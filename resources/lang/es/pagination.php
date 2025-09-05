@@ -31,8 +31,8 @@ return [
 
     'first' => 'Primera',
     'last' => 'Última',
-    'previous_page' => 'Página Anterior',
-    'next_page' => 'Página Siguiente',
+    'previous_page' => 'Página anterior',
+    'next_page' => 'Página siguiente',
 
     'loading' => 'Cargando...',
     'no_results' => 'No se encontraron resultados',

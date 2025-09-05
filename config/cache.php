@@ -105,4 +105,11 @@ return [
 
     'prefix' => env('CACHE_PREFIX', Str::slug(env('APP_NAME', 'laravel'), '_').'_cache_'),
 
+  
+    // ... configuración traducciones ...
+    
+    'translation_hours' => env('TRANSLATION_CACHE_HOURS', 6), 
+    'translation_tags' => ['translations'],
+
+
 ];

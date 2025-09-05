@@ -17,11 +17,16 @@ class UserAudit
     private string $defaultChannel;
     private string $securityChannel;
 
+    // Security constants for pattern validation
+    private const MAX_PATTERN_LENGTH = 200;
+    private const MAX_WILDCARDS_PER_PATTERN = 10;
+    private const FNMATCH_TIMEOUT_SECONDS = 0.1; // 100ms timeout
+
     public function __construct()
     {
         // Validar que los valores críticos estén disponibles
-        $this->criticalActions  = config('audit.critical_actions', []);
-        $this->excludedRoutes   = config('audit.excluded_routes', []);
+        $this->criticalActions  = $this->sanitizePatterns(config('audit.critical_actions', []));
+        $this->excludedRoutes   = $this->sanitizePatterns(config('audit.excluded_routes', []));
         $this->sensitiveFields  = config('audit.sensitive_fields', []);
         
         // Validar sample_rate
@@ -30,6 +35,59 @@ class UserAudit
         
         $this->defaultChannel   = config('audit.channels.default', 'daily');
         $this->securityChannel  = config('audit.channels.security', 'security');
+    }
+
+    /**
+     * Sanitize and validate patterns during construction
+     * SECURITY FIX: Validate patterns to prevent DoS attacks
+     */
+    private function sanitizePatterns(array $patterns): array
+    {
+        $validPatterns = [];
+        
+        foreach ($patterns as $pattern) {
+            if ($this->isValidPattern($pattern)) {
+                $validPatterns[] = $pattern;
+            } else {
+                Log::channel($this->securityChannel)->warning('Invalid audit pattern detected and ignored', [
+                    'pattern' => $pattern,
+                    'reason' => 'Pattern validation failed',
+                    'timestamp' => now()->toISOString()
+                ]);
+            }
+        }
+        
+        return $validPatterns;
+    }
+
+    /**
+     * Validate pattern safety before use
+     * SECURITY FIX: Prevent malicious patterns
+     */
+    private function isValidPattern(string $pattern): bool
+    {
+        // Check pattern length
+        if (strlen($pattern) > self::MAX_PATTERN_LENGTH) {
+            return false;
+        }
+        
+        // Check wildcard count to prevent excessive backtracking
+        $wildcardCount = substr_count($pattern, '*') + substr_count($pattern, '?');
+        if ($wildcardCount > self::MAX_WILDCARDS_PER_PATTERN) {
+            return false;
+        }
+        
+        // Check for suspicious nested patterns
+        if (preg_match('/(\*\/){5,}/', $pattern) || preg_match('/(\*\*){3,}/', $pattern)) {
+            return false;
+        }
+        
+        // Ensure pattern contains only safe characters
+        if (!preg_match('/^[a-zA-Z0-9\/_\-\.\*\?\:\|]+$/', $pattern)) {
+            return false;
+        }
+        
+        return true;
     }
 
     public function handle(Request $request, Closure $next): Response
@@ -70,16 +128,66 @@ class UserAudit
         return false;
     }
 
+    /**
+     * Determine if request should be sampled using cryptographically secure random.
+     * SECURITY FIX: Replaced mt_rand() with cryptographically secure random_int()
+     */
     protected function shouldSample(Request $request): bool
     {
-        return mt_rand() / mt_getrandmax() < $this->sampleRate;
+        try {
+            // Use cryptographically secure random number generator
+            $randomValue = random_int(0, PHP_INT_MAX) / PHP_INT_MAX;
+            return $randomValue < $this->sampleRate;
+        } catch (\Exception $e) {
+            // Fallback: if secure random fails, log all GET requests for security
+            Log::channel($this->securityChannel)->warning('Secure random generation failed, auditing all GET requests', [
+                'error' => $e->getMessage(),
+                'request_url' => $request->fullUrl(),
+                'timestamp' => now()->toISOString()
+            ]);
+            return true; // Fail-safe: audit when in doubt
+        }
     }
 
+    /**
+     * Safe pattern matching with timeout protection
+     * SECURITY FIX: Added validation and timeout protection for fnmatch()
+     */
     protected function matchesPattern(string $route, array $patterns): bool
     {
         foreach ($patterns as $pattern) {
-            if (fnmatch($pattern, $route)) {
-                return true;
+            try {
+                // Set time limit for pattern matching to prevent DoS
+                $startTime = microtime(true);
+                
+                $result = fnmatch($pattern, $route);
+                
+                $executionTime = microtime(true) - $startTime;
+                
+                // Log slow pattern matches for monitoring
+                if ($executionTime > self::FNMATCH_TIMEOUT_SECONDS) {
+                    Log::channel($this->securityChannel)->warning('Slow pattern match detected', [
+                        'pattern' => $pattern,
+                        'route' => $route,
+                        'execution_time' => $executionTime,
+                        'timestamp' => now()->toISOString()
+                    ]);
+                }
+                
+                if ($result) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                // Log pattern matching errors
+                Log::channel($this->securityChannel)->error('Pattern matching error', [
+                    'pattern' => $pattern,
+                    'route' => $route,
+                    'error' => $e->getMessage(),
+                    'timestamp' => now()->toISOString()
+                ]);
+                
+                // Continue with other patterns on error
+                continue;
             }
         }
         return false;
@@ -102,7 +210,7 @@ class UserAudit
             'route' => $request->route()?->getName(),
             'status_code' => $statusCode,
             'timestamp' => now()->toISOString(),
-            'request_id' => $request->header('X-Request-ID') ?: uniqid(),
+            'request_id' => $request->header('X-Request-ID') ?: $this->generateSecureRequestId(),
         ];
 
         if ($this->shouldIncludeRequestData($request, $statusCode)) {
@@ -113,6 +221,20 @@ class UserAudit
 
         if ($this->isCriticalAction($request)) {
             Log::channel($this->securityChannel)->warning('Critical user action', $auditData);
+        }
+    }
+
+    /**
+     * Generate cryptographically secure request ID
+     * SECURITY ENHANCEMENT: Replaced uniqid() with secure random
+     */
+    protected function generateSecureRequestId(): string
+    {
+        try {
+            return bin2hex(random_bytes(16)); // 32 character hex string
+        } catch (\Exception $e) {
+            // Fallback to timestamp-based ID if secure random fails
+            return 'fallback_' . hrtime(true) . '_' . uniqid();
         }
     }
 

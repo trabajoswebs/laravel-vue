@@ -1,0 +1,60 @@
+{
+    "rate_limit": "Too many attempts. Try again in :seconds seconds.",
+    "brute_force_detected": "A possible brute force attack was detected from your IP.",
+    "account_locked": "Your account has been temporarily locked for security reasons.",
+    "invalid_credentials": "The provided credentials are not correct.",
+    "session_expired": "Your session has expired. Please log in again.",
+    "security_violation": "A security violation was detected.",
+    "access_denied": "Access denied. You don't have permission to perform this action.",
+    "suspicious_activity": "Suspicious activity detected. Your session has been closed for security reasons.",
+    "password_too_weak": "The password is too weak. It must contain at least 8 characters, including uppercase, lowercase, numbers and symbols.",
+    "email_already_exists": "This email is already registered.",
+    "invalid_email_format": "The email format is not valid.",
+    "password_mismatch": "Passwords do not match.",
+    "login_successful": "Login successful.",
+    "logout_successful": "Logout successful.",
+    "password_changed": "Password changed successfully.",
+    "email_verification_sent": "A verification link has been sent to your email.",
+    "email_verified": "Your email has been verified successfully.",
+    "password_reset_sent": "A password reset link has been sent to your email.",
+    "password_reset_successful": "Your password has been reset successfully.",
+    "account_created": "Account created successfully. Please verify your email.",
+    "too_many_requests": "Too many requests. Please wait a moment before trying again.",
+    "maintenance_mode": "The site is in maintenance mode. Please come back later.",
+    "csrf_token_mismatch": "Invalid CSRF token. Please reload the page and try again.",
+    "session_timeout": "Your session has expired due to inactivity. Please log in again.",
+    "concurrent_session_limit": "You have reached the concurrent session limit. The oldest session will be closed.",
+    "ip_blocked": "Your IP address has been temporarily blocked due to multiple failed attempts.",
+    "geolocation_blocked": "Access from your geographic location is not allowed.",
+    "browser_not_supported": "Your browser is not compatible with this application.",
+    "javascript_required": "JavaScript is required to use this application.",
+    "cookies_required": "Cookies are required to use this application.",
+    "secure_connection_required": "A secure connection (HTTPS) is required to access this page.",
+    "file_upload_error": "Error uploading file. Check format and size.",
+    "file_type_not_allowed": "File type not allowed.",
+    "file_too_large": "File is too large.",
+    "malware_detected": "Possible malware detected in uploaded file.",
+    "invalid_file_extension": "Invalid file extension.",
+    "upload_successful": "File uploaded successfully.",
+    "delete_confirmation": "Are you sure you want to delete this item?",
+    "operation_successful": "Operation completed successfully.",
+    "operation_failed": "Operation failed. Please try again.",
+    "validation_error": "Validation error. Please check the marked fields.",
+    "server_error": "Server error. Please contact the administrator.",
+    "not_found": "The requested resource was not found.",
+    "unauthorized": "Unauthorized. You must log in to access this resource.",
+    "forbidden": "Forbidden. You don't have permission to access this resource.",
+    "method_not_allowed": "Method not allowed for this resource.",
+    "request_timeout": "The request has expired. Please try again.",
+    "internal_server_error": "Internal server error. Please contact the administrator.",
+    "service_unavailable": "Service unavailable. Please come back later.",
+    "gateway_timeout": "Gateway timeout. Please try again."
+}
+
+
+
+
+
+
+
+

@@ -4,18 +4,21 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
+import { useLanguage } from '@/composables/useLanguage';
+
+const { t } = useLanguage();
 
 const sidebarNavItems: NavItem[] = [
     {
-        title: 'Profile',
+        title: t('navigation.profile'),
         href: '/settings/profile',
     },
     {
-        title: 'Password',
+        title: t('settings.password_settings'),
         href: '/settings/password',
     },
     {
-        title: 'Appearance',
+        title: t('settings.appearance'),
         href: '/settings/appearance',
     },
 ];
@@ -27,20 +30,15 @@ const currentPath = page.props.ziggy?.location ? new URL(page.props.ziggy.locati
 
 <template>
     <div class="px-4 py-6">
-        <Heading title="Settings" description="Manage your profile and account settings" />
+        <Heading :title="t('settings.title')" :description="t('settings.appearance_description')" />
 
         <div class="flex flex-col lg:flex-row lg:space-x-12">
             <aside class="w-full max-w-xl lg:w-48">
                 <nav class="flex flex-col space-y-1 space-x-0">
-                    <Button
-                        v-for="item in sidebarNavItems"
-                        :key="item.href"
-                        variant="ghost"
-                        :class="['w-full justify-start', { 'bg-muted': currentPath === item.href }]"
-                        as-child
-                    >
+                    <Button v-for="item in sidebarNavItems" :key="item.href" variant="ghost"
+                        :class="['w-full justify-start', { 'bg-muted': currentPath === item.href }]" as-child>
                         <Link :href="item.href">
-                            {{ item.title }}
+                        {{ item.title }}
                         </Link>
                     </Button>
                 </nav>

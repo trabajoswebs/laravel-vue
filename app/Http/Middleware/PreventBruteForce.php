@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
-use Inertia\Inertia;
 
 class PreventBruteForce
 {
@@ -71,6 +70,7 @@ class PreventBruteForce
 
     /**
      * Resolve request signature based on scope.
+     * FIXED: Replaced SHA-1 with more secure hashing
      */
     protected function resolveRequestSignature(Request $request, string $scope): string
     {
@@ -85,7 +85,12 @@ class PreventBruteForce
             }
         }
 
-        return $scope . ':' . sha1($baseSignature);
+        // SECURITY FIX: Use SHA-256 instead of SHA-1
+        return $scope . ':' . hash('sha256', $baseSignature);
+        
+        // Alternative secure options:
+        // return $scope . ':' . hash('sha3-256', $baseSignature);
+        // return $scope . ':' . hash('blake2b', $baseSignature);
     }
 
     /**
@@ -116,11 +121,11 @@ class PreventBruteForce
         // Usa traducción (resources/lang/es.json) -> "rate_limit" => "Demasiados intentos. Intenta de nuevo en :seconds segundos."
         $message = __('rate_limit', ['seconds' => $retryAfter]);
 
-        if (Inertia::isRequest($request)) {
+        // Petición Inertia: usar redirect normal (302) y flash para no romper la navegación
+        if ($request->header('X-Inertia')) {
             return redirect()->back()
-                ->withErrors(['rate_limit' => $message])
-                ->withInput()
-                ->setStatusCode(429);
+                ->with('error', $message)
+                ->withInput();
         }
 
         if ($request->expectsJson() || $request->is('api/*')) {
@@ -132,8 +137,7 @@ class PreventBruteForce
         }
 
         return redirect()->back()
-            ->withErrors(['rate_limit' => $message])
-            ->withInput()
-            ->setStatusCode(429);
+            ->with('error', $message)
+            ->withInput();
     }
 }

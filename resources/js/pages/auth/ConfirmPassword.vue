@@ -6,25 +6,22 @@ import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import { Form, Head } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
+import { useLanguage } from '@/composables/useLanguage';
+
+const { t } = useLanguage();
 </script>
 
 <template>
-    <AuthLayout title="Confirm your password" description="This is a secure area of the application. Please confirm your password before continuing.">
-        <Head title="Confirm password" />
+    <AuthLayout :title="t('auth.confirm_password_title')" :description="t('auth.confirm_password_description')">
+
+        <Head :title="t('auth.confirm_password')" />
 
         <Form method="post" :action="route('password.confirm')" reset-on-success v-slot="{ errors, processing }">
             <div class="space-y-6">
                 <div class="grid gap-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                        id="password"
-                        type="password"
-                        name="password"
-                        class="block w-full mt-1"
-                        required
-                        autocomplete="current-password"
-                        autofocus
-                    />
+                    <Label htmlFor="password">{{ t('auth.password') }}</Label>
+                    <Input id="password" type="password" name="password" class="block w-full mt-1" required
+                        autocomplete="current-password" autofocus />
 
                     <InputError :message="errors.password" />
                 </div>
@@ -32,7 +29,7 @@ import { LoaderCircle } from 'lucide-vue-next';
                 <div class="flex items-center">
                     <Button class="w-full" :disabled="processing">
                         <LoaderCircle v-if="processing" class="w-4 h-4 animate-spin" />
-                        Confirm Password
+                        {{ t('auth.confirm_password_button') }}
                     </Button>
                 </div>
             </div>

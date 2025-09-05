@@ -13,12 +13,12 @@ return [
 
     // Códigos de Error HTTP
     '400' => [
-        'title' => 'Solicitud Incorrecta',
+        'title' => 'Solicitud incorrecta',
         'message' => 'El servidor no pudo entender la solicitud.',
         'description' => 'El servidor no puede procesar tu solicitud debido a sintaxis inválida.',
     ],
     '401' => [
-        'title' => 'No Autorizado',
+        'title' => 'No autorizado',
         'message' => 'No estás autorizado para acceder a este recurso.',
         'description' => 'Por favor, inicia sesión con credenciales válidas para continuar.',
     ],
@@ -28,47 +28,47 @@ return [
         'description' => 'No tienes permiso para acceder a esta página o recurso.',
     ],
     '404' => [
-        'title' => 'Página No Encontrada',
+        'title' => 'Página no encontrada',
         'message' => 'La página que buscas no se pudo encontrar.',
         'description' => 'La página puede haber sido movida, eliminada, o has introducido una URL incorrecta.',
     ],
     '405' => [
-        'title' => 'Método No Permitido',
+        'title' => 'Método no permitido',
         'message' => 'El método HTTP utilizado no está permitido para este recurso.',
         'description' => 'Por favor, utiliza un método HTTP diferente para acceder a este recurso.',
     ],
     '408' => [
-        'title' => 'Tiempo de Espera Agotado',
+        'title' => 'Tiempo de espera agotado',
         'message' => 'La solicitud agotó el tiempo de espera mientras esperaba una respuesta.',
         'description' => 'El servidor tardó demasiado en responder. Por favor, inténtalo de nuevo.',
     ],
     '422' => [
-        'title' => 'Entidad No Procesable',
+        'title' => 'Entidad no procesable',
         'message' => 'La solicitud estaba bien formada pero contiene datos inválidos.',
         'description' => 'Por favor, revisa tu entrada e inténtalo de nuevo.',
     ],
     '429' => [
-        'title' => 'Demasiadas Solicitudes',
+        'title' => 'Demasiadas solicitudes',
         'message' => 'Has realizado demasiadas solicitudes en poco tiempo.',
         'description' => 'Por favor, espera un momento antes de intentarlo de nuevo.',
     ],
     '500' => [
-        'title' => 'Error Interno del Servidor',
+        'title' => 'Error interno del servidor',
         'message' => 'Algo salió mal en nuestro servidor.',
         'description' => 'Estamos experimentando dificultades técnicas. Por favor, inténtalo de nuevo más tarde.',
     ],
     '502' => [
-        'title' => 'Puerta de Enlace Incorrecta',
+        'title' => 'Puerta de enlace incorrecta',
         'message' => 'El servidor recibió una respuesta inválida de un servidor aguas arriba.',
         'description' => 'Estamos experimentando problemas de conectividad. Por favor, inténtalo de nuevo más tarde.',
     ],
     '503' => [
-        'title' => 'Servicio No Disponible',
+        'title' => 'Servicio no disponible',
         'message' => 'El servicio no está disponible temporalmente.',
         'description' => 'Estamos realizando mantenimiento. Por favor, vuelve más tarde.',
     ],
     '504' => [
-        'title' => 'Tiempo de Espera de Puerta de Enlace',
+        'title' => 'Tiempo de espera de puerta de enlace',
         'message' => 'El servidor no recibió una respuesta oportuna.',
         'description' => 'La solicitud tardó demasiado en procesarse. Por favor, inténtalo de nuevo.',
     ],
@@ -85,7 +85,7 @@ return [
     'file_error' => 'Ha ocurrido un error de archivo',
     'upload_error' => 'Ha ocurrido un error de subida',
     'download_error' => 'Ha ocurrido un error de descarga',
-    'email_error' => 'Ha ocurrido un error de email',
+    'email_error' => 'Ha ocurrido un error de correo electrónico',
     'notification_error' => 'Ha ocurrido un error de notificación',
 
     // Mensajes de Error Amigables para el Usuario
