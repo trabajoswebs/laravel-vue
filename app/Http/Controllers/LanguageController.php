@@ -2,33 +2,38 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\TranslationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Cookie;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Session;
-use Illuminate\Support\Facades\Validator;
+use App\Helpers\SecurityHelper;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Log;
+use App\Services\TranslationService;
+use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\RateLimiter;
 
 class LanguageController extends Controller
 {
     /**
+     * SECURITY FIX: Cambia el idioma del usuario con validación y rate limiting.
+     * @param Request $request
+     * @param string $locale
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
      * Cambia el idioma del usuario con validación y rate limiting.
      */
     public function changeLanguage(Request $request, string $locale)
-    {     
+    {
         // Validación de entrada
         $validator = Validator::make(['locale' => $locale], [
             'locale' => 'required|string|min:2|max:10|regex:/^[a-zA-Z0-9_\-]+$/'
-        ]);        
-        
+        ]);
+
         if ($validator->fails()) {
             return $this->handleError(
-                'Invalid locale format', 
-                $validator->errors()->first(), 
+                'Invalid locale format',
+                $validator->errors()->first(),
                 $request,
                 400
             );
@@ -71,8 +76,9 @@ class LanguageController extends Controller
             Log::info('Language changed successfully', [
                 'locale' => $sanitizedLocale,
                 'user_id' => $request->user()?->id,
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent(),
+                'ip_hash' => substr(hash('sha256', $request->ip() . config('app.key')), 0, 16),
+                'user_agent_hash' => substr(hash('sha256', $request->userAgent()), 0, 16),
+                'timestamp' => now()->toISOString()
             ]);
 
             // Clear rate limit on success
@@ -89,11 +95,12 @@ class LanguageController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            Log::error('Error changing language', [
+            Log::error('Language change failed', [
                 'locale' => $sanitizedLocale,
                 'user_id' => $request->user()?->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'error_message' => $e->getMessage(),
+                'error_type' => get_class($e)
+                // NO incluir stack trace en producción
             ]);
 
             return $this->handleError(
@@ -106,7 +113,9 @@ class LanguageController extends Controller
     }
 
     /**
-     * Devuelve información del idioma actual
+     * SECURITY FIX: Devuelve información del idioma actual
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
      */
     public function getCurrentLanguage(Request $request)
     {
@@ -145,7 +154,9 @@ class LanguageController extends Controller
     }
 
     /**
-     * Limpia la caché de traducciones (solo en local/testing y con permisos)
+     * SECURITY FIX: Limpia la caché de traducciones (solo en local/testing y con permisos)
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
      */
     public function clearTranslationCache(Request $request)
     {
@@ -205,13 +216,15 @@ class LanguageController extends Controller
     }
 
     /**
-     * Obtiene las traducciones del servidor para el locale dado
+     * SECURITY FIX: Obtiene las traducciones del servidor para el locale dado
+     * @param string $locale
+     * @return array
      */
     protected function getServerTranslations(string $locale): array
     {
         try {
             $messages = $this->loadTranslationMessages($locale);
-            
+
             return [
                 'locale' => $locale,
                 'fallbackLocale' => config('locales.fallback', 'en'),
@@ -224,7 +237,7 @@ class LanguageController extends Controller
                 'locale' => $locale,
                 'error' => $e->getMessage()
             ]);
-            
+
             return [
                 'locale' => $locale,
                 'fallbackLocale' => config('locales.fallback', 'en'),
@@ -237,7 +250,9 @@ class LanguageController extends Controller
     }
 
     /**
-     * Carga los mensajes de traducción para un locale específico
+     * SECURITY FIX: Carga los mensajes de traducción para un locale específico
+     * @param string $locale
+     * @return array
      */
     protected function loadTranslationMessages(string $locale): array
     {
@@ -253,7 +268,7 @@ class LanguageController extends Controller
             ];
 
             $messages = [];
-            
+
             foreach ($frontendNamespaces as $namespace) {
                 $translations = $this->getNamespaceTranslations($namespace, $locale);
                 if (!empty($translations)) {
@@ -262,7 +277,6 @@ class LanguageController extends Controller
             }
 
             return $messages;
-
         } catch (\Throwable $e) {
             Log::warning('Error loading translation messages', [
                 'locale' => $locale,
@@ -273,7 +287,10 @@ class LanguageController extends Controller
     }
 
     /**
-     * Obtiene traducciones de un namespace específico
+     * SECURITY FIX: Obtiene traducciones de un namespace específico
+     * @param string $namespace
+     * @param string $locale
+     * @return array
      */
     protected function getNamespaceTranslations(string $namespace, string $locale): array
     {
@@ -284,13 +301,12 @@ class LanguageController extends Controller
 
             // Obtener las traducciones del namespace
             $translations = trans($namespace);
-            
+
             // Restaurar el locale original
             App::setLocale($originalLocale);
 
             // Solo devolver si es un array válido y no es la clave original
             return is_array($translations) ? $translations : [];
-
         } catch (\Throwable $e) {
             Log::debug('Failed to get namespace translations', [
                 'namespace' => $namespace,
@@ -302,7 +318,10 @@ class LanguageController extends Controller
     }
 
     /**
-     * Persiste la elección de idioma (sesión/cookie y DB update separado)
+     * SECURITY FIX: Persiste la elección de idioma (sesión/cookie y DB update separado)
+     * @param Request $request
+     * @param string $locale
+     * @return void
      */
     protected function persistLanguageChange(Request $request, string $locale): void
     {
@@ -328,13 +347,16 @@ class LanguageController extends Controller
     }
 
     /**
-     * Actualiza el idioma del usuario (no falla si falla)
+     * SECURITY FIX: Actualiza el idioma del usuario (no falla si falla)
+     * @param mixed $user
+     * @param string $locale
+     * @return void
      */
     protected function updateUserLanguage($user, string $locale): void
     {
         try {
             $fieldToUpdate = collect(['locale', 'language', 'preferred_language'])
-                ->first(fn ($field) => $user->getConnection()
+                ->first(fn($field) => $user->getConnection()
                     ->getSchemaBuilder()
                     ->hasColumn($user->getTable(), $field));
 
@@ -364,12 +386,18 @@ class LanguageController extends Controller
                 'locale' => $locale,
                 'error' => $e->getMessage(),
             ]);
-            
+
             // Re-throw para que la transacción falle si es necesario
             throw $e;
         }
     }
 
+    /**
+     * SECURITY FIX: Obtiene el origen de la detección de idioma
+     * @param Request $request
+     * @param string $detectedLocale
+     * @return string
+     */
     protected function getDetectionSource(Request $request, string $detectedLocale): string
     {
         try {
@@ -405,7 +433,12 @@ class LanguageController extends Controller
     }
 
     /**
-     * Maneja respuestas exitosas de forma consistente
+     * SECURITY FIX: Maneja respuestas exitosas de forma consistente
+     * @param string $logMessage
+     * @param string $userMessage
+     * @param Request $request
+     * @param array $data
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
      */
     protected function handleSuccess(string $logMessage, string $userMessage, Request $request, array $data = [])
     {
@@ -413,7 +446,7 @@ class LanguageController extends Controller
         if ($request->header('X-Inertia')) {
             return Redirect::back()->with([
                 'success' => true,
-                'message' => $userMessage,
+                'message' => SecurityHelper::sanitizeOutput($userMessage),
                 ...$data
             ]);
         }
@@ -429,19 +462,23 @@ class LanguageController extends Controller
 
         // Fallback para requests normales
         return Redirect::back()
-            ->with('success', $userMessage)
+            ->with('success', SecurityHelper::sanitizeErrorMessage($userMessage))
             ->with($data);
     }
 
     /**
-     * Maneja errores de forma consistente
+     * SECURITY FIX: Maneja errores de forma consistente
+     * @param string $logMessage
+     * @param string $userMessage
+     * @param Request $request
+     * @param int $status
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
      */
     protected function handleError(string $logMessage, string $userMessage, Request $request, int $status = 400)
     {
-        // Sanitizar mensajes de usuario
-        $sanitizedMessage = strip_tags($userMessage);
-        $sanitizedMessage = substr($sanitizedMessage, 0, 500); // Limitar longitud
-        
+        // Sanitizar mensajes de usuario usando SecurityHelper
+        $sanitizedMessage = SecurityHelper::sanitizeErrorMessage($userMessage);
+
         // Si es Inertia
         if ($request->header('X-Inertia')) {
             return Redirect::back()->with([

@@ -3,13 +3,14 @@
 namespace App\Http\Requests\Settings;
 
 use App\Models\User;
-use Illuminate\Foundation\Http\FormRequest;
+use App\Helpers\SecurityHelper;
 use Illuminate\Validation\Rule;
+use Illuminate\Foundation\Http\FormRequest;
 
 class ProfileUpdateRequest extends FormRequest
 {
     /**
-     * Get the validation rules that apply to the request.
+     * Reglas de validación.
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
@@ -26,5 +27,15 @@ class ProfileUpdateRequest extends FormRequest
                 Rule::unique(User::class)->ignore($this->user()->id),
             ],
         ];
+    }
+
+    /**
+     * Prepara los datos antes de validar.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'name' => SecurityHelper::sanitizeUserInput($this->name ?? ''),
+        ]);
     }
 }

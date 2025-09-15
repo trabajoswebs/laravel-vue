@@ -2,12 +2,13 @@
 
 namespace App\Http\Middleware;
 
-use App\Services\TranslationService;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Log;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
+use Illuminate\Http\Request;
+use App\Helpers\SecurityHelper;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Log;
+use App\Services\TranslationService;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -37,14 +38,11 @@ class HandleInertiaRequests extends Middleware
             $base = parent::share($request);
 
             // Exponer solo campos seguros del usuario
+
             $safeUser = null;
             if ($request->user()) {
-                $safeUser = method_exists($request->user(), 'only')
-                    ? $request->user()->only(['id', 'name', 'email', 'avatar', 'locale'])
-                    : [
-                        'id' => $request->user()->id ?? null,
-                        'name' => $request->user()->name ?? null,
-                    ];
+                $userData = $request->user()->only(['id', 'name', 'email', 'avatar', 'locale']);
+                $safeUser = SecurityHelper::sanitizeForJson($userData);
             }
 
             $data = array_merge($base, [

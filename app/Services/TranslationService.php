@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Cache;
+use App\Helpers\SecurityHelper;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class TranslationService
 {
@@ -266,22 +267,21 @@ class TranslationService
         $sanitizeString = function (string $value) use ($allowHtml, $allowedTags) {
             $value = trim($value);
             if ($allowHtml && $allowedTags !== '') {
-                // Permitir solo tags listadas
-                $clean = strip_tags($value, $allowedTags);
-
-                // Eliminar atributos on* (onclick, onmouseover...) - patrón más robusto
-                $clean = preg_replace('/\s*on\w+\s*=\s*(?:\'[^\']*\'|"[^"]*"|[^\s>]+)/iu', '', $clean);
-
-                // Neutralizar javascript: en href/src (simple heurística)
-                $clean = preg_replace('/\b(href|src)\s*=\s*(["\']?)\s*javascript\s*:/iu', '$1=$2#', $clean);
-
-                return $clean;
+                // Usar HTMLPurifier específico para traducciones
+                try {
+                    return SecurityHelper::sanitizeTranslationContent($value);
+                } catch (\Exception $e) {
+                    // Fallback a sanitización básica si HTMLPurifier falla
+                    $clean = strip_tags($value, $allowedTags);
+                    $clean = preg_replace('/\s*on\w+\s*=\s*(?:\'[^\']*\'|"[^"]*"|[^\s>]+)/iu', '', $clean);
+                    $clean = preg_replace('/\b(href|src)\s*=\s*(["\']?)\s*javascript\s*:/iu', '$1=$2#', $clean);
+                    return $clean;
+                }
             }
 
             // Escape completo si HTML no permitido
             return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         };
-
         $walker = function ($item) use (&$walker, $sanitizeString) {
             if (is_array($item)) {
                 $res = [];

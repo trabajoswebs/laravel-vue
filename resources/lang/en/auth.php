@@ -17,6 +17,8 @@ return [
     'password' => 'The provided password is incorrect.',
     'throttle' => 'Too many login attempts. Please try again in :seconds seconds.',
 
+    'registration_failed' => 'Registration could not be completed. Please verify your data and try again.',
+
     'login' => [
         'title' => 'Login',
         'subtitle' => 'Sign in to your account',
