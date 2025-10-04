@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+@php
+    $cspNonce = request()->attributes->get('csp-nonce');
+@endphp
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}"  @class(['dark' => ($appearance ?? 'system') == 'dark'])>
     <head>
         <meta charset="utf-8">
@@ -6,7 +9,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
-        <script>
+        <script @if($cspNonce) nonce="{{ $cspNonce }}" @endif>
             (function() {
                 const appearance = '{{ $appearance ?? "system" }}';
 
@@ -21,7 +24,7 @@
         </script>
 
         {{-- Inline style to set the HTML background color based on our theme in app.css --}}
-        <style>
+        <style @if($cspNonce) nonce="{{ $cspNonce }}" @endif>
             html {
                 background-color: oklch(1 0 0);
             }
@@ -40,7 +43,11 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 
-        @routes
+        @if ($cspNonce)
+            @routes(nonce: $cspNonce)
+        @else
+            @routes
+        @endif
         @vite(['resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
         @inertiaHead
     </head>

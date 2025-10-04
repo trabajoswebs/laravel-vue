@@ -39,10 +39,12 @@ class LanguageController extends Controller
             );
         }
 
-        // Rate limiting por usuario/ip
+        // Rate limiting por usuario/ip (parametrizado)
         $rateLimitKey = 'language-change:' . ($request->user()?->id ?? $request->ip());
+        $maxAttempts = (int) config('security.rate_limiting.language_change_max_attempts', 5);
+        $decayMinutes = (int) config('security.rate_limiting.language_change_decay_minutes', 5);
 
-        if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
+        if (RateLimiter::tooManyAttempts($rateLimitKey, $maxAttempts)) {
             $seconds = RateLimiter::availableIn($rateLimitKey);
             return $this->handleError(
                 'Too many language changes. Please wait before trying again.',
@@ -52,8 +54,8 @@ class LanguageController extends Controller
             );
         }
 
-        // Hit rate limiter (decay 5 minutos)
-        RateLimiter::hit($rateLimitKey, 300);
+        // Hit rate limiter con decaimiento parametrizado
+        RateLimiter::hit($rateLimitKey, $decayMinutes * 60);
 
         $sanitizedLocale = TranslationService::sanitizeLocale($locale);
 

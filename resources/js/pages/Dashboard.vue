@@ -21,23 +21,25 @@ const breadcrumbs: BreadcrumbItem[] = [
 
     <Head :title="t('dashboard.title')" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <DrawerExample side="left">
-            <template #trigger>
-                <Button>{{ t('dashboard.open') }}</Button>
-            </template>
-            <template #title>
-                {{ t('dashboard.confirm_read') }}
-            </template>
-            <template #description>
-                {{ t('dashboard.description') }}
-            </template>
-            <template #footer>
-                <Button>{{ t('dashboard.send') }}</Button>
-                <Button variant="outline">
-                    {{ t('dashboard.close') }}
-                </Button>
-            </template>
-        </DrawerExample>
+        <!--
+            <DrawerExample side="left">
+                <template #trigger>
+                    <Button>{{ t('dashboard.open') }}</Button>
+                </template>
+<template #title>
+                    {{ t('dashboard.confirm_read') }}
+                </template>
+<template #description>
+                    {{ t('dashboard.description') }}
+                </template>
+<template #footer>
+                    <Button>{{ t('dashboard.send') }}</Button>
+                    <Button variant="outline">
+                        {{ t('dashboard.close') }}
+                    </Button>
+                </template>
+</DrawerExample>
+-->
         <div class="flex h-full flex-1 flex-col gap-4 rounded-xl p-4 overflow-x-auto">
             <div class="grid auto-rows-min gap-4 md:grid-cols-3">
                 <div

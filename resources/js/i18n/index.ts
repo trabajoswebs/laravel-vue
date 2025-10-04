@@ -167,24 +167,6 @@ export const setLocale = async (newLocale: Locale): Promise<boolean> => {
     saveToLocalStorage('locale', newLocale)
     updateHtmlLang(newLocale)
     
-    // Enviar al backend para sincronizar el locale
-    try {
-      const response = await fetch('/language/change/' + newLocale, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        credentials: 'same-origin'
-      });
-      
-      if (!response.ok) {
-        console.warn('Error sincronizando locale con el backend:', response.status);
-      }
-    } catch (error) {
-      console.warn('Error enviando locale al backend:', error)
-    }
-    
     // Emitir evento de cambio
     try {
       window.dispatchEvent(

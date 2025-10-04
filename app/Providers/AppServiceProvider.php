@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Vite;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +21,24 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        if (app()->environment('production')) {
+            Model::preventLazyLoading();
+        }
+
+        $this->app->afterResolving(Vite::class, function (Vite $vite, $app): void {
+            $nonce = null;
+
+            if ($app->bound('request')) {
+                $request = $app['request'];
+
+                if ($request && isset($request->attributes)) {
+                    $nonce = $request->attributes->get('csp-nonce');
+                }
+            }
+
+            if (is_string($nonce) && $nonce !== '') {
+                $vite->useCspNonce($nonce);
+            }
+        });
     }
 }

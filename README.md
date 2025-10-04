@@ -14,6 +14,7 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 11 y Vue
 - **Traducciones dinámicas** - Sistema híbrido cliente-servidor
 - **Diseño responsive** - Funciona en todos los dispositivos
 - **Modo oscuro** - Soporte para temas claro/oscuro
+- **Capa de seguridad documentada** - CSP, rate limiting, auditoría y cabeceras listas para producción ([ver guía](docs/SECURITY.md))
 
 ## 🌍 Sistema de Internacionalización
 

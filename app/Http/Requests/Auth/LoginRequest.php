@@ -29,6 +29,7 @@ class LoginRequest extends FormRequest
         return [
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
+            'remember' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -41,8 +42,16 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
-            RateLimiter::hit($this->throttleKey());
+        $data = $this->validated();
+        $credentials = [
+            'email' => (string) ($data['email'] ?? ''),
+            'password' => (string) ($data['password'] ?? ''),
+        ];
+        $remember = (bool) ($data['remember'] ?? false);
+
+        if (! Auth::attempt($credentials, $remember)) {
+            $decayMinutes = (int) config('security.rate_limiting.login_decay_minutes', 15);
+            RateLimiter::hit($this->throttleKey(), $decayMinutes * 60);
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
@@ -59,7 +68,8 @@ class LoginRequest extends FormRequest
      */
     public function ensureIsNotRateLimited(): void
     {
-        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
+        $maxAttempts = (int) config('security.rate_limiting.login_max_attempts', 5);
+        if (! RateLimiter::tooManyAttempts($this->throttleKey(), $maxAttempts)) {
             return;
         }
 
@@ -77,9 +87,15 @@ class LoginRequest extends FormRequest
 
     /**
      * Get the rate limiting throttle key for the request.
+     * 
+     * @return string
+     *
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        $email = strtolower((string) ($this->validated()['email'] ?? ''));
+        $ip = (string) (request()->ip() ?? '');
+        $ua = (string) (request()->userAgent() ?? '');
+        return Str::transliterate($email.'|'.$ip.'|'.$ua);
     }
 }

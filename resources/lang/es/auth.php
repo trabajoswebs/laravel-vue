@@ -16,7 +16,8 @@ return [
     'failed' => 'Estas credenciales no coinciden con nuestros registros.',
     'password' => 'La contraseña proporcionada es incorrecta.',
     'throttle' => 'Demasiados intentos de inicio de sesión. Por favor, inténtalo de nuevo en :seconds segundos.',
-
+    
+    'registration_successful' => 'Tu cuenta se ha creado correctamente. Por favor, verifica tu correo electrónico.',
     'registration_failed' => 'No se pudo completar el registro. Por favor, verifica tus datos e inténtalo de nuevo.',
 
     'login' => [
@@ -40,7 +41,7 @@ return [
         'name' => 'Nombre completo',
         'username' => 'Nombre de usuario',
         'email' => 'Correo electrónico',
-        'password' => 'LaContraseña',
+        'password' => 'La Contraseña',
         'password_confirmation' => 'Confirmar contraseña',
         'terms' => 'Acepto los :terms y la :privacy',
         'submit' => 'Crear cuenta',
@@ -73,6 +74,7 @@ return [
             'email' => 'Correo electrónico',
             'submit' => 'Enviar enlace de restablecimiento',
             'sent' => 'Hemos enviado por correo electrónico el enlace para restablecer tu contraseña.',
+            'link' => 'Si tu cuenta existe, te enviaremos un enlace de restablecimiento de contraseña a tu dirección de correo electrónico.',
         ],
         'confirm' => [
             'title' => 'Confirmar contraseña',
@@ -108,6 +110,9 @@ return [
         'delete_password' => 'Contraseña',
         'delete_submit' => 'Eliminar cuenta',
     ],
+        'update' => [
+            'failed' => 'No se pudo actualizar el perfil, inténtalo de nuevo más tarde.',
+        ],
 
     'two_factor' => [
         'title' => 'Autenticación de dos factores',

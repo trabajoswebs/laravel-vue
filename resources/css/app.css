@@ -1,56 +1,66 @@
+/* ------------------------------------------------------------------
+ * Configuración base e imports
+ * ------------------------------------------------------------------ */
+/* Importa las utilidades y capas de Tailwind generadas por el plugin oficial. */
 @import 'tailwindcss';
 
+/* Animaciones predefinidas compatibles con Tailwind (clases como animate-fade-in, etc.). */
 @import 'tw-animate-css';
 
-/* Importar estilos de vue-sonner */
+/* Estilos por defecto del sistema de toasts "vue-sonner" para que sus componentes tengan base. */
 @import 'vue-sonner/style.css';
 
+/* Fuentes de plantillas Blade que Tailwind debe escanear para generar clases usadas dinámicamente. */
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+/* Plantillas compiladas de Blade en storage que también pueden contener clases de Tailwind en runtime. */
 @source '../../storage/framework/views/*.php';
 
+/* Variantes personalizadas y tokens compartidos */
+/* Crea una variante "dark:" que aplica estilos cuando el contenedor tenga la clase .dark (data-theme clásica). */
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * @theme inline: define alias de variables CSS para que Tailwind pueda mapearlas como tokens.
+ * Estos alias permiten usar clases como bg-background que en realidad leen var(--background), etc.
+ */
 @theme inline {
+    /* Familias tipográficas por defecto (se usa en font-sans). */
     --font-sans: 'Inter', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
+    /* Radios de borde derivados de --radius para mantener consistencia visual. */
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
     --radius-sm: calc(var(--radius) - 4px);
 
+    /* Alias de colores que Tailwind consumirá (bg-background, text-foreground, etc.). */
     --color-background: var(--background);
     --color-foreground: var(--foreground);
-
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
-
     --color-popover: var(--popover);
     --color-popover-foreground: var(--popover-foreground);
-
     --color-primary: var(--primary);
     --color-primary-foreground: var(--primary-foreground);
-
     --color-secondary: var(--secondary);
     --color-secondary-foreground: var(--secondary-foreground);
-
     --color-muted: var(--muted);
     --color-muted-foreground: var(--muted-foreground);
-
     --color-accent: var(--accent);
     --color-accent-foreground: var(--accent-foreground);
-
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
-
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
 
+    /* Paleta para gráficos (por ejemplo, charts). */
     --color-chart-1: var(--chart-1);
     --color-chart-2: var(--chart-2);
     --color-chart-3: var(--chart-3);
     --color-chart-4: var(--chart-4);
     --color-chart-5: var(--chart-5);
 
+    /* Tokens del sidebar (complementan los de Shadcn/ui). */
     --color-sidebar: var(--sidebar-background);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar-primary: var(--sidebar-primary);
@@ -61,15 +71,11 @@
     --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/*
-  The default border color has changed to `currentColor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
+/* ------------------------------------------------------------------
+ * Ajustes de compatibilidad Tailwind
+ * ------------------------------------------------------------------ */
 @layer base {
+    /* Asegura que los bordes usen un color por defecto coherente cuando no se declare otro. */
     *,
     ::after,
     ::before,
@@ -79,7 +85,9 @@
     }
 }
 
+/* Fuente base para el layout */
 @layer utilities {
+    /* Reconfirma font-sans a nivel del documento para evitar cascadas no deseadas. */
     body,
     html {
         --font-sans:
@@ -87,32 +95,40 @@
     }
 }
 
+/* ------------------------------------------------------------------
+ * Tema claro (valores por defecto)
+ * ------------------------------------------------------------------ */
 :root {
-    --background: hsl(0 0% 100%);
-    --foreground: hsl(0 0% 3.9%);
-    --card: hsl(0 0% 100%);
-    --card-foreground: hsl(0 0% 3.9%);
-    --popover: hsl(0 0% 100%);
-    --popover-foreground: hsl(0 0% 3.9%);
-    --primary: hsl(0 0% 9%);
-    --primary-foreground: hsl(0 0% 98%);
+    /* Superficies y tipografía base en modo claro. */
+    --background: hsl(0 0% 100%);            /* Fondo general */
+    --foreground: hsl(0 0% 3.9%);            /* Texto principal */
+    --card: hsl(0 0% 100%);                  /* Fondo de tarjetas */
+    --card-foreground: hsl(0 0% 3.9%);       /* Texto en tarjetas */
+    --popover: hsl(0 0% 100%);               /* Fondo de popovers/menus */
+    --popover-foreground: hsl(0 0% 3.9%);    /* Texto en popovers */
+    --primary: hsl(0 0% 9%);                 /* Color principal (botones primarios) */
+    --primary-foreground: hsl(0 0% 98%);     /* Texto/íconos sobre primario */
     --secondary: hsl(0 0% 92.1%);
     --secondary-foreground: hsl(0 0% 9%);
-    --muted: hsl(0 0% 96.1%);
-    --muted-foreground: hsl(0 0% 45.1%);
-    --accent: hsl(0 0% 96.1%);
+    --muted: hsl(0 0% 96.1%);                /* Fondos suaves (chips, bloques) */
+    --muted-foreground: hsl(0 0% 45.1%);     /* Texto secundario/silenciado */
+    --accent: hsl(0 0% 96.1%);               /* Estado hover/realce sutil */
     --accent-foreground: hsl(0 0% 9%);
-    --destructive: hsl(0 84.2% 60.2%);
+    --destructive: hsl(0 84.2% 60.2%);       /* Acciones peligrosas (errores) */
     --destructive-foreground: hsl(0 0% 98%);
-    --border: hsl(0 0% 92.8%);
-    --input: hsl(0 0% 89.8%);
-    --ring: hsl(0 0% 3.9%);
+    --border: hsl(0 0% 92.8%);               /* Color de bordes general */
+    --input: hsl(0 0% 89.8%);                /* Bordes de inputs */
+    --ring: hsl(0 0% 3.9%);                  /* Aros de enfoque (focus) */
+    --radius: 0.5rem;                        /* Radio base (8px) */
+
+    /* Paletas adicionales (charts y UI auxiliares). */
     --chart-1: hsl(12 76% 61%);
     --chart-2: hsl(173 58% 39%);
     --chart-3: hsl(197 37% 24%);
     --chart-4: hsl(43 74% 66%);
     --chart-5: hsl(27 87% 67%);
-    --radius: 0.5rem;
+
+    /* Tokens del sidebar en modo claro. */
     --sidebar-background: hsl(0 0% 98%);
     --sidebar-foreground: hsl(240 5.3% 26.1%);
     --sidebar-primary: hsl(0 0% 10%);
@@ -122,9 +138,62 @@
     --sidebar-border: hsl(0 0% 91%);
     --sidebar-ring: hsl(217.2 91.2% 59.8%);
     --sidebar: hsl(0 0% 98%);
+
+    /* Tokens para toasts (tema claro). Cada categoría tiene fondo, borde y texto. */
+    --success-bg: var(--background);
+    --success-border: var(--secondary-foreground);
+    --success-text: hsl(140 89% 30%);
+
+    --warning-bg: hsl(48 100% 97%);
+    --warning-border: hsl(49 88% 84%);
+    --warning-text: hsl(31 77% 61%);
+
+    --error-bg: hsl(0 100% 97%);
+    --error-border: hsl(0 76% 56%);
+    --error-text: hsl(0 87% 49%);
+
+    --info-bg: hsl(221 75% 95%);
+    --info-border: hsl(221 80% 56%);
+    --info-text: hsl(221 70% 28%);
+
+    --event-bg: var(--background);
+    --event-border: var(--secondary-foreground);
+    --event-text: #111111;
+
+    /* Alias específicos para el componente vue-sonner (evita sobrescribir el tema global). */
+    --toast-success-bg: var(--success-bg);
+    --toast-success-border: var(--success-border);
+    --toast-success-text: var(--success-text);
+
+    --toast-warning-bg: var(--warning-bg);
+    --toast-warning-border: var(--warning-border);
+    --toast-warning-text: var(--warning-text);
+
+    --toast-error-bg: var(--error-bg);
+    --toast-error-border: var(--error-border);
+    --toast-error-text: var(--error-text);
+
+    --toast-info-bg: var(--info-bg);
+    --toast-info-border: var(--info-border);
+    --toast-info-text: var(--info-text);
+
+    --toast-event-bg: var(--event-bg);
+    --toast-event-border: var(--event-border);
+    --toast-event-text: var(--event-text);
+
+    /* Acentos de icono para toasts (colores intensos). */
+    --toast-success-accent: hsl(140 100% 27%);
+    --toast-warning-accent: hsl(31 92% 45%);
+    --toast-error-accent: hsl(0 100% 45%);
+    --toast-info-accent: hsl(210 92% 45%);
+    --toast-event-accent: #111111;
 }
 
+/* ------------------------------------------------------------------
+ * Tema oscuro (sobreescribe tokens)
+ * ------------------------------------------------------------------ */
 .dark {
+    /* Superficies y tipografía base en modo oscuro. */
     --background: hsl(0 0% 3.9%);
     --foreground: hsl(0 0% 98%);
     --card: hsl(0 0% 3.9%);
@@ -144,37 +213,266 @@
     --border: hsl(0 0% 14.9%);
     --input: hsl(0 0% 14.9%);
     --ring: hsl(0 0% 83.1%);
+
+    /* Paletas para gráficos en oscuro (mayor contraste). */
     --chart-1: hsl(220 70% 50%);
     --chart-2: hsl(160 60% 45%);
     --chart-3: hsl(30 80% 55%);
     --chart-4: hsl(280 65% 60%);
     --chart-5: hsl(340 75% 55%);
+
+    /* Tokens del sidebar en oscuro. */
     --sidebar-background: hsl(0 0% 7%);
     --sidebar-foreground: hsl(0 0% 95.9%);
-    --sidebar-primary: hsl(360, 100%, 100%);
+    --sidebar-primary: hsl(360 100% 100%);
     --sidebar-primary-foreground: hsl(0 0% 100%);
     --sidebar-accent: hsl(0 0% 15.9%);
     --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
     --sidebar-border: hsl(0 0% 15.9%);
     --sidebar-ring: hsl(217.2 91.2% 59.8%);
     --sidebar: hsl(240 5.9% 10%);
+
+    /* Tokens para toasts en oscuro (usamos sufijo -dark para separar de los claros). */
+    --success-bg: hsl(156 44% 16%);
+    --success-border: hsl(156 48% 30%);
+    --success-text: hsl(140 89% 30%);
+
+    --warning-bg: hsl(38 78% 14%);
+    --warning-border: hsl(37 84% 32%);
+    --warning-text: hsl(37 90% 74%);
+
+    --error-bg: hsl(0 72% 15%);
+    --error-border: hsl(0 76% 32%);
+    --error-text: hsl(0 82% 78%);
+
+    --info-bg: hsl(221 74% 16%);
+    --info-border: hsl(221 78% 34%);
+    --info-text: hsl(221 80% 78%);
+
+    --event-bg: #ffffff;                     /* Eventos con fondo claro para resaltar en oscuro. */
+    --event-border: hsl(0 0% 25%);
+    --event-text: #111111;
+
+    /* Alias específicos que usa vue-sonner cuando el tema data-sonner-theme="dark" está activo. */
+    --toast-success-bg-dark: hsl(156 44% 16%);
+    --toast-success-border-dark: hsl(156 48% 30%);
+    --toast-success-text-dark: hsl(156 56% 78%);
+
+    --toast-warning-bg-dark: hsl(38 78% 14%);
+    --toast-warning-border-dark: hsl(37 84% 32%);
+    --toast-warning-text-dark: hsl(37 90% 74%);
+
+    --toast-error-bg-dark: hsl(0 72% 15%);
+    --toast-error-border-dark: hsl(0 76% 32%);
+    --toast-error-text-dark: hsl(0 82% 78%);
+
+    --toast-info-bg-dark: hsl(221 74% 16%);
+    --toast-info-border-dark: hsl(221 78% 34%);
+    --toast-info-text-dark: hsl(221 80% 78%);
+
+    --toast-event-bg-dark: #ffffff;
+    --toast-event-border-dark: hsl(0 0% 25%);
+    --toast-event-text-dark: #111111;
+
+    /* Acentos de icono para toasts en oscuro (alto contraste). */
+    --toast-success-accent: #22c55e; /* verde-500 */
+    --toast-warning-accent: #fb923c; /* orange-400 */
+    --toast-error-accent: #f87171;   /* red-400 */
+    --toast-info-accent: #60a5fa;    /* blue-400 */
 }
 
+/* ------------------------------------------------------------------
+ * Capas base de Tailwind
+ * ------------------------------------------------------------------ */
 @layer base {
+    /* Normaliza el color de borde y anillo de enfoque para todos los elementos. */
     * {
         @apply border-border outline-ring/50;
     }
+
+    /* Aplica colores de texto y fondo del tema actual al body. */
     body {
         @apply bg-background text-foreground;
     }
 }
 
+/* ------------------------------------------------------------------
+ * Componentes
+ * ------------------------------------------------------------------ */
 @layer components {
+    /* Item del sidebar con transición suave para hover/focus. */
     .sidebar-item {
         @apply transition-all duration-200 ease-in-out;
     }
-    
+
+    /* Efecto sutil de escala al pasar el ratón por encima. */
     .sidebar-item:hover {
         @apply transform scale-[1.02];
     }
+}
+
+/* ------------------------------------------------------------------
+ * Estilos para toasts (vue-sonner)
+ * ------------------------------------------------------------------ */
+/* Modo claro: mapea las variables comunes a las que vue-sonner espera según su data-attrs. */
+[data-sonner-toaster][data-sonner-theme='light'] {
+    --success-bg: var(--toast-success-bg);
+    --success-text: var(--toast-success-text);
+
+    --warning-bg: var(--toast-warning-bg);
+    --warning-text: var(--toast-warning-text);
+
+    --error-bg: var(--toast-error-bg);
+    --error-text: var(--toast-error-text);
+
+    --info-bg: var(--toast-info-bg);
+    --info-text: var(--toast-info-text);
+
+    --event-bg: var(--toast-event-bg);
+    --event-text: var(--toast-event-text);
+}
+
+/* Modo oscuro: usa el set de variables *-dark definido dentro de .dark. */
+[data-sonner-toaster][data-sonner-theme='dark'] {
+    --success-bg: var(--toast-success-bg-dark);
+    --success-text: var(--toast-success-text-dark);
+
+    --warning-bg: var(--toast-warning-bg-dark);
+    --warning-text: var(--toast-warning-text-dark);
+
+    --error-bg: var(--toast-error-bg-dark);
+    --error-text: var(--toast-error-text-dark);
+
+    --info-bg: var(--toast-info-bg-dark);
+    --info-text: var(--toast-info-text-dark);
+
+    --event-bg: var(--toast-event-bg-dark);
+    --event-text: var(--toast-event-text-dark);
+}
+
+/* Asignación de fondos y texto por tipo de toast cuando se activan "rich colors". */
+[data-rich-colors='true'][data-sonner-toast].toast-success,
+[data-sonner-toast][data-type='success'].toast-success {
+    background: var(--success-bg);
+    color: var(--toast-success-text);
+}
+
+[data-rich-colors='true'][data-sonner-toast].toast-warning,
+[data-sonner-toast][data-type='warning'].toast-warning {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+
+[data-rich-colors='true'][data-sonner-toast].toast-error,
+[data-sonner-toast][data-type='error'].toast-error {
+    background: var(--error-bg);
+    color: var(--error-text);
+}
+
+[data-rich-colors='true'][data-sonner-toast].toast-info,
+[data-sonner-toast][data-type='info'].toast-info {
+    background: var(--info-bg);
+    color: var(--info-text);
+}
+
+[data-rich-colors='true'][data-sonner-toast].toast-event,
+[data-sonner-toast][data-type='event'].toast-event {
+    background: var(--event-bg);
+    color: var(--event-text);
+}
+
+/* Colores de icono por tipo (independientes del fondo). */
+[data-sonner-toast].toast-success [data-sonner-icon] {
+    color: var(--toast-success-accent);
+}
+
+[data-sonner-toast].toast-warning [data-sonner-icon] {
+    color: var(--toast-warning-accent);
+}
+
+[data-sonner-toast].toast-error [data-sonner-icon] {
+    color: var(--toast-error-accent);
+}
+
+[data-sonner-toast].toast-info [data-sonner-icon] {
+    color: var(--toast-info-accent);
+}
+
+[data-sonner-toast].toast-event [data-sonner-icon] {
+    color: var(--toast-event-accent);
+}
+
+/* Ajustes de layout e iconografía dentro del toast cuando data-styled='true' */
+[data-sonner-toast][data-styled='true'] [data-icon] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    background: transparent;
+}
+
+[data-sonner-toast][data-styled='true'] [data-title] {
+    font-weight: 600; /* Titular algo más marcado */
+}
+
+[data-sonner-toast][data-styled='true'] [data-description] {
+    color: var(--muted-foreground); /* Descripción en color secundario */
+}
+
+/* En rich-colors mantenemos la descripción en el mismo tono secundario. */
+[data-rich-colors='true'][data-sonner-toast][data-styled='true'] [data-description] {
+    color: var(--muted-foreground);
+}
+
+/* Tamaño de iconos embebidos (svg/img) dentro del contenedor de icono. */
+[data-sonner-toast][data-styled='true'] [data-icon] > svg,
+[data-sonner-toast][data-styled='true'] [data-icon] > img {
+    width: 20px;
+    height: 20px;
+}
+
+/* Overrides por tipo usando [data-type] por si el proveedor marca tipos sin las clases extra. */
+[data-sonner-toast].toast-success [data-icon],
+[data-sonner-toast][data-type='success'] [data-icon] {
+    color: var(--toast-success-accent);
+}
+
+[data-sonner-toast].toast-warning [data-icon],
+[data-sonner-toast][data-type='warning'] [data-icon] {
+    color: var(--toast-warning-accent);
+}
+
+[data-sonner-toast].toast-error [data-icon],
+[data-sonner-toast][data-type='error'] [data-icon] {
+    color: var(--toast-error-accent);
+}
+
+[data-sonner-toast].toast-info [data-icon],
+[data-sonner-toast][data-type='info'] [data-icon] {
+    color: var(--toast-info-accent);
+}
+
+/* Para "event" el icono usa fondo oscuro con texto claro, para dar contraste con la descripción. */
+[data-sonner-toast].toast-event [data-icon],
+[data-sonner-toast][data-type='event'] [data-icon] {
+    background: #000000;
+    color: #ffffff;
+}
+
+/* Toast event usa un icono ligeramente más compacto para dejar espacio a la descripción */
+[data-sonner-toast].toast-event [data-icon] {
+    width: 24px;
+    height: 24px;
+}
+
+/* Y reduce el svg interno en consonancia. */
+[data-sonner-toast].toast-event [data-icon] > svg,
+[data-sonner-toast].toast-event [data-icon] > img,
+[data-sonner-toast][data-type='event'] [data-icon] > svg,
+[data-sonner-toast][data-type='event'] [data-icon] > img {
+    width: 16px;
+    height: 16px;
 }

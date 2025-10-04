@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Helpers\SecurityHelper;
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Helpers\SecurityHelper;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules;
@@ -40,7 +41,7 @@ class RegisteredUserController extends Controller
                 'string',
                 'min:2',
                 'max:100',
-                'regex:/^[a-zA-ZÀ-ÿ\u00f1\u00d1\s\-\'\.]+$/u',
+                'regex:/^[\p{L}\p{M}\s\-\'\.]+$/u',
             ],
             'email' => [
                 'required',
@@ -52,7 +53,7 @@ class RegisteredUserController extends Controller
             'password' => [
                 'required',
                 'confirmed',
-                Rules\Password::min(8)->letters()->numbers()
+                Rules\Password::min(8)->letters()->numbers()->uncompromised()
             ],
         ], [
             // Mensajes de error usando traducciones de Laravel
@@ -77,6 +78,7 @@ class RegisteredUserController extends Controller
             if (!$this->isDataSecure($userData)) {
                 // Log del error sin exponer información sensible
                 Log::error('Datos de usuario no seguros', [
+                    'name' => $userData['name'],
                     'email_domain' => isset($validated['email']) ? $this->getEmailDomain($validated['email']) : null,
                     'timestamp' => now()->toISOString()
                 ]);
@@ -88,7 +90,9 @@ class RegisteredUserController extends Controller
             }
 
             // Crear usuario
-            $user = User::create($userData);
+            DB::transaction(function () use ($userData, &$user) {
+                $user = User::create($userData); // rellena solo name,email,password
+            });
 
             // Log de registro exitoso (sin datos sensibles)
             Log::info('Usuario registrado exitosamente', [
@@ -103,7 +107,7 @@ class RegisteredUserController extends Controller
             Auth::login($user);
 
             return redirect()->route('dashboard')
-                ->with('success', SecurityHelper::sanitizeOutput(__('auth.registration_successful')));
+                ->with('success', SecurityHelper::sanitizeOutput(__('auth.registration_successful'))); 
         } catch (\Exception $e) {
             // Log del error sin exponer información sensible
             Log::error('Error en registro de usuario', [
@@ -122,7 +126,10 @@ class RegisteredUserController extends Controller
 
     /**
      * Preparar datos del usuario para la creación usando SecurityHelper
-     */
+     * @param array $validated
+     * @return array
+    */
+    // Prepare user data for creation using SecurityHelper
     private function prepareUserData(array $validated): array
     {
         return [
@@ -133,6 +140,8 @@ class RegisteredUserController extends Controller
     }
 
     /**
+     * @param array $userData
+     * @return bool
      * Verificar que los datos sanitizados son seguros
      */
     private function isDataSecure(array $userData): bool
@@ -157,6 +166,8 @@ class RegisteredUserController extends Controller
 
     /**
      * Obtener el dominio del email para logging (sin exponer el email completo)
+     * @param string $email
+     * @return string
      */
     private function getEmailDomain(string $email): string
     {

@@ -7,28 +7,58 @@ use Illuminate\Http\Request;
 use App\Helpers\SecurityHelper;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Class SanitizeInput
+ *
+ * Middleware que sanitiza entradas del usuario en cuerpo y parámetros de ruta
+ * antes de llegar a tus controladores. Su objetivo es reducir superficie de
+ * ataque (XSS, inyección de contenido) y homogenizar datos para validación.
+ *
+ * Nota: Este middleware **no valida**; solo normaliza/sanitiza. La validación
+ * debe hacerse igualmente con FormRequests o reglas en el controlador.
+ *
+ * Requisitos:
+ * - Métodos usados provienen de {@see SecurityHelper} y están **whitelisteados**.
+ * - No altera métodos HTTP ni añade campos; solo hace `merge()` sobre los existentes.
+ */
 class SanitizeInput
 {
-    // SECURITY FIX: Whitelist de métodos permitidos para mayor seguridad
+    /**
+     * Lista blanca de métodos permitidos de SecurityHelper para invocación dinámica.
+     *
+     * @var array<int,string>
+     */
     private const ALLOWED_METHODS = [
         'sanitizeUserName',
         'sanitizeUserInput',
         'sanitizeHtml',
         'sanitizeEmail',
-        'sanitizeLocale'
+        'sanitizeLocale',
+        'sanitizePlainText',
     ];
 
-    // SECURITY FIX: Configuración de campos a sanitizar
+    /**
+     * Mapeo campo→método de sanitización a aplicar sobre el payload de la request.
+     *
+     * @var array<string,string>
+     */
     private const FIELD_SANITIZATION_MAP = [
         'name' => 'sanitizeUserName',
-        'description' => 'sanitizeUserInput',
+        'description' => 'sanitizePlainText',
         'content' => 'sanitizeHtml',
-        'message' => 'sanitizeUserInput',
-        'comment' => 'sanitizeUserInput',
-        'title' => 'sanitizeUserInput',
-        'bio' => 'sanitizeUserInput',
+        'message' => 'sanitizePlainText',
+        'comment' => 'sanitizePlainText',
+        'title' => 'sanitizePlainText',
+        'bio' => 'sanitizePlainText',
     ];
 
+    /**
+     * Punto de entrada del middleware.
+     *
+     * @param Request $request Solicitud HTTP entrante.
+     * @param Closure $next    Siguiente manejador del pipeline.
+     * @return mixed           Respuesta HTTP generada por el siguiente middleware/controlador.
+     */
     public function handle(Request $request, Closure $next)
     {
         $this->sanitizeRequestFields($request);
@@ -36,8 +66,11 @@ class SanitizeInput
 
         return $next($request);
     }
+
     /**
-     * SECURITY FIX: Sanitiza campos críticos de la solicitud
+     * Sanitiza campos críticos del body/query de la request según FIELD_SANITIZATION_MAP
+     * y aplica tratamientos específicos para `email` y `locale`.
+     *
      * @param Request $request
      * @return void
      */
@@ -49,15 +82,18 @@ class SanitizeInput
             }
         }
 
-        // SECURITY FIX:    Campos especiales con manejo específico
+        // Campos especiales con manejo específico
         $this->sanitizeEmailField($request);
         $this->sanitizeLocaleField($request);
     }
+
     /**
-     * SECURITY FIX: Sanitiza campo
+     * Sanitiza un campo concreto usando un método permitido de SecurityHelper.
+     * En caso de error, registra log y aplica un fallback seguro.
+     *
      * @param Request $request
-     * @param string $field
-     * @param string $method
+     * @param string  $field   Nombre del campo a sanitizar.
+     * @param string  $method  Método de SecurityHelper a usar (debe estar en ALLOWED_METHODS).
      * @return void
      */
     private function sanitizeField(Request $request, string $field, string $method): void
@@ -76,15 +112,21 @@ class SanitizeInput
                 'error' => $e->getMessage(),
             ]);
 
-            // Fallback seguro
+            // Fallback seguro (texto plano higienizado)
             $this->applyFallbackSanitization($request, $field, $original);
         }
     }
+
     /**
-     * SECURITY FIX: Aplica sanitización
-     * @param mixed $value
-     * @param string $method
-     * @return mixed
+     * Aplica la sanitización delegando en SecurityHelper.
+     * Acepta arrays (aplicación recursiva) o escalares.
+     *
+     * @param mixed  $value  Valor original (string|array|scalar).
+     * @param string $method Nombre del método de SecurityHelper a invocar.
+     * @return mixed         Valor sanitizado (misma estructura que el original).
+     *
+     * @throws \InvalidArgumentException si el método no está permitido.
+     * @throws \RuntimeException         si el método no existe en SecurityHelper.
      */
     private function applySanitization($value, string $method)
     {
@@ -106,16 +148,19 @@ class SanitizeInput
     }
 
     /**
-     * SECURITY FIX: Aplica sanitización de fallback
+     * Fallback de sanitización: convierte a string (si es escalar) y aplica sanitizePlainText.
+     * Registra error si también falla el fallback y mantiene el valor original.
+     *
      * @param Request $request
-     * @param string $field
-     * @param mixed $original
+     * @param string  $field    Nombre del campo que se está sanitizando.
+     * @param mixed   $original Valor original del campo.
      * @return void
      */
     private function applyFallbackSanitization(Request $request, string $field, $original): void
     {
         try {
-            $fallbackValue = SecurityHelper::sanitizeUserInput($original);
+            $scalarOriginal = is_scalar($original) ? (string) $original : '';
+            $fallbackValue = SecurityHelper::sanitizePlainText($scalarOriginal);
             $request->merge([$field => $fallbackValue]);
         } catch (\Throwable $e) {
             // Si incluso el fallback falla, log y continúa con valor original
@@ -127,7 +172,9 @@ class SanitizeInput
     }
 
     /**
-     * SECURITY FIX: Sanitiza campo email
+     * Sanitiza el campo `email` si está presente. No fuerza formato válido;
+     * si es inválido, se delega a la validación posterior.
+     *
      * @param Request $request
      * @return void
      */
@@ -152,7 +199,9 @@ class SanitizeInput
     }
 
     /**
-     * SECURITY FIX: Sanitiza campo locale
+     * Sanitiza el campo `locale` si está presente. Errores no bloquean; quedan a cargo
+     * de la validación posterior (por ejemplo, Rule::in([...]) en FormRequest).
+     *
      * @param Request $request
      * @return void
      */
@@ -172,7 +221,9 @@ class SanitizeInput
     }
 
     /**
-     * SECURITY FIX: Sanitiza parámetros de la ruta
+     * Sanitiza parámetros de la ruta (route params). Cubre `locale`, `slug`, `token`
+     * y normaliza `id` si es numérica.
+     *
      * @param Request $request
      * @return void
      */
@@ -200,9 +251,10 @@ class SanitizeInput
     }
 
     /**
-     * SECURITY FIX: Sanitiza parámetros específicos de la ruta
-     * @param mixed $route
-     * @param array $parameters
+     * Sanitiza parámetros específicos de la ruta: `slug`, `token` y `id` (numérica).
+     *
+     * @param mixed $route      Instancia de Route (tipo laxo para evitar dependencia fuerte en firma).
+     * @param array $parameters Parámetros actuales de la ruta.
      * @return void
      */
     private function sanitizeSpecificParameters($route, array $parameters): void
@@ -212,7 +264,10 @@ class SanitizeInput
         foreach ($parametersToSanitize as $param) {
             if (isset($parameters[$param])) {
                 try {
-                    $sanitizedValue = SecurityHelper::sanitizeUserInput($parameters[$param]);
+                    $value = $parameters[$param];
+                    $sanitizedValue = $param === 'token'
+                        ? SecurityHelper::sanitizeToken((string) $value)
+                        : SecurityHelper::sanitizePlainText((string) $value);
                     $route->setParameter($param, $sanitizedValue);
                 } catch (\Throwable $e) {
                     Log::debug("Route parameter '{$param}' sanitization failed", [

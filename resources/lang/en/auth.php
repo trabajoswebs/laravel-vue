@@ -18,6 +18,7 @@ return [
     'throttle' => 'Too many login attempts. Please try again in :seconds seconds.',
 
     'registration_failed' => 'Registration could not be completed. Please verify your data and try again.',
+    'registration_successful' => 'Your account has been created successfully. Please verify your email address.',
 
     'login' => [
         'title' => 'Login',
@@ -73,6 +74,7 @@ return [
             'email' => 'Email Address',
             'submit' => 'Send Password Reset Link',
             'sent' => 'We have emailed your password reset link.',
+            'link' => 'If your account exists, we will send you a password reset link to your email address.',
         ],
         'confirm' => [
             'title' => 'Confirm Password',
@@ -108,7 +110,9 @@ return [
         'delete_password' => 'Password',
         'delete_submit' => 'Delete Account',
     ],
-
+    'update' => [
+        'failed' => 'Profile update failed. Please try again later.',
+    ],
     'two_factor' => [
         'title' => 'Two Factor Authentication',
         'subtitle' => 'Add additional security to your account using two factor authentication.',

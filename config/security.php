@@ -1,6 +1,37 @@
 <?php
 
+$parseCspSources = static function ($value): array {
+    if (empty($value)) {
+        return [];
+    }
+
+    $sources = preg_split('/[,\s]+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY);
+
+    if (!is_array($sources)) {
+        return [];
+    }
+
+    return array_values(array_filter(array_map('trim', $sources)));
+};
+
+$productionImgHosts = array_filter(array_merge(["'self'", 'data:'], $parseCspSources(env('CSP_IMG_HOSTS'))));
+$productionConnectHosts = array_filter(array_merge(["'self'", env('APP_URL')], $parseCspSources(env('CSP_CONNECT_HOSTS'))));
+
+$productionReportUri = env('CSP_REPORT_URI');
+$productionReportTo = env('CSP_REPORT_TO');
+
+$developmentImgHosts = array_filter(array_merge(["'self'", 'data:', 'https:'], $parseCspSources(env('CSP_DEV_IMG_HOSTS'))));
+$developmentConnectHosts = array_filter(array_merge([
+    "'self'",
+    env('APP_FRONTEND_URL', 'http://localhost:3000'),
+    env('APP_URL'),
+    'ws:',
+    'wss:',
+], $parseCspSources(env('CSP_DEV_CONNECT_HOSTS'))));
+
 return [
+
+    'debug_csp' => env('SECURITY_DEBUG_CSP', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -23,19 +54,10 @@ return [
     */
 
     'authentication' => [
-        // Log de eventos de autenticación
         'log_authentication_events' => env('LOG_AUTHENTICATION_EVENTS', true),
-        
-        // Log de intentos fallidos de login
         'log_failed_logins' => env('LOG_FAILED_LOGINS', true),
-        
-        // Log de logins exitosos
         'log_successful_logins' => env('LOG_SUCCESSFUL_LOGINS', true),
-        
-        // Log de cambios de contraseña
         'log_password_changes' => env('LOG_PASSWORD_CHANGES', true),
-        
-        // Log de logout
         'log_logouts' => env('LOG_LOGOUTS', true),
     ],
 
@@ -43,22 +65,12 @@ return [
     |--------------------------------------------------------------------------
     | User Activity Logging
     |--------------------------------------------------------------------------
-    |
-    | Configure user activity logging settings.
-    |
     */
 
     'user_activity' => [
-        // Log de acciones del usuario
         'log_user_actions' => env('LOG_USER_ACTIONS', true),
-        
-        // Log de direcciones IP
         'log_ip_addresses' => env('LOG_IP_ADDRESSES', true),
-        
-        // Log de user agents
         'log_user_agents' => env('LOG_USER_AGENTS', true),
-        
-        // Log de cambios de datos sensibles
         'log_sensitive_changes' => env('LOG_SENSITIVE_CHANGES', true),
     ],
 
@@ -66,45 +78,31 @@ return [
     |--------------------------------------------------------------------------
     | Rate Limiting
     |--------------------------------------------------------------------------
-    |
-    | Configure rate limiting settings for various endpoints.
-    |
     */
 
     'rate_limiting' => [
-        // Intentos de login por minuto
-        'login_attempts_per_minute' => env('LOGIN_ATTEMPTS_PER_MINUTE', 5),
-        
-        // Intentos de registro por minuto
-        'register_attempts_per_minute' => env('REGISTER_ATTEMPTS_PER_MINUTE', 3),
-        
-        // Intentos de reset de contraseña por minuto
-        'password_reset_attempts_per_minute' => env('PASSWORD_RESET_ATTEMPTS_PER_MINUTE', 3),
-        
-        // Requests generales por minuto
+        'login_max_attempts' => env('LOGIN_MAX_ATTEMPTS', 5),
+        'login_decay_minutes' => env('LOGIN_DECAY_MINUTES', 15),
+        'register_max_attempts' => env('REGISTER_MAX_ATTEMPTS', 3),
+        'register_decay_minutes' => env('REGISTER_DECAY_MINUTES', 10),
+        'password_reset_max_attempts' => env('PASSWORD_RESET_MAX_ATTEMPTS', 3),
+        'password_reset_decay_minutes' => env('PASSWORD_RESET_DECAY_MINUTES', 10),
+        'api_requests_per_minute' => env('API_RATE_LIMIT_PER_MINUTE', 60),
         'general_requests_per_minute' => env('GENERAL_REQUESTS_PER_MINUTE', 100),
+        'language_change_max_attempts' => env('LANGUAGE_CHANGE_MAX_ATTEMPTS', 5),
+        'language_change_decay_minutes' => env('LANGUAGE_CHANGE_DECAY_MINUTES', 5),
     ],
 
     /*
     |--------------------------------------------------------------------------
     | Session Security
     |--------------------------------------------------------------------------
-    |
-    | Configure session-related security settings.
-    |
     */
 
     'session' => [
-        // Regenerar ID de sesión en login
         'regenerate_on_login' => env('SESSION_REGENERATE_ON_LOGIN', true),
-        
-        // Invalidar sesión en logout
         'invalidate_on_logout' => env('SESSION_INVALIDATE_ON_LOGOUT', true),
-        
-        // Regenerar token CSRF en logout
         'regenerate_csrf_on_logout' => env('SESSION_REGENERATE_CSRF_ON_LOGOUT', true),
-        
-        // Log de sesiones
         'log_sessions' => env('LOG_SESSIONS', true),
     ],
 
@@ -112,23 +110,15 @@ return [
     |--------------------------------------------------------------------------
     | File Upload Security
     |--------------------------------------------------------------------------
-    |
-    | Configure file upload security settings.
-    |
     */
 
     'file_uploads' => [
-        // Tipos de archivo permitidos
         'allowed_types' => [
             'image' => ['jpg', 'jpeg', 'png', 'gif', 'webp'],
             'document' => ['pdf', 'doc', 'docx', 'txt'],
             'archive' => ['zip', 'rar', '7z'],
         ],
-        
-        // Tamaño máximo de archivo (en MB)
         'max_size' => env('MAX_FILE_SIZE', 10),
-        
-        // Escanear archivos por malware
         'scan_for_malware' => env('SCAN_FILES_FOR_MALWARE', false),
     ],
 
@@ -136,19 +126,11 @@ return [
     |--------------------------------------------------------------------------
     | API Security
     |--------------------------------------------------------------------------
-    |
-    | Configure API-related security settings.
-    |
     */
 
     'api' => [
-        // Requerir HTTPS para APIs
         'require_https' => env('API_REQUIRE_HTTPS', true),
-        
-        // Rate limiting para APIs
         'rate_limit_per_minute' => env('API_RATE_LIMIT_PER_MINUTE', 60),
-        
-        // Log de requests a APIs
         'log_api_requests' => env('LOG_API_REQUESTS', true),
     ],
 
@@ -156,36 +138,34 @@ return [
     |--------------------------------------------------------------------------
     | Content Security Policy
     |--------------------------------------------------------------------------
-    |
-    | Configure CSP directives for enhanced security.
-    |
     */
 
     'csp' => [
-        // Directivas base para desarrollo
         'development' => [
-            'default-src' => ["'self'", env('APP_FRONTEND_URL', 'http://localhost:3000')],
-            'script-src' => ["'self'", "'unsafe-inline'", "'unsafe-eval'", env('APP_FRONTEND_URL', 'http://localhost:3000')],
-            'style-src' => ["'self'", "'unsafe-inline'", env('APP_FRONTEND_URL', 'http://localhost:3000'), 'https://fonts.googleapis.com'],
-            'img-src' => ["'self'", 'data:', 'https:', env('APP_FRONTEND_URL', 'http://localhost:3000')],
-            'font-src' => ["'self'", 'https://fonts.gstatic.com', env('APP_FRONTEND_URL', 'http://localhost:3000')],
-            'connect-src' => ["'self'", env('APP_FRONTEND_URL', 'http://localhost:3000'), env('APP_URL'), 'ws:', 'wss:'],
+            'default-src' => array_filter(["'self'", env('APP_FRONTEND_URL', 'http://localhost:3000')]),
+            'script-src' => array_filter(["'self'", "'unsafe-inline'", "'unsafe-eval'", env('APP_FRONTEND_URL', 'http://localhost:3000')]),
+            'style-src' => array_filter(["'self'", "'unsafe-inline'", env('APP_FRONTEND_URL', 'http://localhost:3000'), 'https://fonts.googleapis.com', 'https://fonts.bunny.net']),
+            'img-src' => $developmentImgHosts,
+            'font-src' => array_filter(["'self'", 'https://fonts.gstatic.com', 'https://fonts.bunny.net', env('APP_FRONTEND_URL', 'http://localhost:3000')]),
+            'connect-src' => $developmentConnectHosts,
             'frame-ancestors' => ["'none'"],
             'base-uri' => ["'self'"],
             'form-action' => ["'self'"],
         ],
 
-        // Directivas estrictas para producción
         'production' => [
             'default-src' => ["'self'"],
             'script-src' => ["'self'", "'nonce-{nonce}'"],
-            'style-src' => ["'self'", "'nonce-{nonce}'", 'https://fonts.googleapis.com'],
-            'img-src' => ["'self'", 'data:', 'https:'],
-            'font-src' => ["'self'", 'https://fonts.gstatic.com'],
-            'connect-src' => ["'self'", env('APP_URL')],
+            'style-src' => ["'self'", "'nonce-{nonce}'", 'https://fonts.googleapis.com', 'https://fonts.bunny.net'],
+            'img-src' => $productionImgHosts,
+            'font-src' => ["'self'", 'https://fonts.gstatic.com', 'https://fonts.bunny.net'],
+            'connect-src' => $productionConnectHosts,
             'frame-ancestors' => ["'none'"],
             'base-uri' => ["'self'"],
             'form-action' => ["'self'"],
+            'object-src' => ["'none'"],
+            'report-uri' => array_filter([$productionReportUri]),
+            'report-to' => array_filter([$productionReportTo]),
             'upgrade-insecure-requests' => [],
         ],
     ],
@@ -194,9 +174,6 @@ return [
     |--------------------------------------------------------------------------
     | Security Headers
     |--------------------------------------------------------------------------
-    |
-    | Configure which security headers to enable.
-    |
     */
 
     'security_headers' => [
@@ -206,6 +183,20 @@ return [
         'enable_xss_protection' => env('SECURITY_ENABLE_XSS_PROTECTION', true),
         'enable_referrer_policy' => env('SECURITY_ENABLE_REFERRER_POLICY', true),
         'enable_permissions_policy' => env('SECURITY_ENABLE_PERMISSIONS_POLICY', true),
+        'enable_corp' => env('SECURITY_ENABLE_CORP', true),
+        'enable_coop' => env('SECURITY_ENABLE_COOP', true),
+        'enable_coep' => env('SECURITY_ENABLE_COEP', false),
+        'hsts_max_age' => env('SECURITY_HSTS_MAX_AGE', 31536000),
+        'corp_policy' => env('SECURITY_CORP_POLICY', 'same-origin'),
+        'coop_policy' => env('SECURITY_COOP_POLICY', 'same-origin'),
+        'coep_policy' => env('SECURITY_COEP_POLICY', 'require-corp'),
+        'referrer_policy' => env('SECURITY_REFERRER_POLICY', 'strict-origin-when-cross-origin'),
+        'permissions_policy' => $parseCspSources(env('SECURITY_PERMISSIONS_POLICY')),
+    ],
+
+    'trusted_proxies' => [
+        'proxies' => env('TRUSTED_PROXIES'),
+        'headers' => env('TRUSTED_PROXIES_HEADERS', 'all'),
     ],
 
 ];

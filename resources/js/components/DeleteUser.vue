@@ -22,7 +22,25 @@ import { useLanguage } from '../composables/useLanguage';
 
 const { t } = useLanguage();
 
-const passwordInput = ref<HTMLInputElement | null>(null);
+type InputElement = HTMLInputElement & { focus: () => void };
+type InputComponent = { $el?: HTMLElement; focus?: () => void };
+
+const passwordInput = ref<InputElement | InputComponent | null>(null);
+
+const focusPasswordInput = () => {
+    const target = passwordInput.value;
+    if (!target) {
+        return;
+    }
+
+    if (typeof (target as InputComponent).focus === 'function') {
+        (target as InputComponent).focus?.();
+        return;
+    }
+
+    const element = (target as InputComponent).$el ?? (target as unknown as HTMLElement);
+    element?.focus?.();
+};
 </script>
 
 <template>
@@ -39,7 +57,7 @@ const passwordInput = ref<HTMLInputElement | null>(null);
                 </DialogTrigger>
                 <DialogContent>
                     <Form method="delete" :action="route('profile.destroy')" reset-on-success
-                        @error="() => passwordInput?.focus()" :options="{
+                        @error="focusPasswordInput" :options="{
                             preserveScroll: true,
                         }" class="space-y-6" v-slot="{ errors, processing, reset, clearErrors }">
                         <DialogHeader class="space-y-3">

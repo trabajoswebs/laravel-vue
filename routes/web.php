@@ -12,6 +12,15 @@ Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+if (app()->environment('local')) {
+    Route::get('test-flash-event', function () {
+        return back()->with('event', [
+            'title' => 'Evento de prueba',
+            'description' => 'Este toast viene del flash.event configurado en HandleInertiaRequests.',
+        ]);
+    })->middleware(['auth']);
+}
+
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
 
@@ -30,4 +39,3 @@ Route::prefix('language')->name('language.')->group(function () {
         ->middleware(['auth', 'throttle:120,1']); // guest + 120 consultas por minuto máximo
     
 });
-

@@ -11,6 +11,10 @@
     "error": "Error",
     "success": "Success"
   },
+  "flash": {
+    "default_success": "Operation completed successfully.",
+    "default_error": "The operation could not be completed."
+  },
   "navigation": {
     "home": "Home",
     "profile": "Profile",
