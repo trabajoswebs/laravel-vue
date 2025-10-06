@@ -15,6 +15,9 @@ class SecurityHelper
     private const MAX_ERROR_MESSAGE_LENGTH = 500;
     private const MAX_LOCALE_LENGTH = 10;
 
+    /** @var array<string, HTMLPurifier> */
+    private static array $purifierCache = [];
+
     // Patrones de contenido sensible
     private const SENSITIVE_PATTERNS = [
         '/password/i',
@@ -38,21 +41,33 @@ class SecurityHelper
      */
     private static function getHtmlPurifier(string $profile = 'default'): HTMLPurifier
     {
-        // Ej: obtiene configuración según perfil dinámico, si no existe usa la "default"
-        $settings = config('htmlpurifier.' . $profile, config('htmlpurifier.default')); 
-        // Ej: si $profile = "strict" → devuelve array de configuración strict. 
-        // Ej: si no existe "strict" → devuelve config/htmlpurifier.default
-
-        $config = \HTMLPurifier_Config::createDefault(); 
-        // Ej: crea objeto base con configuración por defecto de HTMLPurifier
-
-        foreach ($settings as $key => $value) { 
-            $config->set($key, $value); 
-            // Ej: "HTML.Allowed" => "p,br,strong,em" aplica restricciones de etiquetas
+        if (isset(self::$purifierCache[$profile])) {
+            return self::$purifierCache[$profile]; // Reutiliza instancias
         }
 
-        return new \HTMLPurifier($config); 
-        // Ej: devuelve instancia lista para purificar HTML según perfil elegido
+        // Ej: obtiene configuración según perfil dinámico, si no existe usa la "default"
+        $settings = config('htmlpurifier.' . $profile);
+        if (!is_array($settings)) {
+            $settings = config('htmlpurifier.default', []);
+        }
+
+        $config = HTMLPurifier_Config::createDefault();
+        // Ej: crea objeto base con configuración por defecto de HTMLPurifier
+
+        foreach ($settings as $key => $value) {
+            try {
+                $config->set($key, $value); // Aplica restricciones de etiquetas y atributos
+            } catch (\Throwable $e) {
+                Log::warning('Invalid HTMLPurifier setting ignored', self::sanitizeForLogging([
+                    'profile' => $profile,
+                    'setting' => $key,
+                    'message' => $e->getMessage(),
+                ]));
+            }
+        }
+
+        $purifier = new HTMLPurifier($config);
+        return self::$purifierCache[$profile] = $purifier; // Cachea instancia por perfil
     }
 
 
@@ -75,11 +90,11 @@ class SecurityHelper
             $purifier = self::getHtmlPurifier($config); // Ej: HTMLPurifier listo
             return $purifier->purify($content); // Ej: "<script>x</script>" => ""
         } catch (\Exception $e) {
-            Log::warning('HTMLPurifier failed, using fallback sanitization', [
+            Log::warning('HTMLPurifier failed, using fallback sanitization', self::sanitizeForLogging([
                 'error' => $e->getMessage(), // Ej: "Undefined method"
-                'content_length' => strlen($content), // Ej: 42
+                'content_length' => mb_strlen($content, 'UTF-8'), // Ej: 42
                 'config' => $config // Ej: "default"
-            ]);
+            ]));
 
             return self::sanitizeUserInput($content); // Ej: fallback seguro
         }
@@ -130,26 +145,29 @@ class SecurityHelper
      */
     public static function sanitizeOutput(string $output): string
     {
-        if (empty($output)) return ''; // Ej: "" si output vacío
+        if ($output === '') {
+            return ''; // Ej: "" si output vacío
+        }
 
         $clean = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi', '', $output); // Ej: "<script>1</script>" => ""
         $clean = preg_replace('/<iframe\b[^>]*>(.*?)<\/iframe>/mi', '', $clean); // Ej: "<iframe src='evil'></iframe>" => ""
         $clean = preg_replace('/\s*on\w+\s*=\s*(?:"(?:[^"]*)"|\'(?:[^\']*)\'|[^>\s]+)/i', '', $clean); // Ej: "<a onclick='x'>" => "<a>"
 
-        if (self::containsMaliciousContent($clean) || strip_tags($clean) !== $clean) {
-            try {
-                $purifier = self::getHtmlPurifier('default'); // Ej: crea purificador
-                $clean = $purifier->purify($clean); // Ej: limpia onclick
-            } catch (\Throwable $e) {
-                Log::warning('Purifier unavailable in sanitizeOutput: '.$e->getMessage()); // Ej: log del error
-            }
+        try {
+            $purifier = self::getHtmlPurifier('default'); // Ej: crea purificador
+            $clean = $purifier->purify($clean); // Ej: limpia onclick
+        } catch (\Throwable $e) {
+            Log::warning('Purifier unavailable in sanitizeOutput', self::sanitizeForLogging([
+                'error' => $e->getMessage(),
+            ]));
+
+            return self::sanitizeUserInput($clean); // Fallback a texto escapado
         }
 
-        return htmlspecialchars($clean, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); // Ej: "<b>" => "&lt;b&gt;"
+        return $clean; // Devuelve HTML permitido por configuración
     }
 
-
-        /**
+    /**
      * Sanitiza array de datos para JSON
      *
      * @param array $data Datos de entrada
@@ -184,10 +202,10 @@ class SecurityHelper
             $purifier = app('htmlpurifier.translations'); // Ej: instancia configurada para traducciones
             return $purifier->purify($content); // Ej: "<script>x</script>" => ""
         } catch (\Exception $e) {
-            Log::warning('Translation sanitization failed, using fallback', [
+            Log::warning('Translation sanitization failed, using fallback', self::sanitizeForLogging([
                 'error' => $e->getMessage(), // Ej: "Service not found"
-                'content_length' => strlen($content) // Ej: 42
-            ]);
+                'content_length' => mb_strlen($content, 'UTF-8') // Ej: 42
+            ]));
 
             return self::sanitizeUserInput($content); // Ej: fallback básico
         }
@@ -228,7 +246,7 @@ class SecurityHelper
 
         $email = trim(strtolower($email)); // Ej: " TEST@MAIL.COM " => "test@mail.com"
 
-        if (strlen($email) > self::MAX_EMAIL_LENGTH) {
+        if (mb_strlen($email, 'UTF-8') > self::MAX_EMAIL_LENGTH) {
             throw new \InvalidArgumentException('Email demasiado largo'); // Ej: 300 chars => excepción
         }
 
@@ -256,7 +274,7 @@ class SecurityHelper
         }
 
         $sanitized = self::sanitizeUserInput($message); // Ej: "<b>Error</b>" => "&lt;b&gt;Error&lt;/b&gt;"
-        $sanitized = substr($sanitized, 0, self::MAX_ERROR_MESSAGE_LENGTH); // Ej: corta a 500 chars
+        $sanitized = mb_substr($sanitized, 0, self::MAX_ERROR_MESSAGE_LENGTH, 'UTF-8'); // Ej: corta a 500 chars
 
         foreach (self::SENSITIVE_PATTERNS as $pattern) {
             $sanitized = preg_replace($pattern, '[REDACTED]', $sanitized); // Ej: "password=123" => "[REDACTED]"
@@ -288,7 +306,7 @@ class SecurityHelper
 
         $sanitized = strtolower($sanitized); // Ej: "ES" => "es"
         $sanitized = str_replace('_', '-', $sanitized); // Ej: "es_ES" => "es-es"
-        $sanitized = substr($sanitized, 0, self::MAX_LOCALE_LENGTH); // Ej: "es-mx-variant" => "es-mx"
+        $sanitized = mb_substr($sanitized, 0, self::MAX_LOCALE_LENGTH, 'UTF-8'); // Ej: "es-mx-variant" => "es-mx"
 
         if (!preg_match('/^[a-z]{2}(-[a-z]{2})?$/', $sanitized)) {
             return config('app.locale', 'en'); // Ej: "zzz" => "en"
@@ -305,32 +323,68 @@ class SecurityHelper
      */
     public static function sanitizeUrl(string $url): ?string
     {
-        $cleanUrl = filter_var(trim($url), FILTER_SANITIZE_URL); // Ej: " https://evil.com " => "https://evil.com"
-        if (!filter_var($cleanUrl, FILTER_VALIDATE_URL)) return null; // Ej: "htp:/mal" => null
+        $trimmed = trim($url);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $cleanUrl = filter_var($trimmed, FILTER_SANITIZE_URL);
+        if ($cleanUrl === false || $cleanUrl === '') {
+            return null; // Ej: "htp:/mal" => null
+        }
 
         $parsed = parse_url($cleanUrl); // Ej: devuelve ["scheme"=>"https","host"=>"google.com"]
-        if (!$parsed || empty($parsed['host'])) return null;
+        if (!$parsed || empty($parsed['scheme']) || empty($parsed['host'])) {
+            return null;
+        }
 
-        $host = $parsed['host']; // Ej: "google.com"
+        $host = $parsed['host'];
+        $normalizedHost = strtolower(rtrim($host, '.'));
 
-        $blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
-        if (in_array($host, $blockedHosts, true)) return null; // Ej: "127.0.0.1" => null
+        if (function_exists('idn_to_ascii') && preg_match('/[^\x20-\x7f]/u', $host)) {
+            $asciiHost = idn_to_ascii($host, IDNA_DEFAULT);
+            if ($asciiHost === false) {
+                return null;
+            }
 
-        $records = @dns_get_record($host, DNS_A + DNS_AAAA); // Ej: consulta DNS de google.com
-        if ($records === false || empty($records)) return null;
+            $normalizedHost = strtolower(rtrim($asciiHost, '.'));
+        }
 
-        foreach ($records as $rec) {
-            $ip = $rec['ip'] ?? $rec['ipv6'] ?? null; // Ej: "142.250.190.78"
-            if ($ip === null) continue;
-            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+        $parsed['host'] = $normalizedHost;
+        $cleanUrl = self::rebuildUrlFromParts($parsed);
+
+        $hostForValidation = trim($normalizedHost, '[]');
+
+        $blockedHosts = ['localhost'];
+        if (in_array($hostForValidation, $blockedHosts, true)) {
+            return null; // Ej: "localhost" => null
+        }
+
+        if (filter_var($hostForValidation, FILTER_VALIDATE_IP)) {
+            if (!filter_var($hostForValidation, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                 return null; // Ej: "192.168.1.5" => null
+            }
+        } else {
+            $resolvedIps = self::resolveHostIps($normalizedHost);
+            if (empty($resolvedIps)) {
+                return null;
+            }
+
+            foreach ($resolvedIps as $ip) {
+                if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return null; // Ej: "192.168.1.5" => null
+                }
             }
         }
 
         $allowedSchemes = ['http', 'https'];
-        if (!in_array(strtolower($parsed['scheme'] ?? ''), $allowedSchemes, true)) return null; // Ej: "ftp://" => null
+        if (!in_array(strtolower($parsed['scheme']), $allowedSchemes, true)) {
+            return null; // Ej: "ftp://" => null
+        }
 
-        if (isset($parsed['port']) && !in_array((int)$parsed['port'], [80,443], true)) return null; // Ej: puerto 8080 => null
+        if (isset($parsed['port']) && !in_array((int) $parsed['port'], [80, 443], true)) {
+            return null; // Ej: puerto 8080 => null
+        }
 
         return $cleanUrl; // Ej: "https://google.com"
     }
@@ -338,22 +392,45 @@ class SecurityHelper
 
 
 
-        /**
+    /**
      * Sanitiza rutas de archivo y previene path traversal
      *
      * @param string $path Ruta de archivo
      * @return string Ruta limpia
+     * @throws \InvalidArgumentException Cuando se detectan segmentos no permitidos
      */
     public static function sanitizeFilePath(string $path): string
     {
-        if (empty($path)) {
+        if (trim($path) === '') {
             return ''; // Ej: "" => ""
         }
 
-        $sanitized = preg_replace('/[^a-zA-Z0-9._\-\/]/', '', $path); // Ej: "../../etc/passwd" => "../../etc/passwd"
-        $sanitized = str_replace(['../', '..\\', '..'], '', $sanitized); // Ej: "../../etc/passwd" => "etcpasswd"
-        $sanitized = preg_replace('/\/+/', '/', $sanitized); // Ej: "foo//bar" => "foo/bar"
-        return trim($sanitized, '/'); // Ej: "/uploads/file/" => "uploads/file"
+        $normalized = str_replace('\\', '/', $path);
+        $normalized = preg_replace('/[^\p{L}\p{N}\-_\.\/]/u', '', $normalized) ?? '';
+        $normalized = ltrim($normalized, '/');
+
+        $segments = array_values(array_filter(explode('/', $normalized), static function ($segment) {
+            return $segment !== '';
+        }));
+
+        if (empty($segments)) {
+            return '';
+        }
+
+        $cleanSegments = [];
+        foreach ($segments as $segment) {
+            if ($segment === '.' || $segment === '..') {
+                throw new \InvalidArgumentException('Ruta contiene segmentos no permitidos');
+            }
+
+            if (!preg_match('/^[\p{L}\p{N}\-_\.]+$/u', $segment)) {
+                throw new \InvalidArgumentException('Segmento de ruta inválido');
+            }
+
+            $cleanSegments[] = $segment;
+        }
+
+        return implode('/', $cleanSegments); // Ej: "uploads/file"
     }
 
     /**
@@ -374,7 +451,7 @@ class SecurityHelper
             throw new \InvalidArgumentException('Token contiene caracteres no válidos'); // Ej: "&&&" => excepción
         }
 
-        return substr($sanitized, 0, 255); // Ej: token largo => se corta a 255
+        return mb_substr($sanitized, 0, 255, 'UTF-8'); // Ej: token largo => se corta a 255
     }
 
     /**
@@ -415,7 +492,8 @@ class SecurityHelper
             } elseif (is_array($value)) {
                 $sanitized[$key] = self::sanitizeForLogging($value); // Ej: array anidado => recursivo
             } elseif (is_string($value)) {
-                $sanitized[$key] = strlen($value) > 200 ? substr($value, 0, 200) . '...' : $value; // Ej: string largo => truncado
+                $length = mb_strlen($value, 'UTF-8');
+                $sanitized[$key] = $length > 200 ? mb_substr($value, 0, 200, 'UTF-8') . '...' : $value; // Ej: string largo => truncado
             } else {
                 $sanitized[$key] = $value; // Ej: int/boolean => sin cambios
             }
@@ -438,6 +516,84 @@ class SecurityHelper
 
         $salt = config('app.key', 'default_salt'); // Ej: obtiene clave del .env
         return substr(hash('sha256', $ip . $salt), 0, 12); // Ej: "192.168.1.1" => "a94f6d3bc12f"
+    }
+
+    /**
+     * Reconstruye un URL desde sus partes normalizadas
+     *
+     * @param array $parts Partes generadas por parse_url
+     * @return string URL reconstruida
+     */
+    private static function rebuildUrlFromParts(array $parts): string
+    {
+        $scheme = isset($parts['scheme']) ? $parts['scheme'] . '://' : '';
+        $user = $parts['user'] ?? '';
+        $pass = isset($parts['pass']) ? ':' . $parts['pass'] : '';
+        $auth = $user !== '' ? $user . $pass . '@' : '';
+        $host = $parts['host'] ?? '';
+        $hostForUrl = $host;
+        if ($hostForUrl !== '' && str_contains($hostForUrl, ':') && $hostForUrl[0] !== '[') {
+            $hostForUrl = '[' . $hostForUrl . ']';
+        }
+
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+        $path = $parts['path'] ?? '';
+        $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+        $fragment = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+        return $scheme . $auth . $hostForUrl . $port . $path . $query . $fragment;
+    }
+
+    /**
+     * Resuelve registros DNS a IPs válidas evitando loops de CNAME
+     *
+     * @param string $host Host a resolver
+     * @param array<string,bool> $visited Hosts ya visitados
+     * @return array<int,string> Lista de IPs públicas
+     */
+    private static function resolveHostIps(string $host, array $visited = []): array
+    {
+        $host = rtrim($host, '.');
+        if ($host === '' || isset($visited[$host])) {
+            return [];
+        }
+
+        $visited[$host] = true;
+
+        if (!function_exists('dns_get_record')) {
+            $ip = gethostbyname($host);
+            if ($ip === $host) {
+                return [];
+            }
+
+            return [$ip];
+        }
+
+        $records = @dns_get_record($host, DNS_A + DNS_AAAA + DNS_CNAME);
+        if ($records === false || empty($records)) {
+            return [];
+        }
+
+        $ips = [];
+
+        foreach ($records as $record) {
+            if (isset($record['ip'])) {
+                $ips[] = $record['ip'];
+                continue;
+            }
+
+            if (isset($record['ipv6'])) {
+                $ips[] = $record['ipv6'];
+                continue;
+            }
+
+            if (($record['type'] ?? null) === 'CNAME' && !empty($record['target'])) {
+                $target = rtrim($record['target'], '.');
+                $ips = array_merge($ips, self::resolveHostIps($target, $visited));
+            }
+        }
+
+        return array_values(array_unique($ips));
     }
 
     /**
