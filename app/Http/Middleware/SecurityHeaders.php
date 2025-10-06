@@ -78,12 +78,20 @@ class SecurityHeaders
     /**
      * Esquemas URI permitidos al validar URLs de configuración.
      * 
-     * Solo se aceptan protocolos seguros o necesarios para websockets.
+     * En entornos locales se permite http/ws para tooling (Vite, HMR).
+     * En producción solo se aceptan https/wss para evitar downgrades.
      * Previene inyección de esquemas peligrosos como file://, data://, javascript:
      * 
      * @var array<int, string>
      */
-    private const ALLOWED_SCHEMES = ['http', 'https', 'ws', 'wss'];
+    private const ALLOWED_DEV_SCHEMES = ['http', 'https', 'ws', 'wss'];
+
+    /**
+     * Esquemas permitidos cuando la aplicación corre en producción.
+     *
+     * @var array<int, string>
+     */
+    private const ALLOWED_PROD_SCHEMES = ['https', 'wss'];
 
     /**
      * Directivas por defecto para Permissions-Policy cuando no hay configuración.
@@ -201,6 +209,8 @@ class SecurityHeaders
             ]);
         }
 
+        $this->applyReportToHeader($response);
+
         $this->logDebug('Security headers applied.', [
             'environment' => app()->environment(),
             'request_id' => $request->headers->get('X-Request-ID'),
@@ -242,11 +252,13 @@ class SecurityHeaders
 
         $parsedUrl = parse_url($url);
 
-        if ($parsedUrl === false || !isset($parsedUrl['scheme']) || !in_array($parsedUrl['scheme'], self::ALLOWED_SCHEMES)) {
+        $allowedSchemes = $this->allowedSchemes();
+
+        if ($parsedUrl === false || !isset($parsedUrl['scheme']) || !in_array($parsedUrl['scheme'], $allowedSchemes, true)) {
             Log::warning("Invalid URL detected in security middleware", [
                 'url' => $url,
                 'parsed' => $parsedUrl,
-                'allowed_schemes' => self::ALLOWED_SCHEMES,
+                'allowed_schemes' => $allowedSchemes,
             ]);
             return null;
         }
@@ -257,6 +269,18 @@ class SecurityHeaders
         }
 
         return $cleanUrl;
+    }
+
+    /**
+     * Determina los esquemas permitidos según el entorno actual.
+     */
+    private function allowedSchemes(): array
+    {
+        if (app()->environment(['local', 'development', 'testing'])) {
+            return self::ALLOWED_DEV_SCHEMES;
+        }
+
+        return self::ALLOWED_PROD_SCHEMES;
     }
 
     /**
@@ -670,6 +694,40 @@ class SecurityHeaders
     }
 
     /**
+     * Configura el header Report-To para que coincida con la directiva CSP report-to.
+     *
+     * Requiere al menos un grupo (security.csp.report_to) y una lista de endpoints
+     * válidos. Si no se proporciona una lista explícita, se utiliza como fallback
+     * el valor de security.csp.report_uri.
+     */
+    private function applyReportToHeader(Response $response): void
+    {
+        $group = config('security.csp.report_to');
+
+        if (empty($group)) {
+            return;
+        }
+
+        $endpoints = $this->reportToEndpoints();
+
+        if (empty($endpoints)) {
+            return;
+        }
+
+        $payload = [
+            'group' => $group,
+            'max_age' => (int) config('security.csp.report_to_max_age', 10886400),
+            'endpoints' => $endpoints,
+        ];
+
+        if (config('security.csp.report_to_include_subdomains')) {
+            $payload['include_subdomains'] = true;
+        }
+
+        $response->headers->set('Report-To', json_encode($payload, JSON_UNESCAPED_SLASHES));
+    }
+
+    /**
      * Construye el valor del header Permissions-Policy con configuración flexible.
      * 
      * Busca la configuración en este orden de prioridad:
@@ -718,10 +776,65 @@ class SecurityHeaders
     }
 
     /**
+     * Normaliza los endpoints configurados para Report-To.
+     *
+     * Acepta arrays o strings (separados por espacios o comas) desde la
+     * configuración. Filtra URLs inválidas y obliga a usar HTTPS salvo en
+     * entornos locales, donde se permite HTTP para pruebas.
+     *
+     * @return array<int, array<string, string>>
+     */
+    private function reportToEndpoints(): array
+    {
+        $configuredEndpoints = config('security.csp.report_to_endpoints');
+        $endpoints = array_filter(array_map('trim', Arr::wrap($configuredEndpoints)));
+
+        if (empty($endpoints)) {
+            $fallback = config('security.csp.report_uri');
+
+            if (is_string($fallback) && $fallback !== '') {
+                $endpoints[] = trim($fallback);
+            }
+        }
+
+        $normalized = [];
+
+        foreach ($endpoints as $endpoint) {
+            if (!is_string($endpoint) || $endpoint === '') {
+                continue;
+            }
+
+            $url = trim($endpoint);
+
+            if (filter_var($url, FILTER_VALIDATE_URL) === false) {
+                Log::warning('Skipping invalid Report-To endpoint URL.', ['url' => $url]);
+                continue;
+            }
+
+            $scheme = parse_url($url, PHP_URL_SCHEME);
+            $isLocal = app()->environment(['local', 'development']);
+            $allowedSchemes = $isLocal ? ['https', 'http'] : ['https'];
+
+            if (!in_array($scheme, $allowedSchemes, true)) {
+                Log::warning('Skipping Report-To endpoint with unsupported scheme.', [
+                    'url' => $url,
+                    'scheme' => $scheme,
+                    'environment' => app()->environment(),
+                ]);
+                continue;
+            }
+
+            $normalized[] = ['url' => $url];
+        }
+
+        return $normalized;
+    }
+
+    /**
      * Genera un nonce criptográficamente seguro para CSP.
      * 
      * Utiliza random_bytes() para generar 16 bytes aleatorios (128 bits de entropía)
-     * y los convierte a hexadecimal, resultando en un string de 32 caracteres.
+     * y los codifica en Base64, resultando en un string de 24 caracteres.
      * 
      * El nonce debe ser:
      * - Único por request
@@ -743,7 +856,7 @@ class SecurityHeaders
      */
     private function generateNonce(): string
     {
-        return bin2hex(random_bytes(16));
+        return base64_encode(random_bytes(16));
     }
 
     /**
@@ -876,6 +989,7 @@ class SecurityHeaders
     {
         $relevant = [
             'content-security-policy',
+            'report-to',
             'strict-transport-security',
             'x-frame-options',
             'x-content-type-options',

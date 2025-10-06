@@ -19,6 +19,9 @@ $productionConnectHosts = array_filter(array_merge(["'self'", env('APP_URL')], $
 
 $productionReportUri = env('CSP_REPORT_URI');
 $productionReportTo = env('CSP_REPORT_TO');
+$reportToEndpoints = array_filter($parseCspSources(env('CSP_REPORT_TO_ENDPOINTS')));
+$reportToMaxAge = (int) env('CSP_REPORT_TO_MAX_AGE', 10886400);
+$reportToIncludeSubdomains = filter_var(env('CSP_REPORT_TO_INCLUDE_SUBDOMAINS', false), FILTER_VALIDATE_BOOLEAN);
 
 $developmentImgHosts = array_filter(array_merge(["'self'", 'data:', 'https:'], $parseCspSources(env('CSP_DEV_IMG_HOSTS'))));
 $developmentConnectHosts = array_filter(array_merge([
@@ -141,6 +144,9 @@ return [
     */
 
     'csp' => [
+        'report_to_endpoints' => $reportToEndpoints,
+        'report_to_max_age' => $reportToMaxAge,
+        'report_to_include_subdomains' => $reportToIncludeSubdomains,
         'development' => [
             'default-src' => array_filter(["'self'", env('APP_FRONTEND_URL', 'http://localhost:3000')]),
             'script-src' => array_filter(["'self'", "'unsafe-inline'", "'unsafe-eval'", env('APP_FRONTEND_URL', 'http://localhost:3000')]),

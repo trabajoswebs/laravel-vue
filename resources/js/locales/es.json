@@ -76,7 +76,7 @@
     "login_title": "Inicia sesión en tu cuenta",
     "login_description": "Introduce tu correo electrónico y contraseña para acceder",
     "email_address": "Dirección de correo electrónico",
-    "email_placeholder": "correo@ejemplo.com",
+    "email_placeholder": "correo@@ejemplo.com",
     "password_placeholder": "Contraseña",
     "forgot_password_link": "¿Has olvidado tu contraseña?",
     "dont_have_account": "¿No tienes cuenta?",
