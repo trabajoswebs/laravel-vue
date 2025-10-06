@@ -15,79 +15,79 @@ return [
 
     'welcome' => [
         'title' => '¡Bienvenido a :app_name!',
-        'message' => 'Gracias por unirte a nosotros. ¡Nos emociona tenerte a bordo!',
-        'action' => 'Comenzar',
+        'message' => 'Gracias por unirte. Estamos encantados de acompañarte en la gestión de tu negocio.',
+        'action' => 'Empezar ahora',
     ],
 
     'password_reset' => [
-        'title' => 'Solicitud de Restablecimiento de Contraseña',
-        'message' => 'Estás recibiendo esta notificación porque hemos recibido una solicitud de restablecimiento de contraseña para tu cuenta.',
-        'action' => 'Restablecer Contraseña',
-        'warning' => 'Si no solicitaste un restablecimiento de contraseña, no es necesario realizar ninguna acción adicional.',
+        'title' => 'Solicitud de restablecimiento de contraseña',
+        'message' => 'Hemos recibido una petición para restablecer la contraseña de tu cuenta.',
+        'action' => 'Restablecer contraseña',
+        'warning' => 'Si no lo has pedido tú, ignora este correo y tu contraseña seguirá siendo la misma.',
     ],
 
     'email_verification' => [
-        'title' => 'Verifica tu Dirección de Correo',
-        'message' => 'Por favor, verifica tu dirección de correo electrónico para completar tu registro.',
-        'action' => 'Verificar Correo',
-        'warning' => 'Si no creaste una cuenta, no es necesario realizar ninguna acción adicional.',
+        'title' => 'Verifica tu correo electrónico',
+        'message' => 'Solo falta confirmar tu dirección de correo para activar la cuenta.',
+        'action' => 'Verificar correo',
+        'warning' => 'Si no has creado una cuenta, puedes ignorar este mensaje.',
     ],
 
     'account_created' => [
-        'title' => 'Cuenta Creada Exitosamente',
-        'message' => 'Tu cuenta ha sido creada exitosamente. ¡Bienvenido a :app_name!',
-        'action' => 'Completar Configuración',
+        'title' => 'Cuenta creada',
+        'message' => 'Tu cuenta en :app_name ya está lista.',
+        'action' => 'Completar configuración',
     ],
 
     'login_alert' => [
-        'title' => 'Nuevo Inicio de Sesión Detectado',
-        'message' => 'Hemos detectado un nuevo inicio de sesión en tu cuenta desde :location en :device.',
-        'action' => 'Ver Actividad',
-        'warning' => 'Si no fuiste tú, por favor asegura tu cuenta inmediatamente.',
+        'title' => 'Nuevo inicio de sesión',
+        'message' => 'Tu cuenta se ha usado para iniciar sesión desde :location con :device.',
+        'action' => 'Ver actividad',
+        'warning' => 'Si no reconoces el acceso, cambia la contraseña y revisa tu seguridad.',
     ],
 
     'security_alert' => [
-        'title' => 'Alerta de Seguridad',
-        'message' => 'Hemos detectado actividad sospechosa en tu cuenta. Por favor, revisa y toma medidas si es necesario.',
-        'action' => 'Revisar Actividad',
-        'warning' => 'Esta es una notificación automática de seguridad.',
+        'title' => 'Aviso de seguridad',
+        'message' => 'Hemos detectado actividad poco habitual en tu cuenta. Revísala y actúa si hace falta.',
+        'action' => 'Revisar actividad',
+        'warning' => 'Mensaje automático de seguridad.',
     ],
 
     'profile_updated' => [
         'title' => 'Perfil Actualizado',
-        'message' => 'Tu perfil ha sido actualizado exitosamente.',
-        'action' => 'Ver Perfil',
+        'message' => 'Ya hemos guardado los cambios en tu perfil.',
+        'action' => 'Ver perfil',
     ],
 
     'settings_updated' => [
-        'title' => 'Configuración Actualizada',
-        'message' => 'La configuración de tu cuenta ha sido actualizada exitosamente.',
-        'action' => 'Ver Configuración',
+        'title' => 'Ajustes actualizados',
+        'message' => 'Hemos guardado la nueva configuración de tu cuenta.',
+        'action' => 'Ver ajustes',
     ],
 
     'two_factor_enabled' => [
-        'title' => 'Autenticación de Dos Factores Habilitada',
-        'message' => 'La autenticación de dos factores ha sido habilitada para tu cuenta.',
+        'title' => 'Autenticación en dos pasos activada',
+        'message' => 'Tu cuenta ya tiene activada la autenticación en dos pasos.',
         'action' => 'Gestionar 2FA',
     ],
 
     'two_factor_disabled' => [
-        'title' => 'Autenticación de Dos Factores Deshabilitada',
-        'message' => 'La autenticación de dos factores ha sido deshabilitada para tu cuenta.',
-        'action' => 'Habilitar 2FA',
+        'title' => 'Autenticación en dos pasos desactivada',
+        'message' => 'Has desactivado la autenticación en dos pasos para tu cuenta.',
+        'action' => 'Activar 2FA',
     ],
 
     'account_locked' => [
-        'title' => 'Cuenta Bloqueada Temporalmente',
-        'message' => 'Tu cuenta ha sido bloqueada temporalmente debido a múltiples intentos fallidos de inicio de sesión.',
-        'action' => 'Desbloquear Cuenta',
-        'warning' => 'Esta es una medida de seguridad para proteger tu cuenta.',
+        'title' => 'Cuenta bloqueada temporalmente',
+        'message' => 'Hemos bloqueado la cuenta tras varios intentos fallidos de acceso.',
+        'action' => 'Desbloquear cuenta',
+        'warning' => 'Es una medida preventiva para protegerte.',
     ],
 
     'account_unlocked' => [
-        'title' => 'Cuenta Desbloqueada',
-        'message' => 'Tu cuenta ha sido desbloqueada exitosamente. Ahora puedes iniciar sesión.',
-        'action' => 'Iniciar Sesión',
+        'title' => 'Cuenta desbloqueada',
+        'message' => 'Tu cuenta vuelve a estar disponible. Ya puedes iniciar sesión.',
+        'action' => 'Iniciar sesión',
     ],
 
 ];

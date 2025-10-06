@@ -2,23 +2,23 @@
 
 return [
     // Mensajes de éxito
-    'changed_successfully' => 'Idioma cambiado correctamente',
-    'detected_successfully' => 'Idioma detectado correctamente',
-    'cache_cleared' => 'Caché de traducciones limpiada correctamente',
-    'cache_prewarmed' => 'Caché de traducciones precargada',
-    'current_language_retrieved_successfully' => 'Idioma actual ha sido recuperado',
+    'changed_successfully' => 'Hemos cambiado el idioma.',
+    'detected_successfully' => 'Idioma detectado sin problema.',
+    'cache_cleared' => 'Hemos vaciado la caché de traducciones.',
+    'cache_prewarmed' => 'Traducciones precargadas y listas.',
+    'current_language_retrieved_successfully' => 'Idioma actual recuperado.',
 
     // Mensajes de error
-    'unsupported_language' => 'Idioma no soportado: :locale',
-    'change_error' => 'Error al cambiar el idioma',
-    'detection_error' => 'Error al detectar el idioma',
-    'cache_clear_error' => 'Error al limpiar la caché de traducciones',
-    'cache_prewarm_error' => 'Error al precargar la caché de traducciones',
+    'unsupported_language' => 'No trabajamos con el idioma :locale.',
+    'change_error' => 'No hemos podido cambiar el idioma.',
+    'detection_error' => 'No hemos podido detectar el idioma.',
+    'cache_clear_error' => 'No hemos podido vaciar la caché de traducciones.',
+    'cache_prewarm_error' => 'No hemos podido precargar la caché de traducciones.',
 
     // Mensajes informativos
-    'fallback_used' => 'Usando idioma por defecto: :locale',
-    'cache_cleared_count' => 'Caché limpiada para :count idiomas',
-    'cache_prewarmed_count' => 'Caché precargada para :count idiomas',
+    'fallback_used' => 'Usamos el idioma por defecto: :locale.',
+    'cache_cleared_count' => 'Caché vaciada para :count idiomas.',
+    'cache_prewarmed_count' => 'Precargamos traducciones para :count idiomas.',
 
     // Fuentes de detección
     'detection_source_user' => 'Preferencia del usuario',
@@ -33,10 +33,10 @@ return [
     'user_field_preferred_language' => 'preferred_language',
 
     // Estados
-    'state_changing' => 'Cambiando idioma...',
-    'state_changed' => 'Idioma cambiado',
-    'state_error' => 'Error en el cambio',
-    'state_unsupported' => 'Idioma no soportado',
+    'state_changing' => 'Estamos cambiando el idioma...',
+    'state_changed' => 'Idioma actualizado.',
+    'state_error' => 'No hemos podido cambiarlo.',
+    'state_unsupported' => 'Idioma no disponible.',
 
     // Nombres de idiomas
     'languages' => [

@@ -15,79 +15,79 @@ return [
 
     'welcome' => [
         'title' => 'Welcome to :app_name!',
-        'message' => 'Thank you for joining us. We\'re excited to have you on board!',
-        'action' => 'Get Started',
+        'message' => 'Thanks for joining us – we’re delighted to help you run the show.',
+        'action' => 'Get started',
     ],
 
     'password_reset' => [
-        'title' => 'Password Reset Request',
-        'message' => 'You are receiving this notification because we received a password reset request for your account.',
-        'action' => 'Reset Password',
-        'warning' => 'If you did not request a password reset, no further action is required.',
+        'title' => 'Password reset request',
+        'message' => 'We’ve had a request to reset the password on your account.',
+        'action' => 'Reset password',
+        'warning' => 'If this wasn’t you, simply ignore this message and your password will stay the same.',
     ],
 
     'email_verification' => [
-        'title' => 'Verify Your Email Address',
-        'message' => 'Please verify your email address to complete your registration.',
-        'action' => 'Verify Email',
-        'warning' => 'If you did not create an account, no further action is required.',
+        'title' => 'Verify your email address',
+        'message' => 'Confirm your email address to finish setting up your account.',
+        'action' => 'Verify email',
+        'warning' => 'If you didn’t create an account, you can safely ignore this message.',
     ],
 
     'account_created' => [
-        'title' => 'Account Created Successfully',
-        'message' => 'Your account has been created successfully. Welcome to :app_name!',
-        'action' => 'Complete Setup',
+        'title' => 'Account created',
+        'message' => 'Your account is ready to go. We’re pleased to have you with us.',
+        'action' => 'Complete setup',
     ],
 
     'login_alert' => [
-        'title' => 'New Login Detected',
-        'message' => 'We detected a new login to your account from :location on :device.',
-        'action' => 'View Activity',
-        'warning' => 'If this wasn\'t you, please secure your account immediately.',
+        'title' => 'New login detected',
+        'message' => 'Your account has just been accessed from :location using :device.',
+        'action' => 'Review activity',
+        'warning' => 'If you don’t recognise this, update your password and double-check your security settings.',
     ],
 
     'security_alert' => [
-        'title' => 'Security Alert',
-        'message' => 'We detected suspicious activity on your account. Please review and take action if necessary.',
-        'action' => 'Review Activity',
-        'warning' => 'This is an automated security notification.',
+        'title' => 'Security alert',
+        'message' => 'We’ve spotted some unusual activity on your account. Have a look and take action if needed.',
+        'action' => 'Review activity',
+        'warning' => 'Automatic security notice.',
     ],
 
     'profile_updated' => [
-        'title' => 'Profile Updated',
-        'message' => 'Your profile has been updated successfully.',
-        'action' => 'View Profile',
+        'title' => 'Profile updated',
+        'message' => 'All the changes to your profile are saved.',
+        'action' => 'View profile',
     ],
 
     'settings_updated' => [
-        'title' => 'Settings Updated',
-        'message' => 'Your account settings have been updated successfully.',
-        'action' => 'View Settings',
+        'title' => 'Settings updated',
+        'message' => 'We’ve saved your account settings.',
+        'action' => 'View settings',
     ],
 
     'two_factor_enabled' => [
-        'title' => 'Two-Factor Authentication Enabled',
-        'message' => 'Two-factor authentication has been enabled for your account.',
+        'title' => 'Two-step verification enabled',
+        'message' => 'Two-step verification is now active on your account.',
         'action' => 'Manage 2FA',
     ],
 
     'two_factor_disabled' => [
-        'title' => 'Two-Factor Authentication Disabled',
-        'message' => 'Two-factor authentication has been disabled for your account.',
+        'title' => 'Two-step verification disabled',
+        'message' => 'Two-step verification has been switched off for your account.',
         'action' => 'Enable 2FA',
     ],
 
     'account_locked' => [
-        'title' => 'Account Temporarily Locked',
-        'message' => 'Your account has been temporarily locked due to multiple failed login attempts.',
-        'action' => 'Unlock Account',
-        'warning' => 'This is a security measure to protect your account.',
+        'title' => 'Account temporarily locked',
+        'message' => 'We’ve locked your account after several unsuccessful login attempts.',
+        'action' => 'Unlock account',
+        'warning' => 'It’s a precaution to keep you secure.',
     ],
 
     'account_unlocked' => [
-        'title' => 'Account Unlocked',
-        'message' => 'Your account has been unlocked successfully. You can now log in.',
-        'action' => 'Login',
+        'title' => 'Account unlocked',
+        'message' => 'Your account is open again. You can now log in.',
+        'action' => 'Log in',
     ],
 
 ];

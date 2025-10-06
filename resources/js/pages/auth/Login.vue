@@ -7,10 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { Form, Head } from '@inertiajs/vue3';
-import { LoaderCircle } from 'lucide-vue-next';
+import { LoaderCircle, Eye, EyeOff } from 'lucide-vue-next';
+import { ref } from 'vue';
 import { useLanguage } from '@/composables/useLanguage';
 
 const { t } = useLanguage();
+
+const showPassword = ref(false);
 
 defineProps<{
     status?: string;
@@ -45,8 +48,19 @@ defineProps<{
                             {{ t('auth.forgot_password_link') }}
                         </TextLink>
                     </div>
-                    <Input id="password" type="password" name="password" required :tabindex="2"
-                        autocomplete="current-password" :placeholder="t('auth.password_placeholder')" />
+                    <div class="relative">
+                        <Input id="password" :type="showPassword ? 'text' : 'password'" name="password" required
+                            :tabindex="2" autocomplete="current-password" class="pr-10"
+                            :placeholder="t('auth.password_placeholder')" />
+                        <button type="button"
+                            class="absolute inset-y-0 right-0 flex items-center pr-3 text-neutral-500 transition hover:text-neutral-700 cursor-pointer"
+                            @click="showPassword = !showPassword" :aria-label="showPassword
+                                ? t('settings.hide_password')
+                                : t('settings.show_password')"
+                            :title="showPassword ? t('settings.hide_password') : t('settings.show_password')">
+                            <component :is="showPassword ? EyeOff : Eye" class="h-4 w-4" />
+                        </button>
+                    </div>
                     <InputError :message="errors.password" />
                 </div>
 

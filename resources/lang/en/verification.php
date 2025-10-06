@@ -13,25 +13,25 @@ return [
     |
     */
 
-    'title' => 'Verify Email Address',
-    'subtitle' => 'Before proceeding, please check your email for a verification link.',
-    'message' => 'Thanks for signing up! Before getting started, could you verify your email address by clicking on the link we just emailed to you? If you didn\'t receive the email, we will gladly send you another.',
+    'title' => 'Verify your email',
+    'subtitle' => 'Take a moment to open the email we’ve just sent and click the verification link.',
+    'message' => 'Thanks for registering. To finish setting things up, confirm your email address using the link we’ve just sent. If it’s not in your inbox, we can send it again.',
     
-    'resend' => 'Resend Verification Email',
-    'sent' => 'A fresh verification link has been sent to your email address.',
-    'verified' => 'Your email address has been verified successfully.',
+    'resend' => 'Send the verification email again',
+    'sent' => 'We’ve sent you another verification link.',
+    'verified' => 'Your email address is verified.',
     
-    'email_subject' => 'Verify Email Address',
-    'email_greeting' => 'Hello!',
-    'email_line1' => 'Please click the button below to verify your email address.',
-    'email_action' => 'Verify Email Address',
-    'email_line2' => 'If you did not create an account, no further action is required.',
-    'email_salutation' => 'Regards,',
-    'email_footer' => 'If you\'re having trouble clicking the ":actionText" button, copy and paste the URL below into your web browser: [:actionURL](:actionURL)',
+    'email_subject' => 'Verify your email address',
+    'email_greeting' => 'Hello,',
+    'email_line1' => 'Hit the button below to confirm your email address.',
+    'email_action' => 'Verify email',
+    'email_line2' => 'If you didn’t create an account, you don’t need to do anything.',
+    'email_salutation' => 'Best regards,',
+    'email_footer' => 'If the “:actionText” button doesn’t work, copy and paste this link into your browser: [:actionURL](:actionURL)',
     
-    'already_verified' => 'Your email address is already verified.',
-    'verification_required' => 'Please verify your email address before continuing.',
-    'verification_expired' => 'The verification link has expired. Please request a new one.',
-    'verification_invalid' => 'The verification link is invalid. Please request a new one.',
+    'already_verified' => 'Your email was already verified.',
+    'verification_required' => 'Please verify your email before you continue.',
+    'verification_expired' => 'That link has expired. Request a fresh one.',
+    'verification_invalid' => 'That link doesn’t look right. Ask for a new one.',
 
 ];

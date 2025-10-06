@@ -12,9 +12,9 @@ return [
     */
 
     // Bienvenida e Inicio
-    'welcome' => 'Bienvenido',
-    'welcome_message' => 'Bienvenido a tu aplicación Laravel Vue Starter Kit',
-    'get_started' => 'Empezar',
+    'welcome' => 'Te damos la bienvenida',
+    'welcome_message' => 'Esta es tu mesa de control para gestionar el negocio día a día.',
+    'get_started' => 'Empezar ahora',
     'learn_more' => 'Saber más',
     'documentation' => 'Documentación',
     'github' => 'GitHub',
@@ -63,33 +63,33 @@ return [
     'error' => 'Error',
     'warning' => 'Advertencia',
     'info' => 'Información',
-    'success_message' => 'Operación completada correctamente',
-    'error_message' => 'Ha ocurrido un error al procesar tu solicitud',
-    'warning_message' => 'Por favor, revisa la información antes de continuar',
-    'info_message' => 'Aquí tienes información que puede serte útil',
+    'success_message' => 'Hemos completado la operación sin problemas.',
+    'error_message' => 'Algo ha fallado al procesar tu petición.',
+    'warning_message' => 'Revisa la información antes de seguir.',
+    'info_message' => 'Quizá te venga bien tener en cuenta esto.',
 
     // Mensajes de Formularios
-    'required_fields' => 'Los campos marcados con * son obligatorios',
+    'required_fields' => 'Los campos marcados con * son obligatorios.',
     'optional_fields' => 'Los campos marcados con (opcional) no son obligatorios',
-    'form_validation_error' => 'Por favor, corrige los errores de abajo',
+    'form_validation_error' => 'Corrige los campos señalados antes de continuar.',
     'form_submitted' => 'Formulario enviado correctamente',
     'form_saving' => 'Guardando...',
-    'form_saved' => 'Formulario guardado correctamente',
+    'form_saved' => 'Formulario guardado.',
 
     // Mensajes de Datos
-    'no_data' => 'No hay datos disponibles',
-    'no_results' => 'No se encontraron resultados',
-    'data_loaded' => 'Datos cargados correctamente',
-    'data_saved' => 'Datos guardados correctamente',
-    'data_deleted' => 'Datos eliminados correctamente',
-    'data_updated' => 'Datos actualizados correctamente',
-    'data_created' => 'Datos creados correctamente',
+    'no_data' => 'No tenemos datos que mostrar todavía.',
+    'no_results' => 'No hemos encontrado resultados para esta búsqueda.',
+    'data_loaded' => 'Hemos cargado los datos.',
+    'data_saved' => 'Hemos guardado los datos.',
+    'data_deleted' => 'Hemos eliminado los datos seleccionados.',
+    'data_updated' => 'Datos actualizados.',
+    'data_created' => 'Datos creados.',
 
     // Mensajes de Confirmación
-    'confirm_delete' => '¿Estás seguro de que quieres eliminar este elemento?',
-    'confirm_action' => '¿Estás seguro de que quieres realizar esta acción?',
-    'confirm_leave' => 'Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?',
-    'confirm_logout' => '¿Estás seguro de que quieres cerrar sesión?',
+    'confirm_delete' => '¿Seguro que quieres eliminar este elemento?',
+    'confirm_action' => '¿Seguro que quieres realizar esta acción?',
+    'confirm_leave' => 'Tienes cambios sin guardar. ¿Seguro que quieres salir?',
+    'confirm_logout' => '¿Seguro que quieres cerrar sesión?',
 
     // Tiempo y Fecha
     'today' => 'Hoy',
@@ -114,9 +114,9 @@ return [
     'file_type' => 'Tipo de archivo',
     'file_name' => 'Nombre del archivo',
     'upload_success' => 'Archivo subido correctamente',
-    'upload_error' => 'Error al subir el archivo',
-    'file_too_large' => 'El archivo es demasiado grande',
-    'invalid_file_type' => 'Tipo de archivo no válido',
+    'upload_error' => 'No hemos podido subir el archivo.',
+    'file_too_large' => 'El archivo pesa más de lo permitido.',
+    'invalid_file_type' => 'Este formato de archivo no es compatible.',
 
     // Paginación
     'showing' => 'Mostrando',
@@ -130,22 +130,22 @@ return [
     // Búsqueda y Filtros
     'search_placeholder' => 'Buscar...',
     'filter_by' => 'Filtrar por',
-    'clear_filters' => 'Limpiar filtros',
+    'clear_filters' => 'Quitar filtros',
     'apply_filters' => 'Aplicar filtros',
     'no_filters' => 'No hay filtros aplicados',
     'search_results' => 'Resultados de búsqueda',
-    'search_no_results' => 'No se encontraron resultados para tu búsqueda',
+    'search_no_results' => 'No hay coincidencias con esa búsqueda.',
 
     // Notificaciones
     'notifications' => 'Notificaciones',
     'mark_all_read' => 'Marcar todo como leído',
     'no_notifications' => 'No hay notificaciones',
     'new_notification' => 'Nueva notificación',
-    'notifications_cleared' => 'Notificaciones limpiadas',
+    'notifications_cleared' => 'Hemos vaciado las notificaciones.',
 
     // Interfaz de Usuario
-    'toggle_navigation' => 'Alternar navegación',
-    'toggle_sidebar' => 'Alternar barra lateral',
+    'toggle_navigation' => 'Mostrar u ocultar navegación',
+    'toggle_sidebar' => 'Mostrar u ocultar barra lateral',
     'fullscreen' => 'Pantalla completa',
     'exit_fullscreen' => 'Salir de pantalla completa',
     'dark_mode' => 'Modo oscuro',
@@ -155,7 +155,7 @@ return [
 
     // Páginas de Error
     'page_not_found' => 'Página no encontrada',
-    'page_not_found_message' => 'La página que buscas no se pudo encontrar.',
+    'page_not_found_message' => 'No damos con la página que buscas.',
     'unauthorized' => 'No autorizado',
     'unauthorized_message' => 'No tienes permiso para acceder a este recurso.',
     'forbidden' => 'Prohibido',

@@ -27,7 +27,7 @@ class CleanAuditLogs extends Command
      */
     public function handle()
     {
-        $days = (int) $this->option('days');
+        $days = (int) ($this->option('days') ?? config('audit.retention_days', 90));
         $force = $this->option('force');
         
         $this->info("🧹 Limpiando logs de auditoría más antiguos de {$days} días...");

@@ -173,6 +173,29 @@ return [
         'attribute-name' => [
             'rule-name' => 'custom-message',
         ],
+        'current_password' => [
+            'required' => 'You need to enter your current password.',
+            'current_password' => 'The current password you entered is not correct.',
+        ],
+        'password' => [
+            'required' => 'Please choose a password.',
+            'confirmed' => 'Please repeat the password so we can confirm it matches.',
+            'min' => 'Your password must contain at least :min characters.',
+        ],
+        'password_confirmation' => [
+            'required' => 'Please confirm your password to continue.',
+        ],
+        'name' => [
+            'required' => 'Let us know your name so we can identify you.',
+            'min' => 'Your name must contain at least :min characters.',
+            'max' => 'Your name cannot contain more than :max characters.',
+            'string' => 'Your name may only contain letters and spaces.',
+        ],
+        'email' => [
+            'required' => 'We need your email address to continue.',
+            'email' => 'Enter a valid email address (for example, name@example.com).',
+            'unique' => 'We already have an account registered with this email. If it is yours, please sign in.',
+        ],
     ],
 
     /*

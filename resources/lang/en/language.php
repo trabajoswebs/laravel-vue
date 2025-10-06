@@ -2,23 +2,23 @@
 
 return [
     // Success messages
-    'changed_successfully' => 'Language changed successfully',
-    'detected_successfully' => 'Language detected successfully',
-    'cache_cleared' => 'Translation cache cleared successfully',
-    'cache_prewarmed' => 'Translation cache prewarmed successfully',
-    'current_language_retrieved_successfully' => 'Current language has been retrieved',
+    'changed_successfully' => 'Language updated.',
+    'detected_successfully' => 'Language detected without any trouble.',
+    'cache_cleared' => 'Translation cache cleared.',
+    'cache_prewarmed' => 'Translation cache preloaded and ready.',
+    'current_language_retrieved_successfully' => 'Current language retrieved.',
 
     // Error messages
-    'unsupported_language' => 'Unsupported language: :locale',
-    'change_error' => 'Error changing language',
-    'detection_error' => 'Error detecting language',
-    'cache_clear_error' => 'Error clearing translation cache',
-    'cache_prewarm_error' => 'Error prewarming translation cache',
+    'unsupported_language' => 'We don’t support the :locale language yet.',
+    'change_error' => 'We couldn’t change the language.',
+    'detection_error' => 'We couldn’t detect the language.',
+    'cache_clear_error' => 'We couldn’t clear the translation cache.',
+    'cache_prewarm_error' => 'We couldn’t preload the translation cache.',
 
     // Informative messages
-    'fallback_used' => 'Using fallback language: :locale',
-    'cache_cleared_count' => 'Cache cleared for :count languages',
-    'cache_prewarmed_count' => 'Cache prewarmed for :count languages',
+    'fallback_used' => 'Falling back to :locale',
+    'cache_cleared_count' => 'Cache cleared for :count languages.',
+    'cache_prewarmed_count' => 'Cache preloaded for :count languages.',
 
     // Detection sources
     'detection_source_user' => 'User preference',
@@ -33,10 +33,10 @@ return [
     'user_field_preferred_language' => 'preferred_language',
 
     // States
-    'state_changing' => 'Changing language...',
-    'state_changed' => 'Language changed',
-    'state_error' => 'Change error',
-    'state_unsupported' => 'Unsupported language',
+    'state_changing' => 'We’re changing the language...',
+    'state_changed' => 'Language updated.',
+    'state_error' => 'Couldn’t change the language.',
+    'state_unsupported' => 'Language not available.',
 
     // Language names
     'languages' => [
@@ -96,7 +96,7 @@ return [
         'session_preference_found' => 'Session preference found: :locale',
         'cookie_preference_found' => 'Cookie preference found: :locale',
         'browser_preference_found' => 'Browser preference found: :locale',
-        'fallback_used' => 'Using fallback language: :locale',
+        'fallback_used' => 'Falling back to :locale',
         'cache_hit' => 'Cache hit for: :locale',
         'cache_miss' => 'Cache miss for: :locale',
         'cache_cleared' => 'Cache cleared for: :locale',

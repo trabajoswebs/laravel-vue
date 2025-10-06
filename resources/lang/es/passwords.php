@@ -13,31 +13,31 @@ return [
     |
     */
 
-    'reset' => '¡Tu contraseña ha sido restablecida!',
-    'sent' => '¡Hemos enviado por correo electrónico el enlace para restablecer tu contraseña!',
-    'throttled' => 'Por favor, espera antes de volver a intentarlo.',
-    'token' => 'Este enlace de restablecimiento de contraseña no es válido.',
-    'user' => "No podemos encontrar un usuario con esa dirección de correo electrónico.",
+    'reset' => 'Hemos actualizado tu contraseña.',
+    'sent' => 'Te hemos enviado un enlace para restablecer la contraseña.',
+    'throttled' => 'Espera unos segundos antes de volver a intentarlo.',
+    'token' => 'Este enlace ya no es válido o ha caducado.',
+    'user' => "No encontramos ninguna cuenta asociada a ese correo.",
 
     'reset_title' => 'Restablecer contraseña',
-    'reset_subtitle' => 'Introduce tu dirección de correo electrónico y te enviaremos un enlace para restablecer tu contraseña.',
+    'reset_subtitle' => 'Escribe el correo con el que te registraste y te enviaremos un enlace para recuperarla.',
     'reset_email' => 'Correo electrónico',
     'reset_submit' => 'Enviar enlace de restablecimiento',
     'reset_back' => 'Volver al inicio de sesión',
 
     'new_title' => 'Nueva contraseña',
-    'new_subtitle' => 'Introduce tu nueva contraseña.',
+    'new_subtitle' => 'Elige una contraseña nueva.',
     'new_password' => 'Nueva contraseña',
     'new_password_confirmation' => 'Confirmar nueva contraseña',
     'new_submit' => 'Restablecer contraseña',
 
     'email_subject' => 'Notificación de restablecimiento de contraseña',
     'email_greeting' => '¡Hola!',
-    'email_line1' => 'Estás recibiendo este correo electrónico porque hemos recibido una solicitud de restablecimiento de contraseña para tu cuenta.',
+    'email_line1' => 'Has recibido este correo porque alguien (quizá tú) solicitó restablecer la contraseña.',
     'email_action' => 'Restablecer contraseña',
     'email_line2' => 'Este enlace de restablecimiento de contraseña expirará en :count minutos.',
-    'email_line3' => 'Si no solicitaste un restablecimiento de contraseña, no es necesario realizar ninguna acción adicional.',
-    'email_salutation' => 'Saludos,',
-    'email_footer' => 'Si tienes problemas para hacer clic en el botón ":actionText", copia y pega la URL de abajo en tu navegador web: [:actionURL](:actionURL)',
+    'email_line3' => 'Si no has sido tú, ignora este mensaje y la contraseña seguirá igual.',
+    'email_salutation' => 'Un saludo,',
+    'email_footer' => 'Si el botón «:actionText» no funciona, copia y pega esta dirección en tu navegador: [:actionURL](:actionURL)',
 
 ];

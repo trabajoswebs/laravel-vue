@@ -385,24 +385,32 @@ class SecurityHelper
      */
     public static function sanitizeForLogging(array $data): array
     {
+        static $configuredSensitive = null;
+
+        if ($configuredSensitive === null) {
+            $configuredSensitive = array_map('strtolower', config('audit.sensitive_fields', []));
+        }
+
+        $defaultSensitive = [
+            'password',
+            'password_confirmation',
+            'token',
+            'api_key',
+            'secret',
+            'private_key',
+            'auth_token',
+            'bearer_token',
+            'session_id',
+            'csrf_token',
+            'remember_token'
+        ];
+
+        $sensitiveKeys = array_unique(array_merge($defaultSensitive, $configuredSensitive));
+
         $sanitized = []; // Ej: resultado final inicializado
 
         foreach ($data as $key => $value) {
-            $sensitiveKeys = [
-                'password',
-                'password_confirmation',
-                'token',
-                'api_key',
-                'secret',
-                'private_key',
-                'auth_token',
-                'bearer_token',
-                'session_id',
-                'csrf_token',
-                'remember_token'
-            ];
-
-            if (in_array(strtolower($key), $sensitiveKeys)) {
+            if (in_array(strtolower($key), $sensitiveKeys, true)) {
                 $sanitized[$key] = '[REDACTED]'; // Ej: "password" => "[REDACTED]"
             } elseif (is_array($value)) {
                 $sanitized[$key] = self::sanitizeForLogging($value); // Ej: array anidado => recursivo

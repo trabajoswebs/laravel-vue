@@ -132,7 +132,7 @@ return [
     'prohibited_unless' => ':attribute está prohibido a menos que :other esté en :values.',
     'prohibits' => ':attribute prohíbe que :other esté presente.',
     'regex' => 'El formato de :attribute no es válido.',
-    'required' => ':attribute es obligatorio.',
+    'required' => 'El campo :attribute es obligatorio.',
     'required_array_keys' => 'El campo :attribute debe contener entradas para: :values.',
     'required_if' => ':attribute es obligatorio cuando :other es :value.',
     'required_if_accepted' => ':attribute es obligatorio cuando :other es aceptado.',
@@ -173,6 +173,29 @@ return [
         'attribute-name' => [
             'rule-name' => 'mensaje-personalizado',
         ],
+        'current_password' => [
+            'required' => 'La contraseña actual es obligatoria.',
+            'current_password' => 'La contraseña actual no es correcta.',
+        ],
+        'password' => [
+            'required' => 'Necesitas indicar la contraseña.',
+            'confirmed' => 'Repite la contraseña para confirmar que coincide.',
+            'min' => 'La contraseña debe tener al menos :min caracteres.',
+        ],
+        'password_confirmation' => [
+            'required' => 'Confirma la contraseña para continuar.',
+        ],
+        'name' => [
+            'required' => 'Dinos tu nombre para poder identificarte.',
+            'min' => 'El nombre debe tener como mínimo :min caracteres.',
+            'max' => 'El nombre no puede superar los :max caracteres.',
+            'string' => 'El nombre solo puede contener letras y espacios.',
+        ],
+        'email' => [
+            'required' => 'Necesitamos tu correo electrónico para seguir.',
+            'email' => 'Introduce un correo electrónico con formato válido.',
+            'unique' => 'Ya tenemos una cuenta con este correo. Si es tuyo, inicia sesión.',
+        ],
     ],
 
     /*
@@ -190,7 +213,8 @@ return [
         'name' => 'nombre',
         'username' => 'nombre de usuario',
         'email' => 'correo electrónico',
-        'password' => 'La contraseña',
+        'password' => 'contraseña',
+        'current_password' => 'contraseña actual',
         'password_confirmation' => 'confirmación de contraseña',
         'city' => 'ciudad',
         'country' => 'país',

@@ -1,10 +1,10 @@
 # Laravel Vue Starter Kit
 
-Un kit de inicio completo para aplicaciones web modernas usando Laravel 11 y Vue 3 con Inertia.js.
+Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue 3 con Inertia.js.
 
 ## 🚀 Características Principales
 
-- **Laravel 11** - Framework PHP moderno y robusto
+- **Laravel 12** - Framework PHP moderno y robusto
 - **Vue 3** - Framework JavaScript progresivo
 - **Inertia.js** - Aplicaciones SPA sin la complejidad de APIs
 - **TypeScript** - Tipado estático para JavaScript

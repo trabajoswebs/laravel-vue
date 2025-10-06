@@ -13,9 +13,9 @@ return [
 
     // Welcome and Home
     'welcome' => 'Welcome',
-    'welcome_message' => 'Welcome to your Laravel Vue Starter Kit application',
-    'get_started' => 'Get Started',
-    'learn_more' => 'Learn More',
+    'welcome_message' => 'Your workspace for keeping the business organised.',
+    'get_started' => 'Get started',
+    'learn_more' => 'Find out more',
     'documentation' => 'Documentation',
     'github' => 'GitHub',
 
@@ -63,33 +63,33 @@ return [
     'error' => 'Error',
     'warning' => 'Warning',
     'info' => 'Information',
-    'success_message' => 'Operation completed successfully',
-    'error_message' => 'An error occurred while processing your request',
-    'warning_message' => 'Please review the information before proceeding',
-    'info_message' => 'Here is some information you might find useful',
+    'success_message' => 'We’ve completed the action for you.',
+    'error_message' => 'We couldn’t finish that request.',
+    'warning_message' => 'Take a quick look over the details before you continue.',
+    'info_message' => 'This might be useful to keep in mind.',
 
     // Form Messages
-    'required_fields' => 'Fields marked with * are required',
+    'required_fields' => 'Fields marked with * are compulsory.',
     'optional_fields' => 'Fields marked with (optional) are not required',
-    'form_validation_error' => 'Please correct the errors below',
-    'form_submitted' => 'Form submitted successfully',
+    'form_validation_error' => 'Please fix the highlighted fields before continuing.',
+    'form_submitted' => 'We’ve received your form.',
     'form_saving' => 'Saving...',
-    'form_saved' => 'Form saved successfully',
+    'form_saved' => 'Form saved.',
 
     // Data Messages
-    'no_data' => 'No data available',
-    'no_results' => 'No results found',
-    'data_loaded' => 'Data loaded successfully',
-    'data_saved' => 'Data saved successfully',
-    'data_deleted' => 'Data deleted successfully',
-    'data_updated' => 'Data updated successfully',
-    'data_created' => 'Data created successfully',
+    'no_data' => 'There’s nothing to show just yet.',
+    'no_results' => 'We couldn’t find anything matching that search.',
+    'data_loaded' => 'Data loaded.',
+    'data_saved' => 'Data saved.',
+    'data_deleted' => 'We’ve deleted the selected data.',
+    'data_updated' => 'Data updated.',
+    'data_created' => 'Data created.',
 
     // Confirmation Messages
-    'confirm_delete' => 'Are you sure you want to delete this item?',
-    'confirm_action' => 'Are you sure you want to perform this action?',
-    'confirm_leave' => 'You have unsaved changes. Are you sure you want to leave?',
-    'confirm_logout' => 'Are you sure you want to logout?',
+    'confirm_delete' => 'Are you sure you’d like to delete this item?',
+    'confirm_action' => 'Are you sure you’d like to carry on with this action?',
+    'confirm_leave' => 'You have unsaved changes. Leave without saving?',
+    'confirm_logout' => 'Are you sure you’d like to sign out?',
 
     // Time and Date
     'today' => 'Today',
@@ -114,9 +114,9 @@ return [
     'file_type' => 'File Type',
     'file_name' => 'File Name',
     'upload_success' => 'File uploaded successfully',
-    'upload_error' => 'Error uploading file',
-    'file_too_large' => 'File is too large',
-    'invalid_file_type' => 'Invalid file type',
+    'upload_error' => 'We couldn’t upload the file.',
+    'file_too_large' => 'The file is larger than allowed.',
+    'invalid_file_type' => 'That file format isn’t supported.',
 
     // Pagination
     'showing' => 'Showing',
@@ -130,24 +130,24 @@ return [
     // Search and Filter
     'search_placeholder' => 'Search...',
     'filter_by' => 'Filter by',
-    'clear_filters' => 'Clear Filters',
-    'apply_filters' => 'Apply Filters',
+    'clear_filters' => 'Clear filters',
+    'apply_filters' => 'Apply filters',
     'no_filters' => 'No filters applied',
     'search_results' => 'Search Results',
-    'search_no_results' => 'No results found for your search',
+    'search_no_results' => 'Nothing matches that search.',
 
     // Notifications
     'notifications' => 'Notifications',
-    'mark_all_read' => 'Mark All as Read',
+    'mark_all_read' => 'Mark all as read',
     'no_notifications' => 'No notifications',
     'new_notification' => 'New notification',
-    'notifications_cleared' => 'Notifications cleared',
+    'notifications_cleared' => 'Notifications cleared.',
 
     // User Interface
-    'toggle_navigation' => 'Toggle Navigation',
-    'toggle_sidebar' => 'Toggle Sidebar',
-    'fullscreen' => 'Fullscreen',
-    'exit_fullscreen' => 'Exit Fullscreen',
+    'toggle_navigation' => 'Show or hide navigation',
+    'toggle_sidebar' => 'Show or hide sidebar',
+    'fullscreen' => 'Full screen',
+    'exit_fullscreen' => 'Exit full screen',
     'dark_mode' => 'Dark Mode',
     'light_mode' => 'Light Mode',
     'language' => 'Language',
@@ -155,9 +155,9 @@ return [
 
     // Error Pages
     'page_not_found' => 'Page Not Found',
-    'page_not_found_message' => 'The page you are looking for could not be found.',
+    'page_not_found_message' => 'We can’t find the page you’re after.',
     'unauthorized' => 'Unauthorized',
-    'unauthorized_message' => 'You do not have permission to access this resource.',
+    'unauthorized_message' => 'You don’t have permission to access this resource.',
     'forbidden' => 'Forbidden',
     'forbidden_message' => 'Access to this resource is forbidden.',
     'server_error' => 'Server Error',
