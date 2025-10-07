@@ -6,4 +6,5 @@ return [
      */
     App\Providers\AppServiceProvider::class,
     App\Providers\HtmlPurifierServiceProvider::class,
+    App\Providers\AuthServiceProvider::class,
 ];
