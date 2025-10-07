@@ -65,6 +65,14 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "env:local": [
+            "@php -r \"copy('.env.local','.env');\"",
+            "php artisan config:clear"
+        ],
+        "env:sail": [
+            "@php -r \"copy('.env.sail','.env');\"",
+            "php artisan config:clear"
         ]
     },
     "extra": {
