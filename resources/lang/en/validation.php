@@ -196,6 +196,21 @@ return [
             'email' => 'Enter a valid email address (for example, name@example.com).',
             'unique' => 'We already have an account registered with this email. If it is yours, please sign in.',
         ],
+        'image' => [
+            'invalid_file' => 'Please upload a valid image file.',
+            'invalid_signature' => 'We could not verify that the file is a genuine image. Try another file.',
+            'invalid_dimensions' => 'The image dimensions exceed the allowed limits.',
+            'malicious_payload' => 'We detected suspicious content in the image and rejected the upload.',
+        ],
+        'avatar' => [
+            'required' => 'Please choose an image for your avatar.',
+            'image' => 'The selected file must be a valid image.',
+            'mimes' => 'Allowed formats: JPEG, PNG, WebP, or AVIF.',
+            'mimetypes' => 'Allowed formats: JPEG, PNG, WebP, or AVIF.',
+            'max' => 'Your avatar may not exceed :max kilobytes.',
+            'dimensions' => 'The image must be between 128x128 and 2048x2048 pixels.',
+            'uploaded' => 'We could not process that image. Please try another file.',
+        ],
     ],
 
     /*
@@ -237,6 +252,7 @@ return [
         'time' => 'time',
         'available' => 'available',
         'size' => 'size',
+        'avatar' => 'avatar',
     ],
 
 ];

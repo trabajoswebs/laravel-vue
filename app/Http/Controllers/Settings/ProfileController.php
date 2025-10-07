@@ -21,6 +21,10 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user();
+
+        $this->authorize('view', $user);
+
         return Inertia::render('settings/Profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
@@ -35,6 +39,8 @@ class ProfileController extends Controller
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
         $user = $request->user();
+
+        $this->authorize('update', $user);
 
         try {
             return DB::transaction(function () use ($user, $request) {
@@ -73,6 +79,8 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+
+        $this->authorize('delete', $user);
 
         Auth::logout();
 

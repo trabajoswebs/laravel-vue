@@ -14,9 +14,11 @@ class PasswordController extends Controller
 {
     /**
      * Show the user's password settings page.
-     */
-    public function edit(): Response
+     */    
+    public function edit(Request $request): Response
     {
+        $this->authorize('view', $request->user());
+
         return Inertia::render('settings/Password');
     }
 
@@ -25,6 +27,8 @@ class PasswordController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
+        $this->authorize('update', $request->user());
+
         $validated = $request->validate([
             'current_password' => ['required', 'current_password'],
             'password' => ['required', Password::defaults()->uncompromised(), 'confirmed'],

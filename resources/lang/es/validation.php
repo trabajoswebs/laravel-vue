@@ -196,6 +196,21 @@ return [
             'email' => 'Introduce un correo electrónico con formato válido.',
             'unique' => 'Ya tenemos una cuenta con este correo. Si es tuyo, inicia sesión.',
         ],
+        'image' => [
+            'invalid_file' => 'Debes subir un archivo de imagen válido.',
+            'invalid_signature' => 'No pudimos verificar que el archivo sea una imagen legítima. Intenta con otro.',
+            'invalid_dimensions' => 'Las dimensiones de la imagen exceden los límites permitidos.',
+            'malicious_payload' => 'Detectamos contenido sospechoso en la imagen y se rechazó la carga.',
+        ],
+        'avatar' => [
+            'required' => 'Selecciona una imagen para tu avatar.',
+            'image' => 'El archivo debe ser una imagen válida.',
+            'mimes' => 'Formatos permitidos: JPEG, PNG, WebP o AVIF.',
+            'mimetypes' => 'Formatos permitidos: JPEG, PNG, WebP o AVIF.',
+            'max' => 'El avatar no debe exceder los :max kilobytes.',
+            'dimensions' => 'La imagen debe estar entre 128x128 y 2048x2048 píxeles.',
+            'uploaded' => 'No pudimos procesar esta imagen. Intenta con otro archivo.',
+        ],
     ],
 
     /*
@@ -238,6 +253,7 @@ return [
         'time' => 'hora',
         'available' => 'disponible',
         'size' => 'tamaño',
+        'avatar' => 'avatar',
     ],
 
 ];
