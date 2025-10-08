@@ -1,19 +1,23 @@
 # Laravel Vue Starter Kit
 
-Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue 3 con Inertia.js.
+Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue 3 con Inertia.js, optimizado para desarrollo profesional.
 
 ## 🚀 Características Principales
 
 - **Laravel 12** - Framework PHP moderno y robusto
-- **Vue 3** - Framework JavaScript progresivo
+- **Vue 3** - Framework JavaScript progresivo con Composition API
 - **Inertia.js** - Aplicaciones SPA sin la complejidad de APIs
 - **TypeScript** - Tipado estático para JavaScript
-- **Tailwind CSS** - Framework CSS utilitario
+- **Tailwind CSS 4** - Framework CSS utilitario de última generación
 - **Autenticación completa** - Login, registro, verificación de email
 - **Internacionalización (i18n)** - Soporte multiidioma completo
 - **Traducciones dinámicas** - Sistema híbrido cliente-servidor
 - **Diseño responsive** - Funciona en todos los dispositivos
 - **Modo oscuro** - Soporte para temas claro/oscuro
+- **Procesamiento de imágenes avanzado** - Pipeline de optimización con ImagePipeline y OptimizerService
+- **Media Library** - Gestión avanzada de archivos multimedia con Spatie
+- **Docker & Laravel Sail** - Entorno de desarrollo containerizado
+- **Herramientas de desarrollo** - ESLint, Prettier, TypeScript configurados
 - **Capa de seguridad documentada** - CSP, rate limiting, auditoría y cabeceras listas para producción ([ver guía](docs/SECURITY.md))
 
 ## 🌍 Sistema de Internacionalización
@@ -39,36 +43,116 @@ Este proyecto implementa un sistema de traducciones híbrido que combina:
 - 🇪🇸 **Español** (es) - Idioma por defecto
 - 🇺🇸 **English** (en) - Idioma secundario
 
+## 🖼️ Sistema de Procesamiento de Imágenes
+
+### ImagePipeline
+
+Sistema avanzado de pre-procesamiento de imágenes que incluye:
+
+✅ **Validación robusta** - Tamaño, MIME real (finfo, magic bytes)  
+✅ **Normalización** - Auto-orientación, limpieza de EXIF/ICC, conversión a sRGB  
+✅ **Redimensionado inteligente** - Mantiene proporciones hasta límites configurables  
+✅ **Re-codificación** - Soporte para JPEG, WebP, PNG, GIF con parámetros ajustables  
+✅ **GIF animados** - Conserva animaciones o toma primer frame (configurable)  
+✅ **Gestión de memoria** - Cleanup automático y Value Objects seguros  
+
+### OptimizerService
+
+Servicio de optimización de imágenes para Media Library:
+
+✅ **Optimización completa** - Archivos originales y conversiones  
+✅ **Soporte multi-disco** - Local y S3 con streaming  
+✅ **Métricas detalladas** - Ahorro de espacio y estadísticas por archivo  
+✅ **Límites de seguridad** - Protección contra archivos excesivamente grandes  
+✅ **Whitelist de formatos** - Solo optimiza formatos compatibles  
+
+### Configuración
+
+```bash
+# Instalar dependencias de imagen (requerido)
+sudo apt-get install jpegoptim pngquant webp gifsicle
+
+# Configurar parámetros en config/image-pipeline.php
+# Personalizar calidades, dimensiones máximas, etc.
+```
+
 ## 🛠️ Instalación
 
-### Requisitos
+### Opción A: Con Docker (Recomendado)
 
-- PHP 8.2+
-- Composer
-- Node.js 18+
-- MySQL/PostgreSQL
+#### Requisitos
+- Docker y Docker Compose
+- Node.js 18+ (solo para el frontend)
 
-### 1. Clonar el repositorio
+#### 1. Clonar el repositorio
 
 ```bash
 git clone <repository-url>
 cd laravel-vue-starter-kit
 ```
 
-### 2. Instalar dependencias PHP
+#### 2. Configurar entorno para Sail
+
+```bash
+cp .env.example .env.sail
+./vendor/bin/sail up -d
+```
+
+#### 3. Instalar dependencias
+
+```bash
+./vendor/bin/sail composer install
+./vendor/bin/sail npm install
+```
+
+#### 4. Configurar aplicación
+
+```bash
+./vendor/bin/sail artisan key:generate
+./vendor/bin/sail artisan migrate
+./vendor/bin/sail artisan db:seed
+```
+
+#### 5. Compilar assets y iniciar
+
+```bash
+./vendor/bin/sail npm run dev
+```
+
+La aplicación estará disponible en `http://localhost`
+
+### Opción B: Instalación Local
+
+#### Requisitos
+
+- PHP 8.2+
+- Composer
+- Node.js 18+
+- PostgreSQL 17+ (o MySQL)
+- Redis
+- Extensiones PHP: Imagick, BCMath, Ctype, Fileinfo, JSON, Mbstring, OpenSSL, PDO, Tokenizer, XML
+
+#### 1. Clonar el repositorio
+
+```bash
+git clone <repository-url>
+cd laravel-vue-starter-kit
+```
+
+#### 2. Instalar dependencias PHP
 
 ```bash
 composer install
 ```
 
-### 3. Configurar entorno
+#### 3. Configurar entorno
 
 ```bash
 cp .env.example .env
 php artisan key:generate
 ```
 
-### 4. Configurar base de datos
+#### 4. Configurar base de datos
 
 ```bash
 # Editar .env con tus credenciales de BD
@@ -76,19 +160,19 @@ php artisan migrate
 php artisan db:seed
 ```
 
-### 5. Instalar dependencias JavaScript
+#### 5. Instalar dependencias JavaScript
 
 ```bash
 npm install
 ```
 
-### 6. Compilar assets
+#### 6. Compilar assets
 
 ```bash
 npm run dev
 ```
 
-### 7. Iniciar servidor
+#### 7. Iniciar servidor
 
 ```bash
 php artisan serve
@@ -98,29 +182,50 @@ php artisan serve
 
 ```
 ├── app/
+│   ├── Actions/                          # Actions de Laravel
+│   │   └── Profile/                      # Actions relacionadas con perfil
+│   │       └── UpdateAvatar.php         # Actualización de avatar
+│   ├── Events/                          # Eventos de la aplicación
+│   │   └── User/                        # Eventos de usuario
+│   │       ├── AvatarDeleted.php        # Evento de avatar eliminado
+│   │       └── AvatarUpdated.php        # Evento de avatar actualizado
 │   ├── Http/
-│   │   ├── Controllers/
-│   │   │   └── LanguageController.php    # Controlador de idiomas
+│   │   ├── Controllers/                 # Controladores
+│   │   │   └── LanguageController.php   # Controlador de idiomas
 │   │   └── Middleware/
 │   │       └── HandleInertiaRequests.php # Middleware de traducciones
-│   └── ...
+│   ├── Models/                          # Modelos de Eloquent
+│   │   └── User.php                     # Modelo de usuario
+│   └── Services/                        # Servicios de la aplicación
+│       ├── ImagePipeline.php            # Pipeline de procesamiento de imágenes
+│       └── OptimizerService.php         # Servicio de optimización de imágenes
+├── config/
+│   └── filesystems.php                  # Configuración de sistemas de archivos
+├── docs/
+│   ├── SECURITY.md                      # Guía de seguridad
+│   └── TRANSLATIONS_DYNAMIC.md          # Documentación del sistema i18n
 ├── resources/
 │   ├── js/
-│   │   ├── components/                    # Componentes Vue
+│   │   ├── components/                  # Componentes Vue
 │   │   ├── composables/
-│   │   │   └── useLanguage.ts            # Composable de idiomas
-│   │   ├── i18n/                         # Configuración i18n
-│   │   ├── locales/                      # Traducciones del cliente
-│   │   └── pages/                        # Páginas de la aplicación
-│   ├── lang/                             # Traducciones del servidor
-│   │   ├── es/                           # Español
-│   │   └── en/                           # Inglés
+│   │   │   └── useLanguage.ts          # Composable de idiomas
+│   │   ├── i18n/                       # Configuración i18n
+│   │   ├── locales/                    # Traducciones del cliente
+│   │   └── pages/                      # Páginas de la aplicación
+│   ├── lang/                           # Traducciones del servidor
+│   │   ├── es/                         # Español
+│   │   └── en/                         # Inglés
 │   └── views/
-│       └── app.blade.php                 # Layout principal
+│       └── app.blade.php               # Layout principal
 ├── routes/
-│   └── web.php                           # Rutas web incluyendo idiomas
-└── docs/
-    └── TRANSLATIONS_DYNAMIC.md           # Documentación del sistema
+│   └── web.php                         # Rutas web incluyendo idiomas
+├── docker-compose.yml                  # Configuración de Docker
+├── composer.json                       # Dependencias PHP
+├── package.json                        # Dependencias JavaScript
+├── tsconfig.json                       # Configuración de TypeScript
+├── vite.config.ts                      # Configuración de Vite
+├── eslint.config.js                    # Configuración de ESLint
+└── components.json                     # Configuración de componentes UI
 ```
 
 ## 🌐 Uso del Sistema de Traducciones
@@ -165,6 +270,56 @@ await toggleLanguage()
 </template>
 ```
 
+## 🛠️ Herramientas de Desarrollo
+
+### Comandos de Desarrollo
+
+```bash
+# Desarrollo con hot reload (incluye servidor, cola, logs y Vite)
+composer run dev
+
+# Desarrollo con SSR (Server-Side Rendering)
+composer run dev:ssr
+
+# Testing
+composer run test
+
+# Formatear código JavaScript/TypeScript
+npm run format
+
+# Verificar formato sin cambios
+npm run format:check
+
+# Linter con corrección automática
+npm run lint
+
+# Build para producción
+npm run build
+
+# Build con SSR
+npm run build:ssr
+```
+
+### Configuración de Entorno
+
+```bash
+# Cambiar a entorno local
+composer run env:local
+
+# Cambiar a entorno Sail
+composer run env:sail
+```
+
+### Herramientas Incluidas
+
+- **ESLint** - Linting de JavaScript/TypeScript con configuración para Vue
+- **Prettier** - Formateo automático de código con plugins para Tailwind y imports
+- **TypeScript** - Tipado estático con configuración optimizada
+- **Vite** - Build tool moderno con HMR y optimizaciones
+- **Laravel Pint** - Formateador de código PHP
+- **PHPUnit** - Framework de testing para PHP
+- **Laravel Pail** - Visor de logs en tiempo real
+
 ## 🔧 Configuración Avanzada
 
 ### Agregar Nuevo Idioma
@@ -206,9 +361,12 @@ curl /api/language/translations/es
 ## 📚 Documentación
 
 - [Sistema de Traducciones Dinámicas](docs/TRANSLATIONS_DYNAMIC.md) - Guía completa del sistema i18n
+- [Guía de Seguridad](docs/SECURITY.md) - Configuración de seguridad para producción
 - [Laravel Documentation](https://laravel.com/docs) - Documentación oficial de Laravel
 - [Vue.js Documentation](https://vuejs.org/guide/) - Documentación oficial de Vue
 - [Inertia.js Documentation](https://inertiajs.com/) - Documentación oficial de Inertia
+- [Tailwind CSS Documentation](https://tailwindcss.com/docs) - Documentación de Tailwind CSS 4
+- [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary) - Gestión de archivos multimedia
 
 ## 🤝 Contribuir
 
@@ -225,9 +383,12 @@ Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más det
 ## 🙏 Agradecimientos
 
 - [Laravel Team](https://laravel.com/) por el increíble framework
-- [Vue.js Team](https://vuejs.org/) por Vue 3
+- [Vue.js Team](https://vuejs.org/) por Vue 3 y su ecosistema
 - [Inertia.js Team](https://inertiajs.com/) por la integración perfecta
 - [Tailwind CSS](https://tailwindcss.com/) por el sistema de diseño
+- [Spatie](https://spatie.be/) por las excelentes packages de Laravel
+- [Vite Team](https://vitejs.dev/) por el build tool moderno
+- [TypeScript Team](https://www.typescriptlang.org/) por el tipado estático
 
 ## 📞 Soporte
 
