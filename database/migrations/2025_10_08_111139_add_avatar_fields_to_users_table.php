@@ -12,8 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('avatar_path')->nullable()->after('password');
-            $table->timestamp('avatar_updated_at')->nullable()->after('avatar_path');
+            $table->string('avatar_version', 40)->nullable()->after('email')->comment('Hash SHA1 del avatar para cache busting');
+            $table->timestamp('avatar_updated_at')->nullable()->after('avatar_version')->comment('Fecha de última actualización del avatar');
+            $table->index('avatar_version', 'users_avatar_version_index');
         });
     }
 
@@ -23,7 +24,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['avatar_path', 'avatar_updated_at']);
+            $table->dropIndex('users_avatar_version_index');
+            $table->dropColumn(['avatar_version', 'avatar_updated_at']);
         });
     }
 };

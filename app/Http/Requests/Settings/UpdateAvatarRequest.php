@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Settings;
 
 use App\Rules\SecureImageValidation;
 use Illuminate\Foundation\Http\FormRequest;
 
-class AvatarUpdateRequest extends FormRequest
+class UpdateAvatarRequest extends FormRequest
 {
     private const MAX_FILE_SIZE_KB = 2048;
 
