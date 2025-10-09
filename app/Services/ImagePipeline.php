@@ -11,7 +11,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * ImagePipeline (versión endurecida)
+ * ImagePipeline (versión endurecida y linter-safe)
  *
  * Este servicio se encarga de pre-procesar imágenes subidas para normalizarlas,
  * validarlas, optimizarlas y prepararlas para su almacenamiento o conversión posterior.
@@ -21,7 +21,7 @@ use RuntimeException;
  * - Valida dimensiones y megapíxeles TRAS orientar
  * - Redimensiona manteniendo proporción hasta un máximo (configurable)
  * - Re-encoda (JPEG/WebP/PNG/GIF) con parámetros ajustables (config/image-pipeline.php)
- * - GIF animados: conservar o tomar primer frame (configurable), con límite de frames y truncado real
+ * - GIF animados: conservar o tomar primer frame (configurable) con límite de frames (truncado real)
  * - Escribe un archivo temporal local y devuelve un Value Object con cleanup()
  *
  * Requisitos:
@@ -77,10 +77,10 @@ class ImagePipeline
     {
         // Verifica que la extensión PHP Imagick esté instalada y disponible
         if (!\extension_loaded('imagick')) {
-            throw new RuntimeException('La extensión PHP "imagick" no está disponible.');
+            throw new RuntimeException(__('image-pipeline.extension_not_available'));
         }
 
-        // Carga configuración con validación de rangos para evitar valores tóxicos en ENV
+        // Config segura con rangos
         $this->maxBytes           = $this->cfgInt('image-pipeline.max_bytes', 5 * 1024 * 1024, 1, 50 * 1024 * 1024);
         $this->minDimension       = $this->cfgInt('image-pipeline.min_dimension', 200, 50, 8000);
         $this->maxMegapixels      = $this->cfgFloat('image-pipeline.max_megapixels', 20.0, 0.1, 100.0);
@@ -125,37 +125,37 @@ class ImagePipeline
      */
     public function process(UploadedFile $file): ImagePipelineResult
     {
-        // Validación básica de UploadedFile
+        // 1) Validación básica
         if (!$file->isValid()) {
-            throw new InvalidArgumentException('El archivo subido no es válido.');
+            throw new InvalidArgumentException(__('image-pipeline.file_not_valid'));
         }
 
         $size = (int) ($file->getSize() ?? 0);
         if ($size <= 0 || $size > $this->maxBytes) {
-            throw new InvalidArgumentException('Tamaño de archivo fuera de límites.');
+            throw new InvalidArgumentException(__('image-pipeline.file_size_invalid'));
         }
 
         $realPath = $file->getRealPath();
         if (!$realPath || !\is_readable($realPath)) {
-            throw new InvalidArgumentException('No se pudo leer el archivo temporal.');
+            throw new InvalidArgumentException( __('image-pipeline.file_not_readable'));
         }
 
-        // MIME real por magic bytes (no confiar en extensión)
+        // 2) MIME real (magic bytes)
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $mime  = (string) $finfo->file($realPath);
         if (!isset($this->allowedMimes[$mime])) {
-            throw new InvalidArgumentException("Tipo MIME no permitido: {$mime}");
+            throw new InvalidArgumentException(__('image-pipeline.mime_not_allowed', ['mime' => $mime]));
         }
 
-        $img = new \Imagick(); // única referencia controlada en finally
+        $img = new \Imagick(); // única referencia, controlada en finally
         try {
-            // readImage puede lanzar; valid() añade una capa extra
+            // 3) Cargar + validar
             $img->readImage($realPath);
             if (!$img->valid()) {
-                throw new RuntimeException('No se pudo validar la imagen cargada.');
+                throw new RuntimeException(__('image-pipeline.image_load_failed'));
             }
 
-            // Helper para reemplazar instancia sin perder el finally (evita leaks)
+            // Helper para reemplazar instancia sin perder finally
             $replace = static function (\Imagick &$ref, \Imagick $new): void {
                 $old = $ref;
                 $ref = $new;
@@ -163,29 +163,29 @@ class ImagePipeline
                 $old->destroy();
             };
 
-            // GIF animados
+            // 4) GIF animado (dos estrategias)
             if ($mime === 'image/gif' && $img->getNumberImages() > 1) {
                 if (!$this->preserveGifAnimation) {
-                    // Mantener sólo primer frame (sin coalesce, más rápido y menos memoria)
+                    // Tomar solo primer frame (sin coalesce)
                     $img->setFirstIterator();
                     try {
-                        $first = clone $img;              // clone puede lanzar en casos raros
+                        $first = clone $img;
                         $first->setImageIterations(1);
                     } catch (\Throwable $e) {
                         $this->log('error', 'image_pipeline_gif_clone_failed', [
                             'error' => (string) Str::of($e->getMessage())->limit(120),
                         ]);
-                        throw new RuntimeException('No se pudo extraer el primer frame del GIF.');
+                        throw new RuntimeException(__('image-pipeline.gif_clone_failed'));
                     }
                     $replace($img, $first);
                 } else {
-                    // Preservar animación: coalesce + saneado por frame con validación
+                    // Preservar animación + saneado frame a frame
                     $coalesced = $img->coalesceImages();
                     $index = 0;
                     foreach ($coalesced as $frame) {
                         if (!$frame->valid()) {
-                            $this->log('warning', 'image_pipeline_gif_invalid_frame', ['index' => $index]);
-                            throw new RuntimeException("Frame GIF inválido en índice {$index}.");
+                            $this->log('warning', __('image-pipeline.gif_frame_invalid'), ['index' => $index]);
+                            throw new RuntimeException(__('image-pipeline.gif_frame_invalid', ['index' => $index]));
                         }
                         $this->autoOrient($frame);
                         $frame->stripImage();
@@ -196,18 +196,18 @@ class ImagePipeline
                 }
             }
 
-            // Para imágenes no-animadas (o GIF reducido a 1 frame), saneamos
+            // 5) Saneado general si no es animado (o ya reducido a 1 frame)
             if (!($mime === 'image/gif' && $img->getNumberImages() > 1)) {
                 $this->autoOrient($img);
                 $img->stripImage();
                 $this->toSRGB($img);
             }
 
-            // Validar dimensiones tras orientar
+            // 6) Validar dimensiones tras orientar
             [$width, $height] = $this->dimensions($img);
             $this->assertDimensions($width, $height);
 
-            // Redimensionar proporcionalmente si excede maxEdge
+            // 7) Redimensionar si excede maxEdge
             $maxWH = \max($width, $height);
             $scale = $maxWH > $this->maxEdge ? $this->maxEdge / $maxWH : 1.0;
 
@@ -216,64 +216,44 @@ class ImagePipeline
                 $newH = \max(1, (int) \floor($height * $scale));
 
                 if ($mime === 'image/gif' && $img->getNumberImages() > 1) {
-                    $count = 0;
-                    foreach ($img as $frame) {
-                        $count++;
-                        if ($count <= $this->maxGifFrames) {
-                            $frame->resizeImage($newW, $newH, $this->gifResizeFilter, 1, true);
-                            continue;
-                        }
-                        // Truncar frames extra (de verdad)
-                        try {
-                            $img->deleteImage(); // elimina frame actual del iterador
-                        } catch (\Throwable $e) {
-                            $this->log('warning', 'image_pipeline_gif_delete_frame_failed', [
-                                'index' => $count - 1,
-                                'error' => (string) Str::of($e->getMessage())->limit(120),
-                            ]);
-                            break;
-                        }
-                    }
-                    $img->setFirstIterator();
+                    // Construir secuencia nueva limitada y redimensionada (evita deleteImage)
+                    $limited = $this->buildLimitedGif($img, $newW, $newH);
+                    $replace($img, $limited);
                 } else {
                     $img->resizeImage($newW, $newH, \Imagick::FILTER_LANCZOS, 1, true);
                 }
-                $width = $newW;
+
+                $width  = $newW;
                 $height = $newH;
             }
 
-            // Detección de alpha (evitar romper transparencia al pasar a JPEG)
+            // 8) Detección de alpha (evitar romper transparencia)
             $hasAlpha = $this->hasAlphaChannel($img);
 
-            // Decidir formato de salida base
+            // 9) Decidir formato destino
             $targetFormat = match ($mime) {
                 'image/gif'  => $this->preserveGifAnimation ? 'gif' : ($hasAlpha ? 'png' : 'jpeg'),
                 'image/png'  => $hasAlpha ? ($this->alphaToWebp ? 'webp' : 'png') : 'jpeg',
                 'image/webp' => 'webp',
                 default      => 'jpeg',
             };
-
-            // Enforce WebP si hay alpha y así se configuró
             if ($hasAlpha && $this->alphaToWebp) {
                 $targetFormat = 'webp';
             }
 
-            // Re-encode (parámetros por formato)
-            $ext = $this->allowedMimes[$mime]; // base
+            // 10) Re-encode parámetros por formato
+            $ext = $this->allowedMimes[$mime]; // base (sólo para inicializar)
             if ($targetFormat === 'jpeg') {
                 $img->setImageFormat('jpeg');
                 $img->setImageCompression(\Imagick::COMPRESSION_JPEG);
                 $img->setImageCompressionQuality($this->jpegQuality);
                 if (\max($width, $height) >= $this->jpegProgressiveMin) {
-                    $img->setInterlaceScheme(\Imagick::INTERLACE_JPEG); // progresivo solo si grande
+                    $img->setInterlaceScheme(\Imagick::INTERLACE_JPEG);
                 }
                 $ext = 'jpg';
             } elseif ($targetFormat === 'webp') {
-                $img->setImageFormat('webp');
-                if (\defined('\Imagick::COMPRESSION_WEBP')) {
-                    $img->setImageCompression(\Imagick::COMPRESSION_WEBP);
-                }
-                $img->setOption('webp:method', (string) $this->webpMethod);
+                $img->setImageFormat('webp');                
+                $img->setOption('webp:method', (string) $this->webpMethod); // 0..6
                 $img->setOption('webp:thread-level', '1');
                 $img->setImageCompressionQuality($this->webpQuality);
                 $ext = 'webp';
@@ -284,16 +264,15 @@ class ImagePipeline
                 $img->setOption('png:compression-strategy', (string) $this->pngCompressionStrategy);
                 $img->setOption('png:exclude-chunk', $this->pngExcludeChunk);
                 $ext = 'png';
-            } else { // 'gif' (preservando animación)
+            } else { // gif
                 $img->setImageFormat('gif');
                 $ext = 'gif';
             }
 
-            // Escribir a temporal con verificación estricta
+            // 11) Escribir temporal
             $tmpPath = $this->tempFilePath($ext);
-
             $ok = true;
-            if ($mime === 'image/gif' && $img->getNumberImages() > 1 && $targetFormat === 'gif') {
+            if ($targetFormat === 'gif' && $img->getNumberImages() > 1) {
                 $ok = $img->writeImages($tmpPath, true);
             } else {
                 $ok = $img->writeImage($tmpPath);
@@ -306,17 +285,16 @@ class ImagePipeline
                 throw new RuntimeException('Error al escribir la imagen procesada.');
             }
 
-            // Validación del resultado; limpiar si es inválido
             $bytes = \filesize($tmpPath);
             if ($bytes === false || $bytes <= 0) {
                 if (!@unlink($tmpPath)) {
-                    $this->log('warning', 'image_pipeline_tmp_unlink_failed', ['path' => basename($tmpPath)]);
+                    $this->log('warning',  __('image-pipeline.temp_file_invalid'), ['path' => basename($tmpPath)]);
                 }
-                throw new RuntimeException('El archivo temporal resultante es inválido.');
+                throw new RuntimeException( __('image-pipeline.temp_file_invalid'));
             }
 
-            $hash   = \hash_file('sha1', $tmpPath) ?: \bin2hex(\random_bytes(8));
-            $outMime= $this->mimeFromExtension($ext);
+            $hash    = \hash_file('sha1', $tmpPath) ?: \bin2hex(\random_bytes(8));
+            $outMime = $this->mimeFromExtension($ext);
 
             return new ImagePipelineResult(
                 path: $tmpPath,
@@ -332,10 +310,49 @@ class ImagePipeline
                 'error' => (string) Str::of($e->getMessage())->limit(160),
                 'mime'  => $mime ?? null,
             ]);
+            // Importante para el linter: o retorna, o lanza.
+            throw $e;
         } finally {
             $img->clear();
             $img->destroy();
         }
+    }
+
+    /**
+     * Construye una secuencia GIF limitada y redimensionada (sin deleteImage()).
+     *
+     * Este método se encarga de crear una nueva secuencia de imágenes GIF
+     * con un número limitado de frames y redimensionados, evitando el uso
+     * potencialmente inestable de deleteImage().
+     *
+     * @param  \Imagick  $src  Secuencia original de GIF.
+     * @param  int       $w    Ancho objetivo para el redimensionado.
+     * @param  int       $h    Alto objetivo para el redimensionado.
+     * @return \Imagick        Nueva secuencia de GIF limitada y redimensionada.
+     */
+    private function buildLimitedGif(\Imagick $src, int $w, int $h): \Imagick
+    {
+        $limited = new \Imagick();
+        $limited->setFormat('gif');
+
+        $count = 0;
+        foreach ($src as $frame) {
+            $clone = clone $frame;
+            $clone->resizeImage($w, $h, $this->gifResizeFilter, 1, true);
+
+            $limited->addImage($clone);
+            // conservar timing / dispose
+            $limited->setImageDelay($clone->getImageDelay());
+            $limited->setImageDispose($clone->getImageDispose());
+
+            $count++;
+            if ($count >= $this->maxGifFrames) {
+                break;
+            }
+        }
+
+        // Optimiza frames similares (reduce tamaño)
+        return $limited->deconstructImages();
     }
 
     /**
@@ -356,9 +373,9 @@ class ImagePipeline
 
         $o = $im->getImageOrientation();
         switch ($o) {
-            case \Imagick::ORIENTATION_TOPRIGHT:     $im->flopImage(); break; // espejo horizontal
+            case \Imagick::ORIENTATION_TOPRIGHT:     $im->flopImage(); break;
             case \Imagick::ORIENTATION_BOTTOMRIGHT:  $im->rotateImage('#000', 180); break;
-            case \Imagick::ORIENTATION_BOTTOMLEFT:   $im->flipImage(); break; // espejo vertical
+            case \Imagick::ORIENTATION_BOTTOMLEFT:   $im->flipImage(); break;
             case \Imagick::ORIENTATION_LEFTTOP:      $im->flopImage(); $im->rotateImage('#000', 90); break;
             case \Imagick::ORIENTATION_RIGHTTOP:     $im->rotateImage('#000', 90); break;
             case \Imagick::ORIENTATION_RIGHTBOTTOM:  $im->flopImage(); $im->rotateImage('#000', -90); break;
@@ -385,7 +402,9 @@ class ImagePipeline
             }
             $im->setImageColorspace(\Imagick::COLORSPACE_SRGB);
         } catch (\Throwable $e) {
-            $this->log('debug', 'image_pipeline_srgb_failed', ['error' => (string) Str::of($e->getMessage())->limit(120)]);
+            $this->log('debug', 'image_pipeline_srgb_failed', [
+                'error' => (string) Str::of($e->getMessage())->limit(120),
+            ]);
         }
     }
 
@@ -420,12 +439,12 @@ class ImagePipeline
     private function assertDimensions(int $width, int $height): void
     {
         if ($width < $this->minDimension || $height < $this->minDimension) {
-            throw new InvalidArgumentException('Dimensiones mínimas no alcanzadas.');
+            throw new InvalidArgumentException(__('image-pipeline.dimensions_too_small'));
         }
 
         $mp = ($width * $height) / 1_000_000;
         if ($mp > $this->maxMegapixels) {
-            throw new InvalidArgumentException('La imagen supera el límite de megapíxeles permitido.');
+            throw new InvalidArgumentException(__('image-pipeline.megapixels_exceeded'));
         }
     }
 
@@ -473,7 +492,7 @@ class ImagePipeline
      */
     private function mimeFromExtension(string $ext): string
     {
-        return match (strtolower($ext)) {
+        return match (\strtolower($ext)) {
             'jpg', 'jpeg' => 'image/jpeg',
             'png'         => 'image/png',
             'webp'        => 'image/webp',
@@ -482,6 +501,7 @@ class ImagePipeline
         };
     }
 
+    /** Config helpers con validación de rangos */
     /**
      * Lee un valor entero de la configuración con validación de rangos.
      *
@@ -529,10 +549,9 @@ class ImagePipeline
      */
     private function log(string $level, string $msg, array $context): void
     {
-        // Sanitiza cadenas largas en el contexto si no está en modo debug
-        $context = $this->debug ? $context : \collect($context)->map(function ($val) {
-            return \is_string($val) ? (string) Str::of($val)->limit(160) : $val;
-        })->all();
+        $context = $this->debug ? $context : \collect($context)->map(
+            fn($val) => \is_string($val) ? (string) Str::of($val)->limit(160) : $val
+        )->all();
 
         if ($this->logChannel) {
             Log::channel($this->logChannel)->{$level}($msg, $context);
@@ -544,7 +563,7 @@ class ImagePipeline
 
 /**
  * Value Object del resultado del pipeline.
- * Incluye cleanup() y destructor (silencioso) como red de seguridad.
+ * Trae cleanup() y destructor (silencioso) como red de seguridad.
  *
  * Este Value Object encapsula la información del archivo de imagen procesado
  * y proporciona métodos para limpiar el archivo temporal.
@@ -574,6 +593,7 @@ class ImagePipelineResult
         public string $contentHash,
     ) {}
 
+    /** Borra el temporal (loggea si falla; el destructor lo intenta de nuevo en silencio) */
     /**
      * Borra el archivo temporal (loggea si falla, menos en destructor).
      *
