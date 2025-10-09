@@ -195,6 +195,7 @@ return [
             'required' => 'We need your email address to continue.',
             'email' => 'Enter a valid email address (for example, name@example.com).',
             'unique' => 'We already have an account registered with this email. If it is yours, please sign in.',
+            'lowercase' => 'The email address must be in lowercase.',
         ],
         'image' => [
             'invalid_file' => 'Please upload a valid image file.',

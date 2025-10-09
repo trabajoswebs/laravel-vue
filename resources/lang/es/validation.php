@@ -195,6 +195,7 @@ return [
             'required' => 'Necesitamos tu correo electrónico para seguir.',
             'email' => 'Introduce un correo electrónico con formato válido.',
             'unique' => 'Ya tenemos una cuenta con este correo. Si es tuyo, inicia sesión.',
+            'lowercase' => 'El correo electrónico debe estar en minúsculas.',
         ],
         'image' => [
             'invalid_file' => 'Debes subir un archivo de imagen válido.',
