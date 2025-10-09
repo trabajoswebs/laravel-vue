@@ -109,4 +109,19 @@ return [
 
     // Nivel de detalle para logs de depuración internos
     'debug' => env('IMG_DEBUG', false),
+    
+
+    /*---------------------------------------*/
+
+    'avatar_sizes' => [
+        'thumb'  => 128,
+        'medium' => 256,
+        'large'  => 512,
+    ],
+
+    // Calidad recomendada para WEBP (0-100)
+    'webp_quality' => env('IMAGE_WEBP_QUALITY', 75),
+
+    // Forzar cola de conversions (si no usas el global de Spatie)
+    'avatar_queue_conversions' => null, // null = respetar config de Spatie
 ];
