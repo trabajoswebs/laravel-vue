@@ -12,9 +12,10 @@ use Inertia\Response;
 
 class PasswordController extends Controller
 {
+    
     /**
-     * Show the user's password settings page.
-     */    
+     * Muestra la página de configuración de la contraseña del usuario.
+     */
     public function edit(Request $request): Response
     {
         $this->authorize('view', $request->user());
