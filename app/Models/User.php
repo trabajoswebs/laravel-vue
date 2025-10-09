@@ -100,7 +100,7 @@ class User extends Authenticatable implements HasMedia
      * @param Media|null $media Instancia del archivo adjunto. Puede ser null si no hay archivo adjunto.
      * @return void
      */
-    public function registerMediaConversions(Media $media = null): void
+    public function registerMediaConversions(?Media $media = null): void
     {
         // Aplica las conversiones definidas en el perfil AvatarConversionProfile
         AvatarConversionProfile::apply($this, $media);
