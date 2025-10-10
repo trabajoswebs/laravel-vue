@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Listeners\User\QueueAvatarPostProcessing;
+use Spatie\MediaLibrary\Conversions\Events\ConversionHasBeenCompletedEvent;
 use App\Events\User\AvatarDeleted;
 use App\Events\User\AvatarUpdated;
 use App\Listeners\User\PurgeOldAvatar;
@@ -25,6 +27,10 @@ class EventServiceProvider extends ServiceProvider
         // Al borrar avatar: aquí puedes enganchar otros listeners (CDN, métricas…)
         AvatarDeleted::class => [
             // \App\Listeners\User\PurgeCdnCache::class,
+        ],
+
+        ConversionHasBeenCompletedEvent::class => [
+            QueueAvatarPostProcessing::class,
         ],
     ];
 
