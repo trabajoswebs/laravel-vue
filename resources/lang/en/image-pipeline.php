@@ -39,4 +39,12 @@ return [
     'image_processed' => 'Image processed successfully',
     'format_converted' => 'Format converted to :format',
 
+    // Validation messages
+    'validation' => [
+        'avatar_required' => 'Select an image for your avatar.',
+        'avatar_file' => 'The avatar must be a file.',
+        'avatar_mime' => 'Allowed formats: JPEG, PNG, GIF, WebP, or AVIF.',
+        'dimensions' => 'Image dimensions are outside the allowed range.',
+    ],
+
 ];
