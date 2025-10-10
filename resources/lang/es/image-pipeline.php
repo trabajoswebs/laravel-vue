@@ -39,4 +39,12 @@ return [
     'image_processed' => 'Imagen procesada exitosamente',
     'format_converted' => 'Formato convertido a :format',
 
+    // Mensajes de validación
+    'validation' => [
+        'avatar_required' => 'Selecciona una imagen para tu avatar.',
+        'avatar_file' => 'El avatar debe ser un archivo.',
+        'avatar_mime' => 'Formatos permitidos: JPEG, PNG, GIF, WebP o AVIF.',
+        'dimensions' => 'Las dimensiones de la imagen están fuera del rango permitido.',
+    ],
+
 ];
