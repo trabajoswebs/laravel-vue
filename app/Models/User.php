@@ -85,7 +85,7 @@ class User extends Authenticatable implements HasMedia
     public function registerMediaCollections(): void
     {
         $this->addMediaCollection('avatar')
-            ->useDisk('s3')      // Usa el disco S3 para almacenamiento
+            ->useDisk(config('image-pipeline.avatar_disk', config('filesystems.default')))      // Usa el disco S3 para almacenamiento
             ->singleFile();      // Garantiza un solo archivo por colección
     }
 
@@ -123,7 +123,7 @@ class User extends Authenticatable implements HasMedia
             get: function (): ?string {
                 // Obtiene el primer archivo adjunto en la colección 'avatar'
                 $media = $this->getFirstMedia('avatar');
-                
+
                 // Si no hay archivo adjunto, retorna null
                 if (!$media) return null;
 
@@ -135,8 +135,8 @@ class User extends Authenticatable implements HasMedia
 
                 // Obtiene la versión del avatar para cache busting
                 // Prioriza la propiedad personalizada del medio, sino usa el campo del modelo
-                $version = $media->getCustomProperty('version') 
-                           ?? $this->avatar_version;
+                $version = $media->getCustomProperty('version')
+                    ?? $this->avatar_version;
 
                 // Retorna la URL con el parámetro de versión si existe, sino la URL simple
                 return $version ? "{$url}?v={$version}" : $url;
@@ -160,7 +160,7 @@ class User extends Authenticatable implements HasMedia
             get: function (): ?string {
                 // Obtiene el primer archivo adjunto en la colección 'avatar'
                 $media = $this->getFirstMedia('avatar');
-                
+
                 // Si no hay archivo adjunto, retorna null
                 if (!$media) return null;
 
@@ -172,8 +172,8 @@ class User extends Authenticatable implements HasMedia
 
                 // Obtiene la versión del avatar para cache busting
                 // Prioriza la propiedad personalizada del medio, sino usa el campo del modelo
-                $version = $media->getCustomProperty('version') 
-                           ?? $this->avatar_version;
+                $version = $media->getCustomProperty('version')
+                    ?? $this->avatar_version;
 
                 // Retorna la URL con el parámetro de versión si existe, sino la URL simple
                 return $version ? "{$url}?v={$version}" : $url;
