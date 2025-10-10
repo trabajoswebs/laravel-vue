@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Support\Media;
+namespace App\Support\Media\ConversionProfiles;
 
 use Illuminate\Http\UploadedFile;
 use InvalidArgumentException;
@@ -40,6 +40,55 @@ final class FileConstraints
     /** @var float megapíxeles */
     public readonly float $maxMegapixels;
 
+
+    /** Tamaño máximo de archivo (bytes). */
+    public const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+    /** Límite de megapíxeles (ancho*alto / 1e6). */
+    public const MAX_MEGAPIXELS = 24; // 24 MP (p.ej., 6000x4000)
+
+    /** Dimensiones mínimas y máximas permitidas. */
+    public const MIN_WIDTH  = 64;
+    public const MIN_HEIGHT = 64;
+    public const MAX_WIDTH  = 4000; // ajusta si quieres 8000
+    public const MAX_HEIGHT = 4000;
+
+    /** Extensiones permitidas (en minúsculas). */
+    public const ALLOWED_EXTENSIONS = [
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'avif',
+        'gif',
+    ];
+
+    /** Tipos MIME permitidos. */
+    public const ALLOWED_MIME_TYPES = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/avif',
+        'image/gif',
+    ];
+
+    public const WEBP_QUALITY = 82;
+
+    /**
+     * (Opcional) tamaños de conversión estándar para avatares.
+     * Útiles si luego quieres leerlos desde tu AvatarConversionProfile.
+     */
+    public const THUMB_WIDTH  = 160;
+    public const THUMB_HEIGHT = 160;
+
+    public const MEDIUM_WIDTH  = 512;
+    public const MEDIUM_HEIGHT = 512;
+
+    public const LARGE_WIDTH  = 1024;
+    public const LARGE_HEIGHT = 1024;
+
+    public const QUEUE_CONVERSIONS_DEFAULT = true;
+
     /**
      * Constructor de FileConstraints.
      *
@@ -61,7 +110,7 @@ final class FileConstraints
         $this->maxBytes      = $this->cfgInt('image-pipeline.max_bytes',       $maxBytes,      1,             50 * 1024 * 1024);
         $this->minDimension  = $this->cfgInt('image-pipeline.min_dimension',   $minDimension,  16,            8000);
         $this->maxDimension  = $this->cfgInt('image-pipeline.max_edge',        $maxDimension,  $this->minDimension, 8192);
-        $this->maxMegapixels = $this->cfgFloat('image-pipeline.max_megapixels',$maxMegapixels, 0.1,           100.0);
+        $this->maxMegapixels = $this->cfgFloat('image-pipeline.max_megapixels', $maxMegapixels, 0.1,           100.0);
     }
 
     /**
@@ -77,6 +126,16 @@ final class FileConstraints
     {
         if (!$file->isValid()) {
             throw new InvalidArgumentException('El archivo subido no es válido.');
+        }
+
+        // Validar MIME tipo real (no confiar en la extensión)
+        $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $realMime = finfo_file(finfo_open(FILEINFO_MIME_TYPE), $file->getRealPath());
+
+        if (!in_array($realMime, $allowedMimes, true)) {
+            throw new InvalidArgumentException(
+                "Tipo MIME no permitido: {$realMime}. Permitidos: " . implode(', ', $allowedMimes)
+            );
         }
 
         $size = (int) ($file->getSize() ?? 0);
@@ -136,17 +195,30 @@ final class FileConstraints
         $this->validateUploadedFile($file);
 
         $path = $file->getRealPath();
-        $info = @\getimagesize($path);
-        if (!$info || !isset($info[0], $info[1])) {
-            throw new InvalidArgumentException('No se pudieron detectar dimensiones de la imagen.');
+
+        set_error_handler(static function (int $errno, string $errstr): bool {
+            throw new InvalidArgumentException("Error leyendo imagen: {$errstr}");
+        });
+
+        try {
+            $info = getimagesize($path);
+        } finally {
+            restore_error_handler();
         }
 
-        $width  = (int) $info[0];
-        $height = (int) $info[1];
+        if (!$info || !isset($info[0], $info[1]) || $info[0] <= 0 || $info[1] <= 0) {
+            throw new InvalidArgumentException('Dimensiones de imagen inválidas o archivo corrupto.');
+        }
 
-        $this->assertDimensions($width, $height);
+        // Validar contra image bombs (descompresión desproporcionada)
+        $rawSize = $info[0] * $info[1] * ($info['bits'] ?? 8) / 8;
+        $fileSize = $file->getSize() ?? 0;
+        if ($fileSize > 0 && ($rawSize / $fileSize) > 100) {
+            throw new InvalidArgumentException('Posible image bomb detectada.');
+        }
 
-        return [$width, $height];
+        $this->assertDimensions($info[0], $info[1]);
+        return [$info[0], $info[1]];
     }
 
     /**
