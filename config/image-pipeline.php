@@ -40,7 +40,7 @@ return [
     'jpeg_quality' => env('IMG_JPEG_QUALITY', 82),
 
     // WebP: calidad 0–100 (70–80 recomendado)
-    'webp_quality' => env('IMG_WEBP_QUALITY', 75),
+    // Nota: la clave 'webp_quality' se define más abajo como valor único (evita duplicados).
 
     // Si la imagen tiene transparencia, ¿forzar WebP?
     'alpha_to_webp' => env('IMG_ALPHA_TO_WEBP', true),
@@ -109,7 +109,7 @@ return [
 
     // Nivel de detalle para logs de depuración internos
     'debug' => env('IMG_DEBUG', false),
-    
+
 
     /*---------------------------------------*/
 
@@ -120,8 +120,16 @@ return [
     ],
 
     // Calidad recomendada para WEBP (0-100)
-    'webp_quality' => env('IMAGE_WEBP_QUALITY', 75),
+    // Homologado a IMG_WEBP_QUALITY; mantiene compatibilidad con IMAGE_WEBP_QUALITY
+    'webp_quality' => env('IMG_WEBP_QUALITY', env('IMAGE_WEBP_QUALITY', 75)),
 
     // Forzar cola de conversions (si no usas el global de Spatie)
     'avatar_queue_conversions' => null, // null = respetar config de Spatie
+
+    // Disco donde se almacenará la colección de avatar
+    // Usa env AVATAR_DISK o cae al disco por defecto
+    'avatar_disk' => env('AVATAR_DISK', env('FILESYSTEM_DISK', 'local')),
+
+    'avatar_collection' => env('AVATAR_COLLECTION', 'avatar'),
+
 ];
