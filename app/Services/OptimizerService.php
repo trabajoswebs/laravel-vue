@@ -38,7 +38,10 @@ class OptimizerService
 
     /** Whitelist de MIME optimizables. */
     private const ALLOWED_MIMES = [
-        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
     ];
 
     /**
@@ -373,7 +376,7 @@ class OptimizerService
             // Fallback defensivo: estructura típica
             $dir  = Arr::get($media->toArray(), 'directory');
             $name = Arr::get($media->toArray(), 'file_name');
-            return $dir && $name ? trim((string) $dir, '/').'/'.$name : null;
+            return $dir && $name ? trim((string) $dir, '/') . '/' . $name : null;
         } catch (Throwable $e) {
             Log::debug('optimizer_service_safe_get_rel_failed', [
                 'media_id' => $media->id,
@@ -416,7 +419,7 @@ class OptimizerService
                 if ($baseRel) {
                     $filename = pathinfo($baseRel, PATHINFO_FILENAME);
                     $ext      = pathinfo($baseRel, PATHINFO_EXTENSION);
-                    $rel = 'conversions/'.$filename.'-'.$conversion.'.'.$ext;
+                    $rel = 'conversions/' . $filename . '-' . $conversion . '.' . $ext;
                 }
             }
         } catch (Throwable $e) {
