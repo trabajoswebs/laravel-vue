@@ -48,9 +48,13 @@
     "request_timeout": "The request has expired. Please try again.",
     "internal_server_error": "Internal server error. Please contact the administrator.",
     "service_unavailable": "Service unavailable. Please come back later.",
-    "gateway_timeout": "Gateway timeout. Please try again."
+    "gateway_timeout": "Gateway timeout. Please try again.",
+    "Avatar actualizado correctamente.": "Avatar updated successfully.",
+    "No se pudo actualizar el avatar. Inténtalo de nuevo.": "Could not update avatar. Please try again.",
+    "Avatar eliminado correctamente.": "Avatar deleted successfully.",
+    "No había avatar para eliminar (operación idempotente).": "No avatar to delete (idempotent operation).",
+    "No se pudo eliminar el avatar. Inténtalo de nuevo.": "Could not delete avatar. Please try again."
 }
-
 
 
 
