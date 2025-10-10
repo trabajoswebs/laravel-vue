@@ -12,81 +12,64 @@ use Spatie\MediaLibrary\Conversions\Conversion;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
- * AvatarConversionProfile
+ * Define y aplica perfiles de conversión de imagen para avatares.
  *
- * Este perfil centraliza la lógica de conversión de imágenes para la colección "avatar".
- * Define tamaños, formato (WebP), calidad y otras transformaciones de forma reutilizable
- * en modelos que implementen HasMedia.
- *
- * - Tamaños configurables
- * - Fuerza WEBP con optimize()
- * - Soporta cola (respeta config global o override local)
- * - Logging ante fallos (sin romper el flujo)
- *
- * @author Tu Nombre <tu.email@dominio.com>
+ * Este perfil:
+ * - Genera versiones en diferentes tamaños (thumb, medium, large).
+ * - Usa calidad y dimensiones centralizadas en FileConstraints.
+ * - Aplica formato WebP con optimización y ligero sharpen.
+ * - Permite configurar si se ejecutan en cola o no.
  */
 final class AvatarConversionProfile
 {
     /**
-     * Aplica las conversiones al modelo.
+     * Aplica las conversiones al modelo usando tamaños y calidad centralizados (FileConstraints).
      *
-     * Nota: $media no se usa hoy, pero se deja para futura lógica condicional
-     * por mimetype/orientación si quisieras afinar por fichero.
-     *
-     * @param  HasMedia&InteractsWithMedia  $model  Modelo que implementa HasMedia e InteractsWithMedia.
-     * @param  Media|null                   $media  Instancia de Media opcional (no utilizada actualmente).
+     * @param  HasMedia&InteractsWithMedia  $model
+     * @param  Media|null                   $media
      * @return void
      */
     public static function apply(HasMedia&InteractsWithMedia $model, ?Media $media = null): void
     {
-        // 1) Tamaños desde config (con fallback)
-        $sizes = config('image-pipeline.avatar_sizes', [
-            'thumb'  => 128,
-            'medium' => 256,
-            'large'  => 512,
-        ]);
+        // 1) Tamaños desde FileConstraints (SSOT)
+        $sizes = [
+            // nombre => [width, height, fit]
+            'thumb'  => [FileConstraints::THUMB_WIDTH,  FileConstraints::THUMB_HEIGHT,  Fit::Crop],    // cuadrado
+            'medium' => [FileConstraints::MEDIUM_WIDTH, FileConstraints::MEDIUM_HEIGHT, Fit::Contain], // respeta AR
+            'large'  => [FileConstraints::LARGE_WIDTH,  FileConstraints::LARGE_HEIGHT,  Fit::Contain], // respeta AR
+        ];
 
-        // Sanitiza/valida tamaños
-        $sizes = collect($sizes)
-            ->mapWithKeys(fn ($v, $k) => [$k => max(16, min(4096, (int) $v))])
-            ->only(['thumb', 'medium', 'large'])
-            ->all();
+        // 2) Calidad WEBP desde FileConstraints
+        $webpQuality = FileConstraints::WEBP_QUALITY;
 
-        // 2) Calidad WEBP (clamp defensivo)
-        $webpQuality = (int) config('image-pipeline.webp_quality', 75);
-        $webpQuality = max(1, min(100, $webpQuality));
+        // 3) Modo de cola desde FileConstraints
+        $queued = FileConstraints::QUEUE_CONVERSIONS_DEFAULT;
 
-        // 3) ¿Encolar conversions?
-        $queueOverride = config('image-pipeline.avatar_queue_conversions'); // null => respetar Spatie
-        $queued = is_null($queueOverride)
-            ? (bool) config('media-library.queue_conversions_by_default', true)
-            : (bool) $queueOverride;
-
-        // Helper: perfil cuadrado → WEBP + optimize()
-        $applySquareWebp = static function (Conversion $conversion, int $size) use ($webpQuality): void {
+        // Helper para aplicar formato/quality común
+        $applyWebp = static function (Conversion $conversion, int $w, int $h, Fit $fit) use ($webpQuality): void {
             $conversion
-                ->fit(Fit::Crop, $size, $size)
+                ->fit($fit, $w, $h)
                 ->format('webp')
                 ->quality($webpQuality)
                 ->optimize()
                 ->sharpen(10);
         };
 
-        foreach ($sizes as $name => $px) {
+        foreach ($sizes as $name => [$w, $h, $fit]) {
             try {
                 $conv = $model->addMediaConversion($name)
-                    ->performOnCollections('avatar')
+                    ->performOnCollections('avatar')   // si tienes User::AVATAR_COLLECTION, puedes usarlo aquí
                     ->withResponsiveImages();
 
                 $queued ? $conv->queued() : $conv->nonQueued();
 
-                // Aplicar perfil
-                $conv->tap(fn (Conversion $c) => $applySquareWebp($c, $px));
+                $conv->tap(fn(Conversion $c) => $applyWebp($c, $w, $h, $fit));
             } catch (\Throwable $e) {
-                // No romper el flujo si una conversión falla; log y seguimos
                 Log::error('avatar_conversion_profile_failed', [
                     'conversion' => $name,
-                    'size'       => $px,
+                    'width'      => $w,
+                    'height'     => $h,
+                    'fit'        => method_exists($fit, 'value') ? $fit->value : (string) $fit,
                     'error'      => str($e->getMessage())->limit(160)->toString(),
                 ]);
             }
