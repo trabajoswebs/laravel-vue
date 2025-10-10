@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Rules;
 
 use Closure;
@@ -12,6 +14,7 @@ use Intervention\Image\ImageManager;
 use RuntimeException;
 use SplFileObject;
 use Throwable;
+use App\Support\Media\ConversionProfiles\FileConstraints as FC;
 
 /**
  * Regla de validación endurecida para archivos de imagen.
@@ -35,56 +38,23 @@ use Throwable;
  *  - No confíes solo en la extensión; por eso se verifica MIME vía `finfo` y se decodifica la imagen.
  *  - Mantén esta validación en combinación con políticas de subida (disco aislado, desactivar ejecución en el storage, etc.).
  *
- * @see https://www.php.net/manual/en/function.finfo-file.php Detección MIME
- * @see https://image.intervention.io/ Uso de Intervention Image
+ * @see https://www.php.net/manual/en/function.finfo-file.php   Detección MIME
+ * @see https://image.intervention.io/   Uso de Intervention Image
  */
 class SecureImageValidation implements ValidationRule, DataAwareRule
 {
-    /**
-     * Lista blanca estricta de tipos MIME permitidos.
-     *
-     * @var list<string>
-     */
-    private const ALLOWED_MIME_TYPES = [
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'image/webp',
-        'image/avif',
-    ];
-
-    /**
-     * Extensiones válidas asociadas a los MIME permitidos.
-     *
-     * @var list<string>
-     */
-    private const ALLOWED_EXTENSIONS = [
-        'jpg',
-        'jpeg',
-        'png',
-        'gif',
-        'webp',
-        'avif',
-    ];
-
-    /**
-     * Dimensión máxima (ancho y alto) permitida para la imagen, en píxeles.
-     *
-     * @var int
-     */
-    private const MAX_DIMENSION = 8000;
-
-    /**
-     * Tamaño máximo del archivo en bytes por defecto (5 MB).
-     */
-    private const DEFAULT_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-
     /**
      * Número de bytes iniciales a escanear para detectar payloads sospechosos.
      *
      * @var int
      */
-    private const SCAN_BYTES = 10 * 1024;
+    private const SCAN_BYTES = 50 * 1024;
+
+    /**
+     * Umbral de ratio de descompresión para detectar "image bombs".
+     * Si (ancho*alto*bits/8) / size_bytes > RATIO → sospechoso.
+     */
+    private const BOMB_RATIO_THRESHOLD = 100;
 
     /**
      * Datos del contexto de validación suministrados por el validador.
@@ -119,16 +89,30 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      */
     private int $maxFileSizeBytes;
 
+    /** Normalización opcional vía re-encode para mitigar polyglots/metadata. */
+    private bool $enableNormalization = false;
+
+    /** Umbral configurable para detectar image bombs. */
+    private int $bombRatioThreshold = self::BOMB_RATIO_THRESHOLD;
+
     /**
-     * Initialise the rule and allow dependency injection of the decoder and size limit.
+     * Initialize the rule and allow dependency injection of the decoder and size limit.
+     *
+     * @param callable|null $decodeImage Callable to decode the image file. If null, uses default Intervention Image decoder.
+     * @param int|null $maxFileSizeBytes Max file size in bytes. If null, uses FC::MAX_BYTES.
      */
-    public function __construct(?callable $decodeImage = null, ?int $maxFileSizeBytes = null)
+    public function __construct(?callable $decodeImage = null, ?int $maxFileSizeBytes = null, ?bool $normalize = null, ?int $bombRatioThreshold = null)
     {
         $this->decodeImage = $decodeImage instanceof \Closure
             ? $decodeImage
             : $this->makeDefaultDecoder($decodeImage);
 
-        $this->maxFileSizeBytes = $maxFileSizeBytes ?? self::DEFAULT_MAX_FILE_SIZE_BYTES;
+        // Usa el límite global de FileConstraints cuando no se pasa explícito.
+        $this->maxFileSizeBytes = $maxFileSizeBytes ?? FC::MAX_BYTES;
+
+        // Optional hardening knobs
+        $this->enableNormalization = (bool) ($normalize ?? false);
+        $this->bombRatioThreshold = $bombRatioThreshold ?? self::BOMB_RATIO_THRESHOLD;
     }
 
     /**
@@ -147,12 +131,15 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     }
 
     /**
-     * Create a default decoder that supports Intervention Image v2 and v3.
+     * Create a default decoder for Intervention Image v3 only.
+     *
+     * @param callable|null $decoder Optional custom decoder.
+     * @return \Closure(string):object
      */
     private function makeDefaultDecoder(?callable $decoder = null): \Closure
     {
         if ($decoder !== null) {
-            return static fn (string $path): object => $decoder($path);
+            return static fn(string $path): object => $decoder($path);
         }
 
         return static function (string $path): object {
@@ -164,12 +151,8 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
 
             if (is_callable($manager)) {
                 $image = $manager($path);
-            } elseif (method_exists($manager, 'read')) {
+            } elseif (is_object($manager) && method_exists($manager, 'read')) {
                 $image = $manager->read($path);
-            } elseif (method_exists($manager, 'make')) {
-                $image = $manager->make($path);
-            } elseif (method_exists($manager, 'decode')) {
-                $image = $manager->decode($path);
             } else {
                 throw new RuntimeException('Unable to decode image: unsupported manager implementation.');
             }
@@ -189,43 +172,43 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      */
     private static function resolveImageManager(): object|callable
     {
+        static $cached;
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        // Intervention Image v3 (Interface + container)
         if (class_exists('Intervention\\Image\\Interfaces\\ImageManagerInterface')) {
             if (function_exists('app')) {
-                return app('Intervention\\Image\\Interfaces\\ImageManagerInterface');
+                try {
+                    return $cached = app('Intervention\\Image\\Interfaces\\ImageManagerInterface');
+                } catch (Throwable) {
+                    // caer a instanciación directa
+                }
             }
 
-            throw new RuntimeException('Intervention Image v3 interface detected but Laravel container unavailable.');
+            // Instanciar v3 directamente con driver disponible
+            if (class_exists('Intervention\\Image\\Drivers\\Imagick\\Driver')) {
+                $driver = new \Intervention\Image\Drivers\Imagick\Driver();
+                return $cached = new ImageManager($driver);
+            }
+            if (class_exists('Intervention\\Image\\Drivers\\Gd\\Driver')) {
+                $driver = new \Intervention\Image\Drivers\Gd\Driver();
+                return $cached = new ImageManager($driver);
+            }
+
+            $driverString = extension_loaded('imagick') ? 'imagick' : 'gd';
+            return $cached = new ImageManager($driverString);
         }
 
-        if (class_exists('Intervention\\Image\\ImageManager')) {
-            return self::resolveFromContainer('Intervention\\Image\\ImageManager');
-        }
 
-        if (class_exists('Intervention\\Image\\ImageManagerStatic')) {
-            return static fn (string $path): object => \Intervention\Image\ImageManagerStatic::make($path);
-        }
 
         throw new RuntimeException('Intervention Image is not installed.');
     }
 
     /**
-     * Attempt to resolve a class via the Laravel container, falling back to direct instantiation.
+     * Ejecuta la validación del atributo dado.
      */
-    private static function resolveFromContainer(string $class): object
-    {
-        if (function_exists('app')) {
-            return app($class);
-        }
-
-        if ($class === ImageManager::class) {
-            $driver = extension_loaded('imagick') ? 'imagick' : 'gd';
-
-            return new ImageManager(['driver' => $driver]);
-        }
-
-        return new $class();
-    }
-
     /**
      * Ejecuta la validación del atributo dado.
      *
@@ -276,12 +259,13 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      */
     private function passesSignatureChecks(UploadedFile $file): bool
     {
-        if ($file->getSize() > $this->maxFileSizeBytes) {
+        $size = $file->getSize() ?? 0;
+        if ($size <= 0 || $size > $this->maxFileSizeBytes) {
             return false;
         }
 
-        $extension = strtolower($file->getClientOriginalExtension());
-        if (! in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
+        $extension = strtolower((string) $file->getClientOriginalExtension());
+        if ($extension === '' || !in_array($extension, FC::ALLOWED_EXTENSIONS, true)) {
             return false;
         }
 
@@ -290,64 +274,249 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             return false;
         }
 
-        $imageInfo = @getimagesize($path);
-
-        if (! $imageInfo) {
+        // Leer contenido una sola vez para evitar TOCTOU y mantener coherencia
+        $content = file_get_contents($path);
+        if ($content === false) {
+            $this->logWarning('image_read_failed', $file->getClientOriginalName(), ['path' => $path]);
             return false;
         }
 
-        $width = (int) ($imageInfo[0] ?? 0);
+        // Extraer metadatos básicos desde el buffer
+        $imageInfo = null;
+        set_error_handler(static function (): bool {
+            return true;
+        });
+        try {
+            $imageInfo = getimagesizefromstring($content);
+        } finally {
+            restore_error_handler();
+        }
+        if (!$imageInfo) {
+            return false;
+        }
+
+        $width  = (int) ($imageInfo[0] ?? 0);
         $height = (int) ($imageInfo[1] ?? 0);
+        $bits   = (int) ($imageInfo['bits'] ?? 24);
+
         $this->detectedDimensions = [$width, $height];
 
-        if ($width > self::MAX_DIMENSION || $height > self::MAX_DIMENSION) {
+        // Chequeo rápido de límites (FC)
+        if (
+            $width <= 0 || $height <= 0 ||
+            $width > FC::MAX_WIDTH || $height > FC::MAX_HEIGHT ||
+            $width < FC::MIN_WIDTH || $height < FC::MIN_HEIGHT
+        ) {
             return false;
         }
 
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $detected = $finfo ? finfo_file($finfo, $path) : false;
-
-        if ($finfo) {
-            finfo_close($finfo);
+        // Ratio de descompresión (image bomb)
+        $uncompressed = (int) ($width * $height * max(1, $bits) / 8);
+        if ($size > 0 && $uncompressed / $size > $this->bombRatioThreshold) {
+            return false;
         }
 
-        if ($detected === false || ! in_array($detected, self::ALLOWED_MIME_TYPES, true)) {
+        // exif_imagetype (si está disponible) como verificación adicional
+        if (function_exists('exif_imagetype')) {
+            set_error_handler(static function (): bool {
+                return true;
+            });
+            try {
+                $exifType = exif_imagetype($path);
+            } finally {
+                restore_error_handler();
+            }
+            if ($exifType !== false) {
+                $exifMime = image_type_to_mime_type((int) $exifType);
+                if (!in_array($exifMime, FC::ALLOWED_MIME_TYPES, true)) {
+                    return false;
+                }
+            }
+        }
+
+        // MIME real desde buffer (fallback a path si es necesario)
+        $detected = false;
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $detected = finfo_buffer($finfo, $content);
+                finfo_close($finfo);
+            }
+        }
+        if ($detected === false && function_exists('mime_content_type')) {
+            // Fallback conservador sin supresión de errores
+            set_error_handler(static function (): bool {
+                return true;
+            });
+            try {
+                $detected = mime_content_type($path);
+            } finally {
+                restore_error_handler();
+            }
+        }
+        if ($detected === false || !in_array($detected, FC::ALLOWED_MIME_TYPES, true)) {
             return false;
         }
 
         try {
-            // Decodifica para verificar que es una imagen válida.
-            $decoder = $this->decodeImage;
-            $this->decodedImage = $decoder($path);
+            $this->decodedImage = $this->decodeImageFromString($content);
         } catch (Throwable $exception) {
             $this->logWarning('image_decode_failed', $file->getClientOriginalName(), $exception);
             return false;
+        }
+
+        // Normalización opcional: re-encode en memoria y re-validación heurística
+        if ($this->enableNormalization) {
+            try {
+                $normalized = $this->reencodeToSafeBytes($this->decodedImage, is_string($detected) ? $detected : null);
+            } catch (Throwable $e) {
+                $this->logWarning('image_normalize_failed', $file->getClientOriginalName(), $e);
+                return false;
+            }
+
+            if (!is_string($normalized) || $normalized === '') {
+                return false;
+            }
+
+            // Re-scan de payloads sobre el binario normalizado
+            if (!$this->scanContentForSuspiciousPayload($normalized)) {
+                $this->logWarning('image_normalized_suspicious', $file->getClientOriginalName());
+                return false;
+            }
+
+            // Revalidación de dimensiones y ratio bomba sobre el binario normalizado
+            $info = @getimagesizefromstring($normalized);
+            if (!$info) {
+                return false;
+            }
+            $nW = (int) ($info[0] ?? 0);
+            $nH = (int) ($info[1] ?? 0);
+            if ($nW <= 0 || $nH <= 0 || $nW > FC::MAX_WIDTH || $nH > FC::MAX_HEIGHT) {
+                return false;
+            }
+            $nBits = (int) ($info['bits'] ?? 24);
+            $nSize = strlen($normalized);
+            $nUncompressed = (int) ($nW * $nH * max(1, $nBits) / 8);
+            if ($nSize > 0 && $nUncompressed / $nSize > $this->bombRatioThreshold) {
+                return false;
+            }
         }
 
         return true;
     }
 
     /**
+     * Decodifica la imagen desde contenido binario para evitar TOCTOU.
+     *
+     * @param string $content
+     * @return object
+     */
+    private function decodeImageFromString(string $content): object
+    {
+        $manager = self::resolveImageManager();
+
+        // Intervention v3 ->read() con buffer binario
+        if (is_object($manager) && method_exists($manager, 'read')) {
+            try {
+                /** @var object $img */
+                $img = $manager->read($content);
+                return $img;
+            } catch (Throwable) {
+                // Fallback a archivo temporal seguro
+                return $this->decodeViaTemporaryFile($content, $manager);
+            }
+        }
+
+        // API alternativa: usar archivo temporal
+        if ($this->decodeImage instanceof \Closure) {
+            return $this->decodeViaTemporaryFile($content, $this->decodeImage);
+        }
+        return $this->decodeViaTemporaryFile($content, $manager);
+    }
+
+    /**
+     * Fallback: escribe un archivo temporal de forma segura y decodifica desde path.
+     *
+     * @param string $content
+     * @param object|callable $manager
+     * @return object
+     */
+    private function decodeViaTemporaryFile(string $content, object|callable $manager): object
+    {
+        $tempPath = tempnam(sys_get_temp_dir(), 'sec_img_');
+        if ($tempPath === false) {
+            throw new RuntimeException('Unable to create temporary file');
+        }
+
+        try {
+            if (file_put_contents($tempPath, $content, LOCK_EX) === false) {
+                throw new RuntimeException('Unable to write temporary file');
+            }
+            @chmod($tempPath, 0600);
+
+            if (is_callable($manager)) {
+                /** @var object $img */
+                $img = $manager($tempPath);
+                return $img;
+            }
+
+            if (is_object($manager) && method_exists($manager, 'read')) {
+                /** @var object $img */
+                $img = $manager->read($tempPath);
+                return $img;
+            }
+
+
+
+            throw new RuntimeException('Unable to decode image: unsupported manager implementation.');
+        } finally {
+            @unlink($tempPath);
+        }
+    }
+
+    /**
      * Asegura que las dimensiones (ancho/alto) estén dentro de los límites definidos.
      *
      * @param UploadedFile $file Archivo subido.
-     * @return bool True si ancho y alto son <= MAX_DIMENSION.
+     * @return bool True si ancho y alto son <= FC::MAX_*.
      */
     private function passesDimensionChecks(UploadedFile $file): bool
     {
         if ($this->detectedDimensions !== null) {
             [$width, $height] = $this->detectedDimensions;
 
-            if ($width > self::MAX_DIMENSION || $height > self::MAX_DIMENSION) {
+            if (
+                $width < FC::MIN_WIDTH || $height < FC::MIN_HEIGHT ||
+                $width > FC::MAX_WIDTH || $height > FC::MAX_HEIGHT
+            ) {
+                return false;
+            }
+
+            $megapixels = ($width * $height) / 1_000_000;
+            if ($megapixels > FC::MAX_MEGAPIXELS) {
                 return false;
             }
 
             return true;
         }
 
-        if ($this->decodedImage !== null && method_exists($this->decodedImage, 'width') && method_exists($this->decodedImage, 'height')) {
-            return $this->decodedImage->width() <= self::MAX_DIMENSION
-                && $this->decodedImage->height() <= self::MAX_DIMENSION;
+        if (
+            $this->decodedImage !== null
+            && method_exists($this->decodedImage, 'width')
+            && method_exists($this->decodedImage, 'height')
+        ) {
+            $width = (int) $this->decodedImage->width();
+            $height = (int) $this->decodedImage->height();
+
+            if (
+                $width < FC::MIN_WIDTH || $height < FC::MIN_HEIGHT ||
+                $width > FC::MAX_WIDTH || $height > FC::MAX_HEIGHT
+            ) {
+                return false;
+            }
+
+            $megapixels = ($width * $height) / 1_000_000;
+            return $megapixels <= FC::MAX_MEGAPIXELS;
         }
 
         return false;
@@ -390,6 +559,8 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         /** @var list<non-empty-string> $patterns */
         $patterns = [
             '/<\?php/i',
+            '/<\?=/i',
+            '/<\?(?!xml)/i',
             '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i',
             '/base64_decode\s*\(/i',
         ];
@@ -401,6 +572,110 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Re-encode a normalized image to safe bytes, attempting to strip metadata.
+     * Tries Intervention v2 encode()/stream() and v3 toPng()/toJpeg() best-effort.
+     */
+    private function reencodeToSafeBytes(object $image, ?string $preferredMime = null): ?string
+    {
+        $format = $this->chooseSafeFormat($preferredMime);
+
+        // Intervention v3: toPng()/toJpeg()/toWebp()...
+        $method = null;
+        if ($format === 'png' && method_exists($image, 'toPng')) {
+            $method = 'toPng';
+        } elseif (in_array($format, ['jpg', 'jpeg'], true) && method_exists($image, 'toJpeg')) {
+            $method = 'toJpeg';
+        } elseif ($format === 'webp' && method_exists($image, 'toWebp')) {
+            $method = 'toWebp';
+        }
+        if ($method) {
+            try {
+                /** @var mixed $res */
+                $res = $image->{$method}(90);
+                $bytes = $this->stringifyEncoded($res);
+                if (is_string($bytes) && $bytes !== '') {
+                    return $bytes;
+                }
+            } catch (Throwable) {
+                // fallback abajo
+            }
+        }
+
+        // Último recurso (v3): guardar temporalmente el objeto codificado
+        if (method_exists($image, 'save')) {
+            $tmp = tempnam(sys_get_temp_dir(), 'norm_img_');
+            if ($tmp === false) {
+                return null;
+            }
+            try {
+                $image->save($tmp);
+                $bytes = @file_get_contents($tmp);
+                return is_string($bytes) && $bytes !== '' ? $bytes : null;
+            } finally {
+                @unlink($tmp);
+            }
+        }
+
+        return null;
+    }
+
+    private function chooseSafeFormat(?string $preferredMime): string
+    {
+        // Mantiene JPEG si es origen JPEG (para evitar pérdidas innecesarias), si no PNG lossless
+        if (is_string($preferredMime) && str_contains($preferredMime, 'jpeg')) {
+            return 'jpeg';
+        }
+        return 'png';
+    }
+
+    /** Intenta convertir objetos de encode/stream/encoded a string binario. */
+    private function stringifyEncoded(mixed $encoded): ?string
+    {
+        if (is_string($encoded)) {
+            return $encoded;
+        }
+        if (is_object($encoded)) {
+            if (method_exists($encoded, 'toString')) {
+                try {
+                    return (string) $encoded->toString();
+                } catch (Throwable) {
+                }
+            }
+            if (method_exists($encoded, '__toString')) {
+                try {
+                    return (string) $encoded;
+                } catch (Throwable) {
+                }
+            }
+            if (method_exists($encoded, 'getEncoded')) {
+                try {
+                    return (string) $encoded->getEncoded();
+                } catch (Throwable) {
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Reusa los patrones de scan sobre un contenido en memoria. */
+    private function scanContentForSuspiciousPayload(string $content): bool
+    {
+        $patterns = [
+            '/<\?php/i',
+            '/<\?=/i',
+            '/<\?(?!xml)/i',
+            '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i',
+            '/base64_decode\s*\(/i',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $content)) {
+                return false;
+            }
+        }
         return true;
     }
 
