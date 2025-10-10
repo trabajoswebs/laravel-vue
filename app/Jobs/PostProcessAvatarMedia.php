@@ -112,6 +112,11 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
      */
     public ?string $correlationId;
 
+    // Añadir contador de releases
+    private int $releaseCount = 0;
+    private const MAX_RELEASES = 50;
+
+
     /**
      * Constructor.
      *
@@ -217,6 +222,14 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
         // (2) conversions pendientes → release no bloqueante
         if (!$this->conversionsReady($media)) {
+            if ($this->releaseCount >= self::MAX_RELEASES) {
+                Log::error('ppam_max_releases_exceeded', $this->context([
+                    'releases' => $this->releaseCount,
+                ]));
+                return;
+            }
+
+            $this->releaseCount++;
             $this->release($this->checkIntervalSeconds);
             return;
         }
@@ -357,27 +370,30 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             $disk = Storage::disk($media->disk);
             $isLocal = $this->isLocalDisk($media->disk);
 
-            // Original
+            // Validar que el disco es seguro
+            if (!in_array($disk, self::getAllowedDisks(), true)) {
+                return 'fail';
+            }
+
             if ($isLocal) {
                 $path = $media->getPath();
-                if (!$path || !is_file($path) || !is_readable($path)) {
-                    Log::warning('ppam_original_missing_local', $this->context([
-                        'media_id' => $media->id,
-                        'path'     => $path,
+
+                // Prevenir directory traversal
+                $basePath = config("filesystems.disks.{$media->disk}.root");
+                if (!str_starts_with(realpath($path) ?: '', realpath($basePath))) {
+                    Log::critical('ppam_path_traversal_attempt', $this->context([
+                        'path' => $path,
+                        'base' => $basePath,
                     ]));
-                    // Local: si no está, suele ser fallo permanente
                     return 'fail';
                 }
-            } else {
-                $path = $media->getPathRelativeToRoot();
-                if (!$path || !$disk->exists($path)) {
-                    Log::warning('ppam_original_missing_remote', $this->context([
+
+                if (!is_file($path) || !is_readable($path)) {
+                    Log::warning('ppam_original_missing_local', $this->context([
                         'media_id' => $media->id,
-                        'path'     => $path,
-                        'disk'     => $media->disk,
+                        'path' => $path,
                     ]));
-                    // Remoto: puede ser consistencia eventual → 'retry' si queda budget
-                    return $this->hasExceededWaitBudget() ? 'fail' : 'retry';
+                    return 'fail';
                 }
             }
 
@@ -415,7 +431,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             return $isLocal
                 ? 'fail'
                 : ($this->hasExceededWaitBudget() ? 'fail' : 'retry');
-
         } catch (Throwable $e) {
             if ($this->isTransient($e)) {
                 // Reintentar con backoff
@@ -618,6 +633,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
         }
     }
 
+
     /**
      * Obtiene lista de conversions registradas/generadas.
      *
@@ -691,20 +707,207 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             || str_contains($e->getMessage(), 'Rate exceeded');
     }
 
+
     /**
-     * Enriquece el contexto de log con metadatos comunes del job.
+     * Combina y sanea el contexto proporcionado sin permitir que
+     * el consumidor sobrescriba campos reservados de trazabilidad.
      *
-     * @param array<string, mixed> $context Datos adicionales de contexto.
-     * @return array<string, mixed> Contexto enriquecido con metadatos del job.
+     * - Sanea recursivamente arrays/strings.
+     * - En strings que son URL: parsea query y enmascara claves sensibles.
+     * - En headers/tokens: enmascara valores (p.ej., "Bearer abcdef..." → "Bearer ***def").
+     * - Protege campos reservados para que no puedan ser pisados.
+     *
+     * @param array $context Contexto adicional opcional para mezclar
+     * @return array Contexto combinado y saneado
      */
     private function context(array $context = []): array
     {
-        return array_merge([
-            'media_id'       => $this->mediaId,
-            'collection'     => $this->collection,
-            'queue'          => $this->queue,
-            'job'            => static::class,
-            'correlation_id' => $this->correlationId,
-        ], $context);
+        // Claves sensibles que deben enmascararse si aparecen como nombres de campo
+        $sensitiveKeys = [
+            'signature',
+            'token',
+            'key',
+            'api_key',
+            'access_key',
+            'secret',
+            'password',
+            'authorization',
+            'auth',
+            'x-api-key',
+            'x-auth-token',
+        ];
+
+        // Claves internas que NO se pueden sobrescribir desde $context
+        $reservedKeys = [
+            'media_id',
+            'collection',
+            'queue',
+            'job',
+            'correlation_id',
+        ];
+
+        // 1) Saneamos profundamente el contexto de entrada
+        $sanitizedInput = $this->deepSanitize($context, $sensitiveKeys);
+
+        // 2) Evitamos que el input pise claves reservadas
+        foreach ($reservedKeys as $k) {
+            unset($sanitizedInput[$k]); // Ej.: si el caller pasa ['job' => 'otraCosa'] se ignora
+        }
+
+        // 3) Construimos los defaults internos de trazabilidad
+        $defaults = [
+            'media_id'       => $this->mediaId,       // Ej.: 12345
+            'collection'     => $this->collection,    // Ej.: "avatar"
+            'queue'          => $this->queue,         // Ej.: "images"
+            'job'            => static::class,        // Ej.: "App\Jobs\PostProcessAvatar"
+            'correlation_id' => $this->correlationId, // Ej.: "c38f...-id"
+        ];
+
+        // 4) Mezclamos: defaults ganan frente al input (no se pueden pisar)
+        // Nota: array_merge($sanitizedInput, $defaults) → $defaults tiene prioridad.
+        return array_merge($sanitizedInput, $defaults);
+    }
+
+    /**
+     * Sanea un valor de forma recursiva.
+     * - Si es array: sanea por clave/valor (y enmascara si la clave es sensible).
+     * - Si es string:
+     *     * Si parece URL (http/https): parsea y enmascara query sensible.
+     *     * Si parece header Authorization Bearer: enmascara el token.
+     *     * Si contiene "...password=xxx" en texto plano: aplica redacción defensiva.
+     * - Otros tipos: se devuelven tal cual.
+     *
+     * @param mixed $value
+     * @param string[] $sensitiveKeys
+     * @param string|null $currentKey La clave padre (para decidir si enmascarar por nombre)
+     * @return mixed
+     */
+    private function deepSanitize(mixed $value, array $sensitiveKeys, ?string $currentKey = null): mixed
+    {
+        // Si la clave actual es sensible, enmascara todo el valor (sea lo que sea)
+        if ($currentKey !== null && $this->isSensitiveKey($currentKey, $sensitiveKeys)) {
+            return $this->maskValue($value); // Ej.: "my-secret-token" → "***oken"
+        }
+
+        // Arrays: saneo recursivo por clave/valor
+        if (is_array($value)) {
+            $out = [];
+            foreach ($value as $k => $v) {
+                $out[$k] = $this->deepSanitize($v, $sensitiveKeys, is_string($k) ? $k : null);
+            }
+            return $out;
+        }
+
+        // Strings: tratamos casos especiales (URL, Bearer, patrones comunes)
+        if (is_string($value)) {
+            // Caso URL http/https
+            if (preg_match('#^https?://#i', $value)) {
+                return $this->sanitizeUrlQuery($value, $sensitiveKeys); // Enmascara firma/token/key en la query
+            }
+
+            // Caso Authorization: Bearer <token>
+            if (preg_match('/^Bearer\s+(.+)$/i', trim($value), $m)) {
+                return 'Bearer ' . $this->maskValue($m[1]); // Ej.: "Bearer abcdef..." → "Bearer ***ef"
+            }
+
+            // Patrones simples "password=..." o "token=..." embebidos en texto plano
+            $pattern = '/(?<=^|[\s;&])(' . implode('|', array_map('preg_quote', $sensitiveKeys)) . ')=([^\s;&]+)/i';
+            if (preg_match($pattern, $value)) {
+                return preg_replace($pattern, '$1=***', $value);
+            }
+
+            return $value;
+        }
+
+        // Objetos/recursos/numéricos/bools/null → tal cual (no forzamos serialización aquí)
+        return $value;
+    }
+
+    /**
+     * Determina si una clave es sensible (case-insensitive, guiones o subrayados).
+     */
+    private function isSensitiveKey(string $key, array $sensitiveKeys): bool
+    {
+        $norm = strtolower(str_replace(['-', '_'], '', $key)); // "X-Api-Key" → "xapikey"
+        foreach ($sensitiveKeys as $s) {
+            $sNorm = strtolower(str_replace(['-', '_'], '', $s));
+            if ($norm === $sNorm) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Enmascara un valor preservando un final mínimo para depurar.
+     * - Strings: deja los últimos 2–4 caracteres (según longitud), el resto '***'.
+     * - Arrays/objetos: devuelve '***'.
+     * - Otros: devuelve tal cual.
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    private function maskValue(mixed $value): mixed
+    {
+        if (!is_string($value)) {
+            return is_array($value) || is_object($value) ? '***' : $value;
+        }
+
+        $len = mb_strlen($value);
+        if ($len <= 4) {
+            return '***';
+        }
+        $tail = mb_substr($value, -min(4, max(2, (int)floor($len * 0.15)))); // Ej.: "abcdef123" → deja "f123"
+        return '***' . $tail;
+    }
+
+    /**
+     * Enmascara parámetros sensibles de la query en una URL preservando el resto.
+     * - Usa parse_url/parse_str/http_build_query para evitar romper codificaciones.
+     *
+     * @param string $url
+     * @param string[] $sensitiveKeys
+     * @return string
+     */
+    private function sanitizeUrlQuery(string $url, array $sensitiveKeys): string
+    {
+        $parts = parse_url($url);
+        if (!isset($parts['query'])) {
+            return $url; // No hay query, nada que hacer
+        }
+
+        // Parsear query a array (maneja a[]=1&a[]=2 correctamente)
+        $query = [];
+        parse_str($parts['query'], $query);
+
+        // Redactar claves sensibles (recursivo por si hay sub-arrays)
+        $query = $this->deepSanitize($query, $sensitiveKeys);
+
+        // Reconstruir query
+        $parts['query'] = http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+
+        // Reconstrucción manual segura
+        $scheme   = $parts['scheme'] ?? 'http';
+        $host     = $parts['host']   ?? '';
+        $port     = isset($parts['port']) ? ':' . $parts['port'] : '';
+        $user     = $parts['user'] ?? null;
+        $pass     = isset($parts['pass']) ? ':' . $parts['pass']  : '';
+        $auth     = $user ? $user . $pass . '@' : '';
+        $path     = $parts['path']  ?? '';
+        $queryStr = $parts['query'] ? '?' . $parts['query'] : '';
+        $frag     = isset($parts['fragment']) ? '#' . $parts['fragment'] : '';
+
+        return "{$scheme}://{$auth}{$host}{$port}{$path}{$queryStr}{$frag}";
+    }
+
+
+    /**
+     * Obtiene la lista de discos permitidos leyendo las configuraciones de filesystems.
+     *
+     * @return array Lista de nombres de discos disponibles
+     */
+    private static function getAllowedDisks(): array
+    {
+        return array_keys(config('filesystems.disks', []));
     }
 }
