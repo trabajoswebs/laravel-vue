@@ -13,7 +13,6 @@ use Illuminate\Auth\Access\AuthorizationException;    // Ej. excepciones de auto
 use Illuminate\Http\JsonResponse;                     // Ej. respuesta JSON
 use Illuminate\Http\RedirectResponse;                 // Ej. respuesta redirect
 use Illuminate\Http\Request;                          // Ej. request base
-use Illuminate\Support\Facades\Gate;                  // Ej. Facade para policies
 use Throwable;                                        // Ej. captura de errores
 
 /**
@@ -50,8 +49,8 @@ class ProfileAvatarController extends Controller
         /** @var User $authUser */
         $authUser = $request->user(); // Ej. instancia de User autenticado
 
-        // 2) Autorización explícita: `updateAvatar` sobre sí mismo
-        Gate::authorize('updateAvatar', $authUser); // Ej. true si es dueño o super-admin
+        // 2) Autorización explícita: `update` sobre sí mismo
+        $this->authorize('updateAvatar', $authUser); // Ej. true si es dueño o super-admin
 
         try {
             // 3) Ejecuta la Action invocable (__invoke) con User + UploadedFile
@@ -72,7 +71,6 @@ class ProfileAvatarController extends Controller
 
             // 6) Si no, redirige atrás con flash
             return back()->with('success', $payload['message']);
-
         } catch (Throwable $e) {
             // Manejo de error uniforme
             $errorMessage = __('No se pudo actualizar el avatar. Inténtalo de nuevo.');
@@ -106,7 +104,7 @@ class ProfileAvatarController extends Controller
         $authUser = $request->user(); // Ej. usuario autenticado
 
         // Autoriza eliminación del propio avatar
-        Gate::authorize('updateAvatar', $authUser); // Ej. true si es dueño o super-admin
+        $this->authorize('deleteAvatar', $authUser); // Ej. true si es dueño o super-admin
 
         try {
             // Ejecuta la Action invocable (__invoke). Retorna true si había avatar y se eliminó.
@@ -124,7 +122,6 @@ class ProfileAvatarController extends Controller
             }
 
             return back()->with('success', $message);
-
         } catch (Throwable $e) {
             $errorMessage = __('No se pudo eliminar el avatar. Inténtalo de nuevo.');
             if ($request->wantsJson()) {
