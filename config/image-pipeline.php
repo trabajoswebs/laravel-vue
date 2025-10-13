@@ -132,4 +132,32 @@ return [
 
     'avatar_collection' => env('AVATAR_COLLECTION', 'avatar'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Galería (opcional)
+    |--------------------------------------------------------------------------
+    |
+    | Colección/disco y tamaños por defecto para imágenes de galería/portfolio.
+    | Puedes ajustar estos valores por entorno o sobrescribir sizes por modelo.
+    |
+    */
+    'gallery_disk' => env('GALLERY_DISK', env('FILESYSTEM_DISK', 'local')),
+    'gallery_collection' => env('GALLERY_COLLECTION', 'gallery'),
+    'gallery_sizes' => [
+        'thumb'  => 320,
+        'medium' => 1280,
+        'large'  => 2048,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Postproceso: colecciones a procesar
+    |--------------------------------------------------------------------------
+    |
+    | Coma/space-separated list o array de colecciones para el listener que
+    | encola la optimización tras las conversions (default: avatar,gallery).
+    |
+    */
+    'postprocess_collections' => env('IMG_POSTPROCESS_COLLECTIONS', 'avatar,gallery'),
+
 ];
