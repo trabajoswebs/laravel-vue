@@ -250,50 +250,99 @@ php artisan serve
 
 ```
 ├── app/
-│   ├── Actions/                          # Actions de Laravel
-│   │   └── Profile/                      # Actions relacionadas con perfil
-│   │       └── UpdateAvatar.php         # Actualización de avatar
-│   ├── Events/                          # Eventos de la aplicación
-│   │   └── User/                        # Eventos de usuario
-│   │       ├── AvatarDeleted.php        # Evento de avatar eliminado
-│   │       └── AvatarUpdated.php        # Evento de avatar actualizado
+│   ├── Actions/
+│   │   └── Profile/
+│   │       ├── UpdateAvatar.php           # Actualiza avatar (pipeline + ML)
+│   │       └── DeleteAvatar.php           # Elimina avatar (idempotente)
+│   ├── Console/
+│   │   └── Commands/
+│   │       └── CleanAuditLogs.php         # Limpieza de auditoría
+│   ├── Events/
+│   │   └── User/
+│   │       ├── AvatarDeleted.php
+│   │       └── AvatarUpdated.php
 │   ├── Http/
-│   │   ├── Controllers/                 # Controladores
-│   │   │   └── LanguageController.php   # Controlador de idiomas
-│   │   └── Middleware/
-│   │       └── HandleInertiaRequests.php # Middleware de traducciones
-│   ├── Models/                          # Modelos de Eloquent
-│   │   └── User.php                     # Modelo de usuario
-│   └── Services/                        # Servicios de la aplicación
-│       ├── ImagePipeline.php            # Pipeline de procesamiento de imágenes
-│       └── OptimizerService.php         # Servicio de optimización de imágenes
+│   │   ├── Controllers/
+│   │   │   ├── Settings/
+│   │   │   │   ├── ProfileController.php
+│   │   │   │   ├── PasswordController.php
+│   │   │   │   └── ProfileAvatarController.php
+│   │   │   └── Auth/*
+│   │   ├── Middleware/
+│   │   │   ├── SecurityHeaders.php        # CSP y cabeceras de seguridad
+│   │   │   ├── HandleInertiaRequests.php
+│   │   │   ├── SanitizeInput.php
+│   │   │   ├── TrustProxies.php
+│   │   │   ├── PreventBruteForce.php
+│   │   │   └── UserAudit.php
+│   │   └── Requests/
+│   │       └── Settings/
+│   │           ├── UpdateAvatarRequest.php
+│   │           ├── DeleteAvatarRequest.php
+│   │           └── ProfileUpdateRequest.php
+│   ├── Jobs/
+│   │   └── PostProcessAvatarMedia.php     # Optimización original + conversions
+│   ├── Listeners/
+│   │   └── User/
+│   │       ├── QueueAvatarPostProcessing.php
+│   │       └── PurgeOldAvatar.php
+│   ├── Models/
+│   │   └── User.php                        # Colección ML 'avatar' + accessors
+│   ├── Policies/
+│   │   └── UserPolicy.php
+│   ├── Providers/
+│   │   ├── AppServiceProvider.php
+│   │   ├── AuthServiceProvider.php
+│   │   ├── EventServiceProvider.php
+│   │   └── HtmlPurifierServiceProvider.php
+│   ├── Rules/
+│   │   └── SecureImageValidation.php       # Regla endurecida (magic bytes, bomb)
+│   ├── Services/
+│   │   ├── ImagePipeline.php               # Saneado/resize/re-encode (Imagick)
+│   │   ├── OptimizerService.php            # Spatie Image Optimizer (local/S3)
+│   │   └── TranslationService.php
+│   ├── Support/
+│   │   └── Media/
+│   │       └── ConversionProfiles/
+│   │           ├── AvatarConversionProfile.php
+│   │           └── FileConstraints.php
+│   └── Helpers/
+│       └── SecurityHelper.php
+├── bootstrap/
+│   └── app.php                             # Registra SecurityHeaders y routing
 ├── config/
-│   └── filesystems.php                  # Configuración de sistemas de archivos
-├── docs/
-│   ├── SECURITY.md                      # Guía de seguridad
-│   └── TRANSLATIONS_DYNAMIC.md          # Documentación del sistema i18n
-├── resources/
-│   ├── js/
-│   │   ├── components/                  # Componentes Vue
-│   │   ├── composables/
-│   │   │   └── useLanguage.ts          # Composable de idiomas
-│   │   ├── i18n/                       # Configuración i18n
-│   │   ├── locales/                    # Traducciones del cliente
-│   │   └── pages/                      # Páginas de la aplicación
-│   ├── lang/                           # Traducciones del servidor
-│   │   ├── es/                         # Español
-│   │   └── en/                         # Inglés
-│   └── views/
-│       └── app.blade.php               # Layout principal
+│   ├── image-pipeline.php                  # Límites/calidades de imagen
+│   ├── media-library.php                   # Spatie ML (cola, tamaños)
+│   ├── security.php                        # CSP y headers
+│   ├── filesystems.php
+│   ├── queue.php
+│   ├── app.php
+│   ├── logging.php
+│   └── services.php
 ├── routes/
-│   └── web.php                         # Rutas web incluyendo idiomas
-├── docker-compose.yml                  # Configuración de Docker
-├── composer.json                       # Dependencias PHP
-├── package.json                        # Dependencias JavaScript
-├── tsconfig.json                       # Configuración de TypeScript
-├── vite.config.ts                      # Configuración de Vite
-├── eslint.config.js                    # Configuración de ESLint
-└── components.json                     # Configuración de componentes UI
+│   ├── web.php
+│   ├── settings.php                        # Incluye PATCH/DELETE /settings/avatar
+│   ├── auth.php
+│   └── console.php
+├── docs/
+│   ├── SECURITY.md
+│   └── TRANSLATIONS_DYNAMIC.md
+├── resources/
+│   ├── js/                                 # Vue 3 + Inertia
+│   ├── lang/                               # Traducciones (es/en)
+│   └── views/
+│       └── app.blade.php
+├── tests/
+│   ├── Feature/*
+│   └── Unit/*
+├── docker-compose.yml
+├── Dockerfile
+├── composer.json
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── eslint.config.js
+└── components.json
 ```
 
 ## 🌐 Uso del Sistema de Traducciones
