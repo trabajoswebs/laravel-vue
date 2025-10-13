@@ -76,6 +76,74 @@ sudo apt-get install jpegoptim pngquant webp gifsicle
 # Personalizar calidades, dimensiones máximas, etc.
 ```
 
+### Avatares: subida segura (pipeline y configuración)
+
+Este proyecto incluye un pipeline endurecido para subir el avatar del usuario (Laravel + Inertia/Vue) con validación por magic bytes, eliminación de EXIF/ICC, límites de megapíxeles y optimización del original y sus conversiones.
+
+- Endpoints de avatar (rutas protegidas por `auth`):
+  - `PATCH /settings/avatar` → actualiza el avatar (usa `UpdateAvatarRequest` + `ImagePipeline`)
+  - `DELETE /settings/avatar` → elimina el avatar actual
+- Concurrencia y postproceso:
+  - Listener a conversions que encola `PostProcessAvatarMedia` con `WithoutOverlapping` por `mediaId` y `ShouldBeUnique`.
+  - `OptimizerService` optimiza original y conversions (local y S3 por streaming).
+- Validación fuerte en request y regla custom:
+  - `File::image() + mimetypes + dimensions` y `SecureImageValidation` (finfo/exif, image-bomb ratio, scan heurístico).
+
+Configuración requerida (producción):
+
+1) Límite de tamaño a 10 MB (alineado en todas las capas)
+
+```env
+# .env
+IMG_MAX_BYTES=10485760
+```
+
+```php
+// config/media-library.php
+'max_file_size' => (int) env('IMG_MAX_BYTES', 10 * 1024 * 1024),
+```
+
+2) Driver de imágenes
+
+```env
+# .env
+IMAGE_DRIVER=imagick
+```
+
+Instala la extensión en el runtime (según distribución):
+- Debian/Ubuntu: `apt-get install -y php-imagick && service php-fpm restart`
+- Alpine (Docker): `apk add --no-cache php81-pecl-imagick`
+
+3) CSP para entrega desde S3/CloudFront
+
+```env
+# .env
+CSP_IMG_HOSTS=dxxxxx.cloudfront.net *.s3.amazonaws.com
+```
+
+El middleware `App\\Http\\Middleware\\SecurityHeaders` genera la CSP; `config/security.php` lee los hosts desde env.
+
+4) Rutas de avatar (ya incluidas)
+
+```php
+// routes/settings.php
+Route::patch('settings/avatar', [\\App\\Http\\Controllers\\Settings\\ProfileAvatarController::class, 'update'])
+    ->name('settings.avatar.update');
+Route::delete('settings/avatar', [\\App\\Http\\Controllers\\Settings\\ProfileAvatarController::class, 'destroy'])
+    ->name('settings.avatar.destroy');
+```
+
+5) Límites del servidor para subidas (asegura que no bloqueen 10 MB)
+
+- PHP: `upload_max_filesize=10M`, `post_max_size=10M` (php.ini)
+- Nginx: `client_max_body_size 10M;`
+- Workers de cola: cola `image-optimization` activa (Horizon/Supervisor)
+
+6) Buenas prácticas de frontend
+
+- Consumir `avatarUrl` y `avatarThumbUrl` del modelo `User` (incluyen cache busting `?v=`)
+- Enviar el archivo como `FormData` en el campo `avatar`
+
 ## 🛠️ Instalación
 
 ### Opción A: Con Docker (Recomendado)
