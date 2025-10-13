@@ -76,6 +76,52 @@ sudo apt-get install jpegoptim pngquant webp gifsicle
 # Personalizar calidades, dimensiones máximas, etc.
 ```
 
+### Arquitectura reutilizable por colección
+
+Este proyecto implementa una arquitectura de subida de imágenes reutilizable basada en perfiles:
+
+- `app/Services/ImageUploadService::upload(HasMedia $owner, UploadedFile $file, ImageProfile $profile)`
+  - Centraliza el adjuntado a Spatie Media Library tras normalizar con `ImagePipeline`.
+  - Nombra los archivos como `{collection}-{sha1}.{ext}` y guarda props (`version`, `mime`, `width`, `height`).
+- Perfiles (`app/Support/Media`):
+  - `ImageProfile` (contrato): define `collection()`, `disk()`, `conversions()`, `fieldName()`, `requiresSquare()` y `applyConversions()`.
+  - `Profiles/AvatarProfile`: usa `avatar_collection`/`avatar_disk` y delega conversions a `AvatarConversionProfile`.
+  - `Profiles/GalleryProfile`: define conversions típicas de galería con tamaños configurables.
+- Listener multi-colecta:
+  - `QueueAvatarPostProcessing` ahora soporta múltiples colecciones configurables en `image-pipeline.postprocess_collections` (por defecto `avatar,gallery`).
+
+Uso rápido para otra colección (ej. galería):
+
+1) En el modelo que almacena imágenes de galería (p. ej., `PortfolioItem`):
+
+```php
+public function registerMediaCollections(): void
+{
+    $this->addMediaCollection(config('image-pipeline.gallery_collection', 'gallery'))
+        ->useDisk(config('image-pipeline.gallery_disk', config('filesystems.default')));
+}
+
+public function registerMediaConversions(?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void
+{
+    (new \App\Support\Media\Profiles\GalleryProfile())->applyConversions($this, $media);
+}
+```
+
+2) En tu controlador/action para galería:
+
+```php
+$media = app(\App\Services\ImageUploadService::class)
+    ->upload($model, $request->file('image'), new \App\Support\Media\Profiles\GalleryProfile());
+```
+
+3) Configura opcionalmente en `.env`:
+
+```env
+GALLERY_DISK=s3
+GALLERY_COLLECTION=gallery
+IMG_POSTPROCESS_COLLECTIONS="avatar,gallery"
+```
+
 ### Avatares: subida segura (pipeline y configuración)
 
 Este proyecto incluye un pipeline endurecido para subir el avatar del usuario (Laravel + Inertia/Vue) con validación por magic bytes, eliminación de EXIF/ICC, límites de megapíxeles y optimización del original y sus conversiones.
@@ -198,7 +244,7 @@ La aplicación estará disponible en `http://localhost`
 - Node.js 18+
 - PostgreSQL 17+ (o MySQL)
 - Redis
-- Extensiones PHP: Imagick, BCMath, Ctype, Fileinfo, JSON, Mbstring, OpenSSL, PDO, Tokenizer, XML
+- Extensiones PHP: Imagick (requerida por ImagePipeline), BCMath, Ctype, Fileinfo, JSON, Mbstring, OpenSSL, PDO, Tokenizer, XML
 
 #### 1. Clonar el repositorio
 
@@ -276,6 +322,7 @@ php artisan serve
 │   │   │   ├── PreventBruteForce.php
 │   │   │   └── UserAudit.php
 │   │   └── Requests/
+│   │       ├── UploadImageRequest.php         # Request genérico (SecureImageValidation)
 │   │       └── Settings/
 │   │           ├── UpdateAvatarRequest.php
 │   │           ├── DeleteAvatarRequest.php
@@ -299,10 +346,15 @@ php artisan serve
 │   │   └── SecureImageValidation.php       # Regla endurecida (magic bytes, bomb)
 │   ├── Services/
 │   │   ├── ImagePipeline.php               # Saneado/resize/re-encode (Imagick)
+│   │   ├── ImageUploadService.php          # Servicio común de subida por perfil
 │   │   ├── OptimizerService.php            # Spatie Image Optimizer (local/S3)
 │   │   └── TranslationService.php
 │   ├── Support/
 │   │   └── Media/
+│   │       ├── ImageProfile.php            # Contrato de perfiles
+│   │       ├── Profiles/
+│   │       │   ├── AvatarProfile.php
+│   │       │   └── GalleryProfile.php
 │   │       └── ConversionProfiles/
 │   │           ├── AvatarConversionProfile.php
 │   │           └── FileConstraints.php
@@ -451,6 +503,27 @@ composer run env:sail
 1. **Crear archivo PHP** en `resources/lang/{locale}/`
 2. **Agregar al middleware** en la lista de archivos
 3. **Usar en componentes** con la función `t()`
+
+### Variables de entorno relevantes (imágenes)
+
+```env
+# Límite de tamaño en bytes para la normalización
+IMG_MAX_BYTES=10485760
+
+# Driver de imágenes
+IMAGE_DRIVER=imagick
+
+# Colección/Disco para avatar
+AVATAR_COLLECTION=avatar
+AVATAR_DISK=public
+
+# Colección/Disco para galería
+GALLERY_COLLECTION=gallery
+GALLERY_DISK=public
+
+# Colecciones a postprocesar tras conversions
+IMG_POSTPROCESS_COLLECTIONS="avatar,gallery"
+```
 
 ## 🧪 Testing
 
