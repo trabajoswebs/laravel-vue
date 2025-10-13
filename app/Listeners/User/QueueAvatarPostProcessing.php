@@ -22,16 +22,41 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  * Nota: No tipamos el evento a ConversionHasBeenCompleted para evitar
  * el error de Intelephense “Undefined type …”; usamos object + instanceof.
  */
+/**
+ * Listener que encola post-proceso/optimización tras conversions de ML.
+ *
+ * Ahora soporta múltiples colecciones configurables, manteniendo compatibilidad
+ * con el flujo existente de avatar.
+ */
 final class QueueAvatarPostProcessing
 {
-    private string $collection;
+    /**
+     * Colecciones a postprocesar (p. ej., ['avatar','gallery']).
+     *
+     * @var array<int,string>
+     */
+    private array $collections;
     /** @var array<int,string> */
     private array $conversions;
 
+    /**
+     * Inicializa colecciones y conversions desde config.
+     */
     public function __construct()
     {
-        // Colección desde config (fallback 'avatar')
-        $this->collection = (string) config('image-pipeline.avatar_collection', 'avatar');
+        // Colecciones a postprocesar desde config (fallback ['avatar'])
+        $configured = config('image-pipeline.postprocess_collections');
+        if (is_string($configured)) {
+            $list = preg_split('/[\s,]+/', $configured, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        } elseif (is_array($configured)) {
+            $list = array_values(array_filter($configured, fn ($v) => is_string($v) && $v !== ''));
+        } else {
+            $list = [];
+        }
+        if (empty($list)) {
+            $list = [(string) config('image-pipeline.avatar_collection', 'avatar')];
+        }
+        $this->collections = array_values(array_unique($list));
 
         // Conversions = keys de avatar_sizes (fallback a defaults)
         $sizes = config('image-pipeline.avatar_sizes', [
@@ -71,12 +96,13 @@ final class QueueAvatarPostProcessing
             return;
         }
 
-        // 2) Filtrar por colección esperada (desde config)
-        if ((string) $media->collection_name !== $this->collection) {
+        // 2) Filtrar por colecciones esperadas (desde config)
+        $collection = (string) $media->collection_name;
+        if (!in_array($collection, $this->collections, true)) {
             Log::debug('ppam_listener_skip_collection', [
                 'media_id'         => $media->id,
-                'collection'       => (string) $media->collection_name,
-                'expected'         => $this->collection,
+                'collection'       => $collection,
+                'expected'         => $this->collections,
                 'conversion_fired' => $conversionName,
             ]);
             return;
@@ -114,13 +140,13 @@ final class QueueAvatarPostProcessing
             PostProcessAvatarMedia::dispatchFor(
                 media: $media,
                 conversions: $this->conversions,
-                collection: $this->collection,
+                collection: $collection,
                 correlationId: $correlationId
             );
 
             Log::info('ppam_listener_dispatch', [
                 'media_id'         => $media->id,
-                'collection'       => $this->collection,
+                'collection'       => $collection,
                 'conversions'      => $this->conversions,
                 'conversion_fired' => $conversionName,
                 'correlation_id'   => $correlationId,
@@ -128,7 +154,7 @@ final class QueueAvatarPostProcessing
         } catch (\Throwable $e) {
             Log::error('ppam_listener_dispatch_failed', [
                 'media_id'         => $media->id,
-                'collection'       => $this->collection,
+                'collection'       => $collection,
                 'conversions'      => $this->conversions,
                 'conversion_fired' => $conversionName,
                 'error'            => $e->getMessage(),
