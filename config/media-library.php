@@ -12,7 +12,8 @@ return [
      * The maximum file size of an item in bytes.
      * Adding a larger file will result in an exception.
      */
-    'max_file_size' => 1024 * 1024 * 10, // 10MB
+    // Alineado con los límites de la pipeline (IMG_MAX_BYTES / FileConstraints)
+    'max_file_size' => (int) env('IMG_MAX_BYTES', 10 * 1024 * 1024),
 
     /*
      * This queue connection will be used to generate derived and responsive images.

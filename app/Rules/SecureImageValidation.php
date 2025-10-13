@@ -107,8 +107,9 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             ? $decodeImage
             : $this->makeDefaultDecoder($decodeImage);
 
-        // Usa el límite global de FileConstraints cuando no se pasa explícito.
-        $this->maxFileSizeBytes = $maxFileSizeBytes ?? FC::MAX_BYTES;
+        // Usa límite desde configuración cuando no se pasa explícito (evita hardcodear).
+        $this->maxFileSizeBytes = $maxFileSizeBytes
+            ?? (int) (config('image-pipeline.max_bytes') ?? (10 * 1024 * 1024));
 
         // Optional hardening knobs
         $this->enableNormalization = (bool) ($normalize ?? false);

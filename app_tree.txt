@@ -1,0 +1,72 @@
+app/
+├── Actions/
+│   └── Profile/
+│       ├── DeleteAvatar.php
+│       └── UpdateAvatar.php
+├── Console/
+│   └── Commands/
+│       └── CleanAuditLogs.php
+├── Events/
+│   └── User/
+│       ├── AvatarDeleted.php
+│       └── AvatarUpdated.php
+├── Helpers/
+│   └── SecurityHelper.php
+├── Http/
+│   ├── Controllers/
+│   │   ├── Auth/
+│   │   │   ├── AuthenticatedSessionController.php
+│   │   │   ├── ConfirmablePasswordController.php
+│   │   │   ├── EmailVerificationNotificationController.php
+│   │   │   ├── EmailVerificationPromptController.php
+│   │   │   ├── NewPasswordController.php
+│   │   │   ├── PasswordResetLinkController.php
+│   │   │   ├── RegisteredUserController.php
+│   │   │   └── VerifyEmailController.php
+│   │   ├── Settings/
+│   │   │   ├── PasswordController.php
+│   │   │   ├── ProfileAvatarController.php
+│   │   │   └── ProfileController.php
+│   │   ├── Controller.php
+│   │   └── LanguageController.php
+│   ├── Middleware/
+│   │   ├── HandleAppearance.php
+│   │   ├── HandleInertiaRequests.php
+│   │   ├── PreventBruteForce.php
+│   │   ├── SanitizeInput.php
+│   │   ├── SecurityHeaders.php
+│   │   ├── TrustProxies.php
+│   │   └── UserAudit.php
+│   └── Requests/
+│       ├── Auth/
+│       │   └── LoginRequest.php
+│       └── Settings/
+│           ├── DeleteAvatarRequest.php
+│           ├── ProfileUpdateRequest.php
+│           └── UpdateAvatarRequest.php
+├── Jobs/
+│   └── PostProcessAvatarMedia.php
+├── Listeners/
+│   └── User/
+│       ├── PurgeOldAvatar.php
+│       └── QueueAvatarPostProcessing.php
+├── Models/
+│   └── User.php
+├── Policies/
+│   └── UserPolicy.php
+├── Providers/
+│   ├── AppServiceProvider.php
+│   ├── AuthServiceProvider.php
+│   ├── EventServiceProvider.php
+│   └── HtmlPurifierServiceProvider.php
+├── Rules/
+│   └── SecureImageValidation.php
+├── Services/
+│   ├── ImagePipeline.php
+│   ├── OptimizerService.php
+│   └── TranslationService.php
+└── Support/
+    └── Media/
+        └── ConversionProfiles/
+            ├── AvatarConversionProfile.php
+            └── FileConstraints.php

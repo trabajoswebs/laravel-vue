@@ -42,7 +42,7 @@ final class FileConstraints
 
 
     /** Tamaño máximo de archivo (bytes). */
-    public const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+    public const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
     /** Límite de megapíxeles (ancho*alto / 1e6). */
     public const MAX_MEGAPIXELS = 24; // 24 MP (p.ej., 6000x4000)
@@ -129,7 +129,7 @@ final class FileConstraints
         }
 
         // Validar MIME tipo real (no confiar en la extensión)
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $allowedMimes = self::ALLOWED_MIME_TYPES;
         $realMime = finfo_file(finfo_open(FILEINFO_MIME_TYPE), $file->getRealPath());
 
         if (!in_array($realMime, $allowedMimes, true)) {

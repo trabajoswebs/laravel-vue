@@ -58,7 +58,7 @@ class ProfileAvatarController extends Controller
 
             // 4) Mensaje de éxito + datos útiles para el front (version/hash para cache-busting)
             $payload = [
-                'message'        => __('Avatar actualizado correctamente.'),
+                'message'        => __('settings.profile.avatar.updated'),
                 'media_id'       => $media->id,                              // Ej. 123
                 'version'        => $media->getCustomProperty('version'),    // Ej. sha1 hash
                 'avatar_version' => $authUser->avatar_version ?? null,       // Ej. redundante si guardas versión en users
@@ -73,7 +73,7 @@ class ProfileAvatarController extends Controller
             return back()->with('success', $payload['message']);
         } catch (Throwable $e) {
             // Manejo de error uniforme
-            $errorMessage = __('No se pudo actualizar el avatar. Inténtalo de nuevo.');
+            $errorMessage = __('settings.profile.avatar.update_failed');
             if ($request->wantsJson()) {
                 return response()->json([
                     'message' => $errorMessage,
@@ -111,8 +111,8 @@ class ProfileAvatarController extends Controller
             $deleted = $action($authUser); // Ej. bool
 
             $message = $deleted
-                ? __('Avatar eliminado correctamente.')
-                : __('No había avatar para eliminar (operación idempotente).');
+                ? __('settings.profile.avatar.deleted')
+                : __('settings.profile.avatar.nothing_to_delete');
 
             if ($request->wantsJson()) {
                 return response()->json([
@@ -123,7 +123,7 @@ class ProfileAvatarController extends Controller
 
             return back()->with('success', $message);
         } catch (Throwable $e) {
-            $errorMessage = __('No se pudo eliminar el avatar. Inténtalo de nuevo.');
+            $errorMessage = __('settings.profile.avatar.delete_failed');
             if ($request->wantsJson()) {
                 return response()->json([
                     'message' => $errorMessage,

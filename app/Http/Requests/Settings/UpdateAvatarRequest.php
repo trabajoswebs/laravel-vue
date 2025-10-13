@@ -36,8 +36,9 @@ class UpdateAvatarRequest extends FormRequest
      */
     public function rules(): array
     {
-        // Derivados de FileConstraints (SSOT). Laravel espera KB en 'max'.
-        $maxKb = (int) ceil(FC::MAX_BYTES / 1024);
+        // Leer desde configuración (SSOT). Laravel espera KB en 'max'.
+        $maxBytes = (int) (config('image-pipeline.max_bytes') ?? 5 * 1024 * 1024);
+        $maxKb = (int) ceil($maxBytes / 1024);
 
         // Dimensiones mín./máx. centralizadas.
         $minW = FC::MIN_WIDTH;
@@ -66,7 +67,7 @@ class UpdateAvatarRequest extends FormRequest
 
                 // 4) Validación profunda (firma real, EXIF, poliglot, megapíxeles, etc.).
                 //    Pásale límites para que no dupliques números mágicos.
-                new SecureImageValidation(maxFileSizeBytes: FC::MAX_BYTES),
+                new SecureImageValidation(maxFileSizeBytes: $maxBytes),
             ],
         ];
     }
