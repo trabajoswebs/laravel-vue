@@ -25,7 +25,7 @@ return [
      * This queue will be used to generate derived and responsive images.
      * Leave empty to use the default queue.
      */
-    'queue_name' => env('MEDIA_QUEUE', ''),
+    'queue_name' => env('MEDIA_QUEUE', env('QUEUE_MEDIA', 'media')),
 
     /*
      * By default all conversions will be performed on a queue.
@@ -192,7 +192,7 @@ return [
      * your custom jobs extend the ones provided by the package.
      */
     'jobs' => [
-        'perform_conversions' => Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob::class,
+        'perform_conversions' => App\Support\Media\Jobs\PerformConversionsJob::class,
         'generate_responsive_images' => Spatie\MediaLibrary\ResponsiveImages\Jobs\GenerateResponsiveImagesJob::class,
     ],
 
@@ -214,7 +214,7 @@ return [
      * The default lifetime in minutes for temporary urls.
      * This is used when you call the `getLastTemporaryUrl` or `getLastTemporaryUrl` method on a media item.
      */
-    'temporary_url_default_lifetime' => env('MEDIA_TEMPORARY_URL_DEFAULT_LIFETIME', 5),
+    'temporary_url_default_lifetime' => (int) env('MEDIA_TEMPORARY_URL_DEFAULT_LIFETIME', 15),
 
     'remote' => [
         /*
