@@ -68,6 +68,14 @@ final class ImagePipelineResult
     }
 
     /**
+     * Indica si el archivo temporal ya fue limpiado.
+     */
+    public function isCleaned(): bool
+    {
+        return $this->cleaned;
+    }
+
+    /**
      * Elimina manualmente el archivo temporal asociado a este resultado.
      * 
      * Si la operación falla, registra un mensaje de aviso.

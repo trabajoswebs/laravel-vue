@@ -374,12 +374,21 @@ class TranslationService
                 return $res;
             }
 
-            if (is_string($item) || is_numeric($item) || is_bool($item)) {
-                return $sanitizeString((string)$item);
+            if (is_string($item)) {
+                return $sanitizeString($item);
+            }
+
+            if (is_int($item) || is_float($item) || is_bool($item) || $item === null) {
+                return $item;
             }
 
             // Otros tipos: serializar de forma segura
-            return htmlspecialchars(json_encode($item), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $encoded = json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($encoded === false) {
+                $encoded = '';
+            }
+
+            return $sanitizeString($encoded);
         };
 
         return $walker($translations);

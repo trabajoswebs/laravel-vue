@@ -49,12 +49,16 @@ final class ImagePipeline
      *
      * @param FileConstraints $constraints Configuración de límites de archivo (tamaño, dimensiones, etc.).
      */
-    public function __construct(FileConstraints $constraints)
+    public function __construct(
+        FileConstraints $constraints,
+        ?PipelineConfig $config = null,
+        ?PipelineLogger $logger = null
+    )
     {
         // Inicializa todos los componentes del pipeline
         $this->constraints = $constraints;
-        $this->config = PipelineConfig::fromConstraints($constraints);
-        $this->logger = new PipelineLogger($this->config->logChannel, $this->config->debug);
+        $this->config = $config ?? PipelineConfig::fromConstraints($constraints);
+        $this->logger = $logger ?? new PipelineLogger($this->config->logChannel, $this->config->debug);
         $this->artifacts = new PipelineArtifacts($this->logger);
         $this->imagickWorkflow = new ImagickWorkflow($this->config, $this->artifacts, $this->logger);
         $this->fallbackWorkflow = new FallbackWorkflow($this->config, $this->artifacts, $this->logger);
