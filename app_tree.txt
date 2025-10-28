@@ -48,7 +48,6 @@ app/
 │   └── PostProcessAvatarMedia.php
 ├── Listeners/
 │   └── User/
-│       ├── PurgeOldAvatar.php
 │       └── QueueAvatarPostProcessing.php
 ├── Models/
 │   └── User.php
