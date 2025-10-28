@@ -4,68 +4,151 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Media\Contracts\MediaOwner;
 use App\Support\Media\ImageProfile;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
- * Servicio para subir una imagen normalizada a una colección determinada por un perfil.
- *
- * Responsabilidades:
- * - Ejecutar ImagePipeline para normalizar (auto-orient, strip EXIF/ICC, sRGB, re-encode).
- * - Nombrar archivo en base a {collection}-{sha1}.{ext}.
- * - Adjuntar a Media Library con propiedades personalizadas (version, mime, dims).
- * - Respetar el disco definido por el perfil.
- *
- * No gestiona: locks/transacciones, policies, ni eventos de dominio (delegar en Actions).
+ * Normaliza y adjunta imágenes a modelos que implementan Media Library.
+ * 
+ * Este servicio actúa como intermediario entre la subida de archivos y la biblioteca
+ * de medios. Procesa la imagen usando el ImagePipeline, la adjunta al modelo
+ * correspondiente y maneja limpieza y errores.
+ * 
+ * @example
+ * $service = new ImageUploadService($pipeline, $exceptionHandler);
+ * $media = $service->upload($user, $uploadedFile, $imageProfile);
+ * echo $media->getUrl(); // URL de la imagen procesada
  */
 final class ImageUploadService
 {
+    public function __construct(
+        private readonly ImagePipeline $pipeline,
+        private readonly ExceptionHandler $exceptions,
+    ) {}
+
     /**
-     * Sube una imagen normalizada a la colección indicada por el perfil.
-     *
-     * @param  HasMedia&InteractsWithMedia  $owner    Modelo destino que implementa Media Library.
-     * @param  UploadedFile                 $file     Archivo de imagen subido.
-     * @param  ImageProfile                 $profile  Perfil que define colección, disco y conversions.
-     * @return Media                                   Media recién creado.
-     *
-     * @throws InvalidArgumentException si el archivo no es válido.
+     * Sube, procesa y adjunta un archivo de imagen a un modelo MediaOwner.
+     * 
+     * 1. Procesa la imagen con el pipeline.
+     * 2. Limpia la colección si el perfil es de archivo único.
+     * 3. Genera un nombre de archivo único basado en el hash.
+     * 4. Agrega la imagen al modelo usando Spatie Media Library.
+     * 5. Guarda metadatos personalizados (hash, dimensiones, etc.).
+     * 6. Limpia el archivo temporal al finalizar.
+     * 
+     * @param MediaOwner $owner Modelo al que se adjunta la imagen.
+     * @param UploadedFile $file Archivo de imagen subido.
+     * @param ImageProfile $profile Perfil de imagen que define colección, disco, etc.
+     * @return Media Instancia del modelo Media recién creado.
+     * @throws InvalidArgumentException Si el archivo no es válido.
+     * @throws \Throwable Si ocurre un error durante el procesamiento o la subida.
      */
-    public function upload(HasMedia&InteractsWithMedia $owner, UploadedFile $file, ImageProfile $profile): Media
+    public function upload(MediaOwner $owner, UploadedFile $file, ImageProfile $profile): Media
     {
         if (!$file->isValid()) {
-            throw new InvalidArgumentException('Archivo inválido.');
+            throw new InvalidArgumentException('Archivo de imagen inválido.');
         }
 
-        /** @var ImagePipeline $pipeline */
-        $pipeline = app(ImagePipeline::class);
-        $res = $pipeline->process($file);
+        $collection = $profile->collection();
+        $disk = $profile->disk();
+        $result = null;
 
         try {
-            $collection = $profile->collection();
-            $target = $collection . '-' . $res->contentHash . '.' . $res->extension;
-            $adder = $owner->addMedia($res->path)
+            // Procesa la imagen
+            $result = $this->pipeline->process($file);
+
+            // Genera un nombre de archivo único
+            $target = sprintf('%s-%s.%s', $collection, $result->contentHash(), $result->extension());
+
+            // Prepara el adder de Spatie Media Library
+            $safeFilename = str_replace('"', "'", basename($target));
+            $headers = [
+                'ACL' => 'private',
+                'ContentType' => $result->mime(),
+                'ContentDisposition' => sprintf('inline; filename="%s"', $safeFilename),
+            ];
+
+            $adder = $owner->addMedia($result->path())
                 ->usingFileName($target)
+                ->addCustomHeaders($headers)
                 ->withCustomProperties([
-                    'version'     => $res->contentHash,
+                    'version'     => $result->contentHash(),
                     'uploaded_at' => now()->toIso8601String(),
-                    'mime_type'   => $res->mime,
-                    'width'       => $res->width,
-                    'height'      => $res->height,
+                    'mime_type'   => $result->mime(),
+                    'width'       => $result->width(),
+                    'height'      => $result->height(),
                 ]);
 
-            $disk = $profile->disk();
-            $media = is_string($disk) && $disk !== ''
+            if ($profile->isSingleFile() && \method_exists($adder, 'singleFile')) {
+                $adder->singleFile();
+            }
+
+            // Adjunta la imagen a la colección (y disco) correspondiente
+            $media = filled($disk)
                 ? $adder->toMediaCollection($collection, $disk)
                 : $adder->toMediaCollection($collection);
 
             return $media;
+        } catch (\Throwable $exception) {
+            // Registra el error y lo relanza
+            $this->report('image_upload.failed', $exception, [
+                'model'      => $owner::class,
+                'model_id'   => $owner->getKey(),
+                'collection' => $collection,
+                'disk'       => $disk,
+                'file'       => [
+                    'name' => $file->getClientOriginalName(),
+                    'size' => $file->getSize(),
+                    'mime' => $file->getMimeType(),
+                ],
+            ]);
+
+            throw $exception;
         } finally {
-            $res->cleanup();
+            // Asegura la limpieza del archivo temporal
+            if ($result !== null) {
+                try {
+                    $result->cleanup();
+                } catch (\Throwable $cleanupException) {
+                    $this->report(
+                        'image_upload.cleanup_failed',
+                        $cleanupException,
+                        [
+                            'model'      => $owner::class,
+                            'model_id'   => $owner->getKey(),
+                            'collection' => $collection,
+                        ],
+                        'warning'
+                    );
+                }
+            }
         }
     }
-}
 
+    /**
+     * Registra un error en el log y lo reporta al manejador de excepciones.
+     *
+     * @param string $message Mensaje descriptivo del evento.
+     * @param \Throwable $exception Excepción ocurrida.
+     * @param array $context Información adicional para el log.
+     * @param string $level Nivel de log ('error', 'warning', etc.).
+     */
+    private function report(
+        string $message,
+        \Throwable $exception,
+        array $context = [],
+        string $level = 'error'
+    ): void {
+        Log::log($level, $message, array_merge([
+            'exception' => $exception->getMessage(),
+            'trace'     => $exception->getTraceAsString(),
+        ], $context));
+
+        $this->exceptions->report($exception);
+    }
+}
