@@ -23,6 +23,24 @@ services:
             - pgsql
             - redis
             - mailpit
+    queue-worker:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: 'sail-8.4/app'
+        command: >
+            sh -c "php artisan queue:work redis --queue=default,media --sleep=3 --tries=3"
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+        working_dir: /var/www/html
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - sail
+        depends_on:
+            - redis
+            - pgsql
     pgsql:
         image: 'postgres:17'
         ports:
