@@ -44,41 +44,65 @@ final class QueueAvatarPostProcessing
      */
     public function __construct()
     {
-        // Colecciones a postprocesar desde config (fallback ['avatar'])
+        $this->collections = $this->resolveCollectionsFromConfig();
+        $this->conversions = $this->resolveConversionsFromConfig();
+    }
+
+
+
+    /**
+     * @return array<int,string>
+     */
+    private function resolveCollectionsFromConfig(): array
+    {
         $configured = config('image-pipeline.postprocess_collections');
+
         if (is_string($configured)) {
             $list = preg_split('/[\s,]+/', $configured, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         } elseif (is_array($configured)) {
-            $list = array_values(array_filter($configured, fn ($v) => is_string($v) && $v !== ''));
+            $list = array_values(array_filter($configured, static fn ($value) => is_string($value) && $value !== ''));
         } else {
             $list = [];
         }
-        if (empty($list)) {
+
+        if ($list === []) {
             $list = [(string) config('image-pipeline.avatar_collection', 'avatar')];
         }
-        $this->collections = array_values(array_unique($list));
 
-        // Conversions = keys de avatar_sizes (fallback a defaults)
+        return array_values(array_unique($list));
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    private function resolveConversionsFromConfig(): array
+    {
         $sizes = config('image-pipeline.avatar_sizes', [
             'thumb'  => 128,
             'medium' => 256,
             'large'  => 512,
         ]);
 
-        $this->conversions = array_values(
+        $conversions = array_values(
             array_filter(
                 array_keys(is_array($sizes) ? $sizes : []),
-                static fn ($k) => is_string($k) && $k !== ''
+                static fn ($key) => is_string($key) && $key !== ''
             )
         );
 
-        if (empty($this->conversions)) {
-            $this->conversions = ['thumb', 'medium', 'large'];
+        if ($conversions === []) {
+            $conversions = ['thumb', 'medium', 'large'];
         }
+
+        return $conversions;
     }
 
     /**
      * Maneja el evento de conversión completada.
+     *
+     * Contrato del evento (Spatie v10/v11):
+     *  - Propiedad pública `media`: instancia de {@see Media}.
+     *  - Propiedad pública `conversionName`: string|null con el nombre de la conversión.
      *
      * @param object $event Evento disparado tras completar una conversión.
      */
@@ -160,6 +184,8 @@ final class QueueAvatarPostProcessing
                 'error'            => $e->getMessage(),
                 'correlation_id'   => $correlationId,
             ]);
+
+            Cache::forget($key);
         }
     }
 }
