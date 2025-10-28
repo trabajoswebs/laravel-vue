@@ -20,7 +20,11 @@ final class RunPendingMediaCleanup
     /**
      * Maneja eventos ConversionHasBeenCompleted/Failed.
      *
-     * @param object $event Evento despachado por Spatie.
+     * Contrato del evento (Spatie v10/v11):
+     *  - Propiedad pública `media`: instancia de {@see Media}.
+     *  - Propiedad opcional `conversionName`: string|null.
+     *
+     * @param object $event Evento despachado por Spatie (conversion completada o fallida).
      */
     public function handle(object $event): void
     {
