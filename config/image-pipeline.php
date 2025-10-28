@@ -13,16 +13,35 @@ return [
     */
 
     // Tamaño máximo del archivo de entrada (bytes)
-    'max_bytes' => env('IMG_MAX_BYTES', 5 * 1024 * 1024), // 5MB
+    'max_bytes' => env('IMG_MAX_BYTES', 15 * 1024 * 1024), // 15MB
+
+    // Extensiones de imagen permitidas (se normalizan a minúsculas)
+    'allowed_extensions' => [
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'avif',
+        'gif',
+    ],
+
+    // Tipos MIME permitidos (mapa mime => extensión sugerida)
+    'allowed_mimes' => [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/webp' => 'webp',
+        'image/avif' => 'avif',
+        'image/gif'  => 'gif',
+    ],
 
     // Dimensión mínima (ancho y alto) requerida para aceptar la imagen
-    'min_dimension' => env('IMG_MIN_DIMENSION', 200), // px
+    'min_dimension' => env('IMG_MIN_DIMENSION', 128), // px
 
     // Límite de megapíxeles admitidos (protección DoS)
-    'max_megapixels' => env('IMG_MAX_MEGAPIXELS', 20.0),
+    'max_megapixels' => env('IMG_MAX_MEGAPIXELS', 48.0),
 
     // Lado mayor máximo del resultado (resize manteniendo proporción)
-    'max_edge' => env('IMG_MAX_EDGE', 1024), // px
+    'max_edge' => env('IMG_MAX_EDGE', 16384), // px
 
 
 
@@ -50,6 +69,17 @@ return [
 
     // Método de WebP (0–6). 6 = más calidad/tiempo
     'webp_method' => env('IMG_WEBP_METHOD', 6),
+
+    // Patrón de firmas sospechosas dentro de binarios de imagen (regex). Ajustable por entorno.
+    'suspicious_payload_patterns' => [
+        '/<\?php/i',
+        '/<\?=/i',
+        '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i',
+        '/base64_decode\s*\(/i',
+    ],
+
+    // Preferencia por defecto para encolar conversions (true = queued, false = sync)
+    'queue_conversions_default' => env('IMG_QUEUE_CONVERSIONS_DEFAULT', true),
 
 
 
@@ -120,11 +150,11 @@ return [
     ],
 
     // Calidad recomendada para WEBP (0-100)
-    // Homologado a IMG_WEBP_QUALITY; mantiene compatibilidad con IMAGE_WEBP_QUALITY
-    'webp_quality' => env('IMG_WEBP_QUALITY', env('IMAGE_WEBP_QUALITY', 75)),
+    // Homologado a IMG_WEBP_QUALITY; mantiene compatibilidad con IMG_WEBP_QUALITY
+    'webp_quality' => env('IMG_WEBP_QUALITY', env('IMG_WEBP_QUALITY', 75)),
 
-    // Forzar cola de conversions (si no usas el global de Spatie)
-    'avatar_queue_conversions' => null, // null = respetar config de Spatie
+    // Preferencia específica para la colección avatar (null = usa queue_conversions_default)
+    'avatar_queue_conversions' => env('IMG_AVATAR_QUEUE_CONVERSIONS', null),
 
     // Disco donde se almacenará la colección de avatar
     // Usa env AVATAR_DISK o cae al disco por defecto
