@@ -22,3 +22,6 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Media artifacts (runtime)
+storage/media-library/**
