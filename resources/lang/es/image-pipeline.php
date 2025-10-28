@@ -26,6 +26,7 @@ return [
     'temp_file_invalid' => 'El archivo temporal resultante es inválido.',
     'processing_failed' => 'Error en el procesamiento de imagen.',
     'cleanup_failed' => 'No se pudo limpiar el archivo temporal.',
+    'suspicious_payload' => 'Se detectó código potencialmente malicioso dentro de la imagen.',
 
     // Mensajes de log
     'gif_clone_failed' => 'Error al clonar frame GIF',
@@ -34,6 +35,7 @@ return [
     'cmyk_to_srgb' => 'Conversión de CMYK a sRGB detectada',
     'srgb_failed' => 'Error en conversión a sRGB',
     'image_pipeline_failed' => 'Error general en pipeline de imagen',
+    'image_pipeline_resource_limits_failed' => 'Falló la aplicación de límites de recursos en Imagick',
 
     // Mensajes de éxito
     'image_processed' => 'Imagen procesada exitosamente',
