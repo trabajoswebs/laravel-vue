@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
+use App\Observers\MediaObserver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\ServiceProvider;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +26,8 @@ class AppServiceProvider extends ServiceProvider
         if (app()->environment('production')) {
             Model::preventLazyLoading();
         }
+
+        Media::observe(MediaObserver::class);
 
         $this->app->afterResolving(Vite::class, function (Vite $vite, $app): void {
             $nonce = null;

@@ -28,6 +28,30 @@ const props = withDefaults(defineProps<Props>(), {
 
 const page = usePage();
 const auth = computed(() => page.props.auth);
+const avatarSrc = computed<string | null>(() => {
+    const user = auth.value?.user as Record<string, unknown> | undefined;
+    if (!user) {
+        return null;
+    }
+
+    const candidates = [
+        user.avatar_thumb_url,
+        user.avatar_url,
+        user.avatar,
+    ];
+
+    for (const value of candidates) {
+        if (typeof value !== 'string') {
+            continue;
+        }
+        const trimmed = value.trim();
+        if (trimmed !== '') {
+            return trimmed;
+        }
+    }
+
+    return null;
+});
 
 const isCurrentRoute = computed(() => (url: string) => page.url === url);
 
@@ -154,7 +178,7 @@ const rightNavItems: NavItem[] = [
                             <Button variant="ghost" size="icon"
                                 class="relative size-10 w-auto rounded-full p-1 focus-within:ring-2 focus-within:ring-primary">
                                 <Avatar class="size-8 overflow-hidden rounded-full">
-                                    <AvatarImage v-if="auth.user.avatar" :src="auth.user.avatar"
+                                    <AvatarImage v-if="avatarSrc" :src="avatarSrc"
                                         :alt="auth.user.name" />
                                     <AvatarFallback
                                         class="rounded-lg bg-neutral-200 font-semibold text-black dark:bg-neutral-700 dark:text-white">

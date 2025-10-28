@@ -6,6 +6,7 @@ use App\Helpers\SecurityHelper;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
+<<<<<<< ours
 class TranslationService
 {
     /**
@@ -13,6 +14,33 @@ class TranslationService
      * - 'es-es' -> 'es-ES'
      * - 'ES' -> 'es'
      * - 'es_es' -> 'es-ES'
+=======
+/**
+ * Servicio para la gestión de traducciones con funcionalidades de saneamiento,
+ * validación, detección de idioma y cache.
+ * 
+ * Este servicio centraliza la lógica de manejo de locales y traducciones,
+ * aplicando validaciones de seguridad y optimizando el rendimiento con cache.
+ * 
+ * @example
+ * $locale = TranslationService::sanitizeLocale('es_es');
+ * $valid = TranslationService::validateLocale('es-ES');
+ * $detected = TranslationService::detectUserLocale($request);
+ * $translations = TranslationService::loadTranslations('es');
+ */
+class TranslationService
+{
+    /**
+     * Normaliza un locale a formato estándar (idioma-REGIÓN).
+     * 
+     * Ejemplos:
+     * - 'es-es' -> 'es-ES'
+     * - 'ES' -> 'es'
+     * - 'es_es' -> 'es-ES'
+     * 
+     * @param string $locale Locale a normalizar.
+     * @return string Locale normalizado o cadena vacía si inválido.
+>>>>>>> theirs
      */
     public static function sanitizeLocale(string $locale): string
     {
@@ -32,7 +60,16 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Valida si el locale es soportado (acepta subtags como es-ES -> es)
+=======
+     * Valida si un locale es soportado por la aplicación.
+     * 
+     * Acepta subtags (por ejemplo, 'es-ES' es válido si 'es' está en soportados).
+     * 
+     * @param string $locale Locale a validar.
+     * @return bool True si es válido y está soportado.
+>>>>>>> theirs
      */
     public static function validateLocale(string $locale): bool
     {
@@ -60,8 +97,20 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Detecta el idioma del usuario en orden de prioridad:
      * user -> session -> cookie -> navegador -> fallback
+=======
+     * Detecta el idioma preferido del usuario en orden de prioridad:
+     * 1. Usuario autenticado (campo locale, language o preferred_language)
+     * 2. Sesión ('locale')
+     * 3. Cookie ('locale')
+     * 4. Cabecera Accept-Language del navegador
+     * 5. Valor por defecto (fallback)
+     * 
+     * @param \Illuminate\Http\Request $request Request actual.
+     * @return string Locale detectado.
+>>>>>>> theirs
      */
     public static function detectUserLocale(\Illuminate\Http\Request $request): string
     {
@@ -120,7 +169,13 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Comprueba si el store de cache soporta tags correctamente
+=======
+     * Comprueba si el store de cache actual soporta tags.
+     * 
+     * @return bool True si los tags son soportados.
+>>>>>>> theirs
      */
     protected static function supportsCacheTags(): bool
     {
@@ -133,7 +188,16 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Carga traducciones usando cache; sanea antes de cachear
+=======
+     * Carga traducciones desde archivos y las cachea.
+     * 
+     * Sanea el locale antes de cargar y aplica sanitización a las traducciones.
+     * 
+     * @param string $locale Locale para cargar.
+     * @return array Traducciones cargadas y sanitizadas.
+>>>>>>> theirs
      */
     public static function loadTranslations(string $locale): array
     {
@@ -163,7 +227,17 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Carga los archivos PHP y el JSON; merge sencillo: JSON tiene prioridad (override)
+=======
+     * Carga archivos de traducción PHP y JSON.
+     * 
+     * Los archivos PHP se cargan desde `lang/{locale}/{file}.php`.
+     * El archivo JSON se carga desde `lang/{locale}.json` y tiene prioridad.
+     * 
+     * @param string $locale Locale para cargar.
+     * @return array Traducciones combinadas.
+>>>>>>> theirs
      */
     protected static function loadTranslationFiles(string $locale): array
     {
@@ -208,7 +282,19 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Validación simple de estructura JSON (profundidad, longitud de keys, total keys)
+=======
+     * Valida la estructura de un array JSON de traducciones.
+     * 
+     * Impone límites en profundidad, longitud de claves y número total de claves.
+     * Bloquea contenido potencialmente peligroso como etiquetas <script>.
+     * 
+     * @param array $json Array a validar.
+     * @param int $depth Profundidad actual (para recursión).
+     * @param array|null &$counter Contador de claves (para recursión).
+     * @return bool True si la estructura es válida.
+>>>>>>> theirs
      */
     protected static function validateJsonStructure(array $json, int $depth = 0, ?array &$counter = null): bool
     {
@@ -253,11 +339,21 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Sanitiza las traducciones recursivamente:
      * - Por defecto escapa todo (HTML deshabilitado)
      * - Si allow_html = true: permite tags listadas en config (strip_tags) y elimina atributos on* de forma robusta
      *
      * Nota: si necesitas HTML complejo, usa una librería como HTMLPurifier en lugar de heurísticos.
+=======
+     * Sanitiza recursivamente un array de traducciones.
+     * 
+     * Si está permitido HTML (config locales.allow_html), aplica sanitización
+     * segura (SecurityHelper o heurísticos). Si no, escapa todo.
+     * 
+     * @param array $translations Traducciones a sanitizar.
+     * @return array Traducciones sanitizadas.
+>>>>>>> theirs
      */
     protected static function sanitizeTranslations(array $translations): array
     {
@@ -303,7 +399,15 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Limpiar cache de traducciones (usa tags si están soportados)
+=======
+     * Limpia la cache de todas las traducciones.
+     * 
+     * Usa tags si están disponibles, sino borra claves individuales.
+     * 
+     * @return array Resultado de la operación.
+>>>>>>> theirs
      */
     public static function clearTranslationCache(): array
     {
@@ -330,7 +434,14 @@ class TranslationService
     }
 
     /**
+<<<<<<< ours
      * Metadata simple
+=======
+     * Obtiene metadatos simples de un idioma (nombre, bandera, etc.).
+     * 
+     * @param string $locale Locale para obtener metadatos.
+     * @return array Metadatos del idioma.
+>>>>>>> theirs
      */
     public static function getLanguageMetadata(string $locale): array
     {

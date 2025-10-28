@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Services\Optimizer\Adapters\LocalOptimizationAdapter;
+use App\Services\Optimizer\Adapters\RemoteDownloader;
+use App\Services\Optimizer\Adapters\RemoteUploader;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -44,6 +48,8 @@ class OptimizerService
         'image/gif',
     ];
 
+    private LocalOptimizationAdapter $localAdapter;
+
     /**
      * Constructor del servicio.
      *
@@ -51,10 +57,16 @@ class OptimizerService
      *                                          Si no se inyecta, se crea una con OptimizerChainFactory.
      */
     public function __construct(
-        private ?OptimizerChain $optimizer = null
+        private ?OptimizerChain $optimizer = null,
+        ?LocalOptimizationAdapter $localAdapter = null,
     ) {
         // Si no inyectan chain, crear una con el Factory (trae optimizadores por defecto).
         $this->optimizer ??= OptimizerChainFactory::create();
+        $this->localAdapter = $localAdapter ?? new LocalOptimizationAdapter(
+            $this->optimizer,
+            self::MAX_FILE_SIZE,
+            self::ALLOWED_MIMES,
+        );
     }
 
     /**
@@ -80,126 +92,115 @@ class OptimizerService
      *   }>
      * }
      */
+
     public function optimize(Media $media, array $conversions = ['thumb', 'medium', 'large']): array
     {
-        // Obtiene el nombre del disco asociado al Media
-        $diskName = $media->disk;
-        // Obtiene la instancia del disco
-        $disk = Storage::disk($diskName);
-        // Obtiene el driver del disco (p. ej. 'local', 's3')
-        $driver = (string) config("filesystems.disks.{$diskName}.driver");
-        // Determina si es un disco local
-        $isLocal = in_array($driver, ['local', 'public'], true);
-
-        // Construye la lista de archivos objetivo (original + conversiones)
         $targets = $this->buildTargets($media, $conversions);
 
-        $filesOptimized = 0; // Contador de archivos que se optimizaron (redujeron tamaño)
-        $bytesBefore = 0;    // Total de bytes antes de la optimización
-        $bytesAfter = 0;     // Total de bytes después de la optimización
-        $details = [];       // Detalles por archivo procesado
+        $metrics = [
+            'files_optimized' => 0,
+            'bytes_before'    => 0,
+            'bytes_after'     => 0,
+            'details'         => [],
+        ];
 
-        // Itera sobre cada archivo objetivo (original o conversión)
-        foreach ($targets as $t) {
-            $label = $t['type'];      // Etiqueta del archivo (original, conversion:thumb, etc.)
-            $full  = $t['full_path']; // Ruta absoluta (local) o null (remoto)
-            $rel   = $t['rel_path'];  // Ruta relativa al disco
+        $diskCache = [];
+        $driverCache = [];
 
-            try {
-                // Aplica la estrategia de optimización según si el disco es local o remoto
-                if ($isLocal) {
-                    // Optimización local: el archivo se modifica in-place
-                    $result = $this->optimizeLocal($full);
-                } else {
-                    // Optimización remota: se descarga a un temporal, se optimiza localmente y se sube de nuevo
-                    $result = $this->optimizeRemote($diskName, $rel);
-                }
+        foreach ($targets as $target) {
+            $outcome = $this->optimizeTarget($media, $target, $diskCache, $driverCache);
 
-                // Acumula estadísticas solo con números válidos
-                $bytesBefore += max(0, $result['bytes_before']);
-                $bytesAfter  += max(0, $result['bytes_after']);
+            $metrics['bytes_before'] += \max(0, $outcome['bytes_before'] ?? 0);
+            $metrics['bytes_after']  += \max(0, $outcome['bytes_after'] ?? 0);
 
-                // Cuenta como optimizado si realmente redujo tamaño
-                if ($result['bytes_after'] > 0 && $result['bytes_after'] < $result['bytes_before']) {
-                    $filesOptimized++;
-                }
-
-                // Añade la ruta al resultado
-                $result['path'] = $isLocal ? (string) $full : (string) $rel;
-                $details[] = $result;
-            } catch (Throwable $e) {
-                // En caso de error, registra un log y añade un registro de error a los detalles
-                $msg = (string) Str::of($e->getMessage())->limit(160);
-                Log::warning('optimizer_service_failed', [
-                    'media_id' => $media->id,
-                    'disk'     => $diskName,
-                    'target'   => $label,
-                    'error'    => $msg,
-                ]);
-
-                $details[] = [
-                    'path'          => $isLocal ? (string) $full : (string) $rel,
-                    'bytes_before'  => 0,
-                    'bytes_after'   => 0,
-                    'optimized'     => false,
-                    'error'         => $msg,
-                ];
+            if (($outcome['bytes_after'] ?? 0) > 0 && ($outcome['bytes_after'] ?? 0) < ($outcome['bytes_before'] ?? 0)) {
+                $metrics['files_optimized']++;
             }
+
+            $metrics['details'][] = $outcome;
         }
 
-        // Devuelve las estadísticas acumuladas
-        return [
-            'files_optimized' => $filesOptimized,
-            'bytes_before'    => $bytesBefore,
-            'bytes_after'     => $bytesAfter,
-            'bytes_saved'     => max(0, $bytesBefore - $bytesAfter), // Bytes ahorrados (siempre >= 0)
-            'details'         => $details,
-        ];
+        $metrics['bytes_saved'] = \max(0, $metrics['bytes_before'] - $metrics['bytes_after']);
+
+        return $metrics;
     }
 
     /**
-     * Optimiza un archivo local in-place.
+     * Procesa un objetivo individual (original o conversión).
      *
-     * Este método se encarga de optimizar un archivo directamente en su ubicación
-     * en el sistema de archivos local. Valida el archivo antes de optimizarlo.
-     *
-     * @param  string|null  $fullPath  Ruta absoluta al archivo local.
-     * @return array{bytes_before:int, bytes_after:int, optimized:bool, error?:string}
+     * @param  array<string,mixed>                    $target
+     * @param  array<string,FilesystemAdapter>        $diskCache
+     * @param  array<string,string>                   $driverCache
+     * @return array{bytes_before:int,bytes_after:int,optimized:bool,path:string,error?:string}
      */
-    private function optimizeLocal(?string $fullPath): array
+    private function optimizeTarget(Media $media, array $target, array &$diskCache, array &$driverCache): array
     {
-        // Validaciones básicas del archivo local
-        if (!$fullPath || !is_file($fullPath) || !is_readable($fullPath)) {
-            return ['bytes_before' => 0, 'bytes_after' => 0, 'optimized' => false, 'error' => 'file_not_readable'];
+        $label = (string) ($target['type'] ?? 'unknown');
+        $diskName = (string) ($target['disk'] ?? '');
+        $fullPath = \is_string($target['full_path'] ?? null) ? $target['full_path'] : null;
+        $relativePath = \is_string($target['rel_path'] ?? null) ? $target['rel_path'] : null;
+        $isLocal = false;
+
+        try {
+            $disk = $this->resolveFilesystemAdapter($diskName, $diskCache);
+            $driver = $driverCache[$diskName] ??= $this->diskDriver($diskName);
+            $isLocal = $this->isLocalDriver($driver);
+
+            $result = $isLocal && $fullPath !== null
+                ? $this->localAdapter->optimize($fullPath)
+                : $this->optimizeRemote($diskName, $disk, $relativePath);
+
+            $result['path'] = $this->resolveResultPath($isLocal, $fullPath, $relativePath);
+
+            return $result;
+        } catch (Throwable $e) {
+            $msg = (string) Str::of($e->getMessage())->limit(160);
+
+            Log::warning('optimizer_service_failed', [
+                'media_id' => $media->id,
+                'disk'     => $diskName,
+                'target'   => $label,
+                'error'    => $msg,
+            ]);
+
+            return [
+                'path'          => $this->resolveResultPath($isLocal, $fullPath, $relativePath),
+                'bytes_before'  => 0,
+                'bytes_after'   => 0,
+                'optimized'     => false,
+                'error'         => $msg,
+            ];
+        }
+    }
+
+    /**
+     * Resuelve y cachea el adapter de filesystem para un disco.
+     *
+     * @param  array<string,FilesystemAdapter> $cache
+     */
+    private function resolveFilesystemAdapter(string $diskName, array &$cache): FilesystemAdapter
+    {
+        if ($diskName === '') {
+            throw new RuntimeException('disk_name_missing');
         }
 
-        // MIME defensivo local
-        $mime = $this->mimeFromPath($fullPath);
-        if (!in_array($mime, self::ALLOWED_MIMES, true)) {
-            return ['bytes_before' => 0, 'bytes_after' => 0, 'optimized' => false, 'error' => 'mime_not_allowed'];
+        if (!isset($cache[$diskName])) {
+            $filesystem = Storage::disk($diskName);
+            if (!$filesystem instanceof FilesystemAdapter) {
+                throw new RuntimeException("unexpected_filesystem_adapter: {$diskName}");
+            }
+            $cache[$diskName] = $filesystem;
         }
 
-        // Validación de tamaño
-        $before = filesize($fullPath) ?: 0;
-        if ($before <= 0) {
-            return ['bytes_before' => 0, 'bytes_after' => 0, 'optimized' => false, 'error' => 'empty_file'];
-        }
-        if ($before > self::MAX_FILE_SIZE) {
-            return ['bytes_before' => $before, 'bytes_after' => $before, 'optimized' => false, 'error' => 'file_too_large'];
-        }
+        return $cache[$diskName];
+    }
 
-        // Aplica la optimización in-place
-        $this->optimizer->optimize($fullPath);
-        // Limpia la cache de stat para asegurar que filesize() devuelva el tamaño actualizado
-        clearstatcache(true, $fullPath);
-        $after = filesize($fullPath) ?: $before;
-
-        // Devuelve las estadísticas
-        return [
-            'bytes_before' => $before,
-            'bytes_after'  => $after,
-            'optimized'    => $after < $before, // Indica si se redujo el tamaño
-        ];
+    /**
+     * Determina si un driver de filesystem es local.
+     */
+    private function isLocalDriver(?string $driver): bool
+    {
+        return \in_array($driver, ['local', 'public'], true);
     }
 
     /**
@@ -209,94 +210,64 @@ class OptimizerService
      * lo optimiza usando la cadena de optimización local, y luego sube
      * el archivo optimizado de vuelta al disco remoto.
      *
-     * @param  string       $diskName      Nombre del disco remoto.
-     * @param  string|null  $relativePath  Ruta relativa al archivo en el disco remoto.
+     * @param  string               $diskName      Nombre del disco remoto.
+     * @param  FilesystemAdapter    $disk          Instancia del disco remoto.
+     * @param  string|null          $relativePath  Ruta relativa al archivo en el disco remoto.
      * @return array{bytes_before:int, bytes_after:int, optimized:bool, error?:string}
      */
-    private function optimizeRemote(string $diskName, ?string $relativePath): array
+    private function optimizeRemote(string $diskName, FilesystemAdapter $disk, ?string $relativePath): array
     {
-        // Obtiene la instancia del disco remoto
-        $disk = Storage::disk($diskName);
-
         // Verifica que el archivo exista en el disco remoto
-        if (!$relativePath || !$disk->exists($relativePath)) {
-            return ['bytes_before' => 0, 'bytes_after' => 0, 'optimized' => false, 'error' => 'remote_not_found'];
+        if (!is_string($relativePath) || $relativePath === '' || !$disk->exists($relativePath)) {
+            throw new RuntimeException('remote_not_found');
         }
 
-        // MIME defensivo
         $mime = (string) ($disk->mimeType($relativePath) ?? '');
-        if (!in_array($mime, self::ALLOWED_MIMES, true)) {
-            return ['bytes_before' => 0, 'bytes_after' => 0, 'optimized' => false, 'error' => 'mime_not_allowed'];
+        if (!\in_array($mime, self::ALLOWED_MIMES, true)) {
+            throw new RuntimeException('mime_not_allowed');
         }
 
-        // Tamaño por API (no cargar a memoria)
         $before = (int) $disk->size($relativePath);
         if ($before <= 0) {
-            return ['bytes_before' => 0, 'bytes_after' => 0, 'optimized' => false, 'error' => 'empty_remote_file'];
+            throw new RuntimeException('empty_remote_file');
         }
         if ($before > self::MAX_FILE_SIZE) {
-            return ['bytes_before' => $before, 'bytes_after' => $before, 'optimized' => false, 'error' => 'file_too_large'];
+            throw new RuntimeException('file_too_large');
         }
 
-        // Streaming download → tmp
-        $tmp = $this->tempFile('opt_'); // Crea un archivo temporal seguro
-        $in  = $disk->readStream($relativePath); // Obtiene un stream de lectura del archivo remoto
-        if ($in === false) {
-            @unlink($tmp); // Limpia el temporal si falla la lectura
-            return ['bytes_before' => 0, 'bytes_after' => 0, 'optimized' => false, 'error' => 'stream_read_failed'];
-        }
+        $context = $this->resolveRemoteContext($diskName, $disk, $relativePath, $mime);
+        $tmp = $this->tempFile('opt_');
+        $downloader = new RemoteDownloader($disk);
+        $uploader = new RemoteUploader($disk);
 
         try {
-            // Copia el stream remoto al archivo temporal local
-            $out = fopen($tmp, 'wb');
-            if ($out === false) {
-                throw new RuntimeException('tmp_open_failed');
-            }
-            stream_copy_to_stream($in, $out); // Copia el contenido
-            fclose($out);
-            fclose($in);
+            $copied = $downloader->download($relativePath, $tmp, $before);
+            $before = $copied;
 
-            // Optimiza localmente el archivo temporal
-            $this->optimizer->optimize($tmp);
-            $after = filesize($tmp) ?: $before;
+            $result = $this->localAdapter->optimize($tmp, $mime);
 
-            // Subida por streaming (sobrescribe el archivo original en el disco remoto)
-            $fp = fopen($tmp, 'rb'); // Abre el archivo temporal para lectura
-            if ($fp === false) {
-                throw new RuntimeException('tmp_reopen_failed');
-            }
+            $uploader->upload($relativePath, $tmp, $context['options']);
 
-            // Opcional backup sencillo (descomentar si quieres rollback estricto):
-            // $backup = $relativePath.'.bak';
-            // $disk->copy($relativePath, $backup);
-
-            try {
-                // put() con resource hace streaming a S3 en Flysystem v3
-                $ok = $disk->put($relativePath, $fp);
-                if ($ok === false) {
-                    throw new RuntimeException('remote_put_failed');
-                }
-                // if (isset($backup)) $disk->delete($backup);
-            } catch (Throwable $e) {
-                // if (isset($backup)) { $disk->move($backup, $relativePath); }
-                throw $e;
-            } finally {
-                fclose($fp); // Cierra el stream del archivo temporal
-            }
-
-            // Devuelve las estadísticas
             return [
                 'bytes_before' => $before,
-                'bytes_after'  => $after,
-                'optimized'    => $after < $before, // Indica si se redujo el tamaño
+                'bytes_after'  => $result['bytes_after'],
+                'optimized'    => $result['optimized'],
             ];
         } finally {
-            // Limpieza garantizada en finally
-            if (is_file($tmp)) {
-                @unlink($tmp); // Borra el archivo temporal
+            if ($context['visibility'] !== null && method_exists($disk, 'setVisibility')) {
+                try {
+                    $disk->setVisibility($relativePath, $context['visibility']);
+                } catch (Throwable $e) {
+                    Log::debug('optimizer_service_restore_visibility_failed', [
+                        'disk'      => $diskName,
+                        'path'      => $relativePath,
+                        'error'     => (string) Str::of($e->getMessage())->limit(120),
+                    ]);
+                }
             }
-            if (is_resource($in)) {
-                @fclose($in); // Cierra el stream de entrada (aunque ya debería estar cerrado)
+
+            if (is_file($tmp)) {
+                @unlink($tmp);
             }
         }
     }
@@ -309,17 +280,19 @@ class OptimizerService
      *
      * @param  Media              $media        Instancia del modelo Media.
      * @param  array<int, string> $conversions  Nombres de las conversiones.
-     * @return array<int, array{type:string, full_path:?string, rel_path:?string}>
+     * @return array<int, array{type:string, disk:string, full_path:?string, rel_path:?string}>
      */
     private function buildTargets(Media $media, array $conversions): array
     {
         $targets = [];
+        $originalDisk = (string) $media->disk;
 
         // Original
         $originalFull = $this->safeGetPath($media); // Ruta absoluta del original (si está disponible)
         $originalRel  = $this->safeGetPathRelative($media); // Ruta relativa del original
         $targets[] = [
             'type'      => 'original',
+            'disk'      => $originalDisk,
             'full_path' => $originalFull,
             'rel_path'  => $originalRel,
         ];
@@ -329,9 +302,11 @@ class OptimizerService
             // Defensa básica contra traversal en nombres de conversion
             $safeName = preg_replace('/[^a-z0-9_\-]/i', '', (string) $name) ?: $name;
             [$full, $rel] = $this->safeGetConversionPaths($media, $safeName); // Rutas de la conversión
+            $conversionDisk = (string) ($media->conversions_disk ?: $originalDisk);
 
             $targets[] = [
                 'type'      => "conversion:{$safeName}",
+                'disk'      => $conversionDisk,
                 'full_path' => $full,
                 'rel_path'  => $rel,
             ];
@@ -434,6 +409,75 @@ class OptimizerService
     }
 
     /**
+     * Determina driver del disco configurado.
+     */
+    private function diskDriver(string $diskName): string
+    {
+        return (string) config("filesystems.disks.{$diskName}.driver", '');
+    }
+
+    /**
+     * Devuelve la ruta más representativa para reporting.
+     */
+    private function resolveResultPath(bool $isLocal, ?string $fullPath, ?string $relativePath): string
+    {
+        if ($isLocal && is_string($fullPath) && $fullPath !== '') {
+            return $fullPath;
+        }
+
+        if (is_string($relativePath) && $relativePath !== '') {
+            return $relativePath;
+        }
+
+        if (is_string($fullPath) && $fullPath !== '') {
+            return $fullPath;
+        }
+
+        return '';
+    }
+
+    /**
+     * Resuelve opciones para sobrescribir objetos remotos preservando metadatos básicos.
+     *
+     * @return array{options:array<string,mixed>, visibility:?string}
+     */
+    private function resolveRemoteContext(string $diskName, FilesystemAdapter $disk, string $path, string $mime): array
+    {
+        $options = [];
+        $visibility = null;
+
+        if ($mime !== '') {
+            $options['mimetype'] = $mime;
+        }
+
+        if (method_exists($disk, 'getVisibility')) {
+            try {
+                $visibilityValue = $disk->getVisibility($path);
+                if (is_string($visibilityValue) && $visibilityValue !== '') {
+                    $visibility = $visibilityValue;
+                    $options['visibility'] = $visibilityValue;
+                }
+            } catch (Throwable $e) {
+                Log::debug('optimizer_service_visibility_lookup_failed', [
+                    'disk' => $diskName,
+                    'path' => $path,
+                    'error' => (string) Str::of($e->getMessage())->limit(120),
+                ]);
+            }
+        }
+
+        $extraOptions = config("media.optimizer.put_options.{$diskName}", []);
+        if (is_array($extraOptions) && $extraOptions !== []) {
+            $options = array_merge($options, $extraOptions);
+        }
+
+        return [
+            'options'    => $options,
+            'visibility' => $visibility,
+        ];
+    }
+
+    /**
      * Crea un archivo temporal seguro con tempnam().
      *
      * @param  string  $prefix  Prefijo para el nombre del archivo temporal.
@@ -448,19 +492,4 @@ class OptimizerService
         return $tmp;
     }
 
-    /**
-     * Obtiene el MIME real de un archivo local por magic bytes.
-     *
-     * @param  string  $fullPath  Ruta absoluta al archivo local.
-     * @return string             Tipo MIME del archivo.
-     */
-    private function mimeFromPath(string $fullPath): string
-    {
-        try {
-            $fi = new \finfo(FILEINFO_MIME_TYPE);
-            return (string) $fi->file($fullPath);
-        } catch (Throwable) {
-            return 'application/octet-stream';
-        }
-    }
 }
