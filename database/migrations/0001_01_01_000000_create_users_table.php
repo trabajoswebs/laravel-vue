@@ -15,6 +15,8 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
+            $table->string('avatar_version', 40)->nullable()->comment('Hash SHA1 del avatar para cache busting')->index('users_avatar_version_index');
+            $table->timestamp('avatar_updated_at')->nullable()->comment('Fecha de última actualización del avatar');
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
