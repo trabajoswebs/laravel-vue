@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Media;
 
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
+use App\Support\Media\Contracts\MediaOwner;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
@@ -53,6 +52,10 @@ interface ImageProfile
     /**
      * Aplica las conversions del perfil a un modelo HasMedia.
      */
-    public function applyConversions(HasMedia&InteractsWithMedia $model, ?Media $media = null): void;
-}
+    public function applyConversions(MediaOwner $model, ?Media $media = null): void;
 
+    /**
+     * Indica si la colección debe comportarse como single file (clear antes de subir).
+     */
+    public function isSingleFile(): bool;
+}
