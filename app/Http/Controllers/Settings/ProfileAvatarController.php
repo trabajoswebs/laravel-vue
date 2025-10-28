@@ -13,6 +13,7 @@ use Illuminate\Auth\Access\AuthorizationException;    // Ej. excepciones de auto
 use Illuminate\Http\JsonResponse;                     // Ej. respuesta JSON
 use Illuminate\Http\RedirectResponse;                 // Ej. respuesta redirect
 use Illuminate\Http\Request;                          // Ej. request base
+use Illuminate\Support\Facades\Log;
 use Throwable;                                        // Ej. captura de errores
 
 /**
@@ -49,6 +50,16 @@ class ProfileAvatarController extends Controller
         /** @var User $authUser */
         $authUser = $request->user(); // Ej. instancia de User autenticado
 
+        Log::info('Avatar update request received', [
+            'user_id' => $authUser?->getKey(),
+            'has_file' => $request->hasFile('avatar'),
+            'files' => array_map(static fn($file) => [
+                'original' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'mime' => $file->getMimeType(),
+            ], $request->allFiles()),
+        ]);
+
         // 2) Autorización explícita: `update` sobre sí mismo
         $this->authorize('updateAvatar', $authUser); // Ej. true si es dueño o super-admin
 
@@ -72,6 +83,11 @@ class ProfileAvatarController extends Controller
             // 6) Si no, redirige atrás con flash
             return back()->with('success', $payload['message']);
         } catch (Throwable $e) {
+            Log::error('Avatar update failed', [
+                'user_id' => $authUser->getKey(),
+                'error' => $e->getMessage(),
+                'exception' => $e,
+            ]);
             // Manejo de error uniforme
             $errorMessage = __('settings.profile.avatar.update_failed');
             if ($request->wantsJson()) {
@@ -123,6 +139,11 @@ class ProfileAvatarController extends Controller
 
             return back()->with('success', $message);
         } catch (Throwable $e) {
+            Log::error('Avatar delete failed', [
+                'user_id' => $authUser->getKey(),
+                'error' => $e->getMessage(),
+                'exception' => $e,
+            ]);
             $errorMessage = __('settings.profile.avatar.delete_failed');
             if ($request->wantsJson()) {
                 return response()->json([
