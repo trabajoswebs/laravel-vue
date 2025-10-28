@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Actions\Profile;
 
 use App\Events\User\AvatarDeleted;
+use App\Jobs\CleanupMediaArtifactsJob;
 use App\Models\User;
+use App\Support\Media\MediaArtifactCollector;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -26,6 +28,14 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  */
 class DeleteAvatar
 {
+    private const CLEANUP_DELAY_SECONDS = 30;
+
+    private static ?bool $hasAvatarVersionColumn = null;
+
+    public function __construct(
+        private readonly MediaArtifactCollector $artifactCollector,
+    ) {}
+
     /**
      * Elimina el avatar actual (colección 'avatar'). Idempotente.
      *
@@ -56,9 +66,10 @@ class DeleteAvatar
                 return false; // Nada que borrar - idempotencia
             }
 
-            // Guarda el ID del archivo antes de eliminarlo
+            // Construye payload de cleanup antes de eliminar
             // para poder usarlo en el log posteriormente.
             $mediaId = $media->id;
+            $cleanupArtifacts = $this->artifactsForCleanup($locked, $media);
 
             // Bloque try...catch para manejar posibles errores al eliminar
             // el archivo físico (por ejemplo, en S3).
@@ -82,7 +93,11 @@ class DeleteAvatar
             // Si el modelo User tiene una columna 'avatar_version',
             // la actualizamos a null ya que ya no hay avatar.
             // Verificamos su existencia para evitar errores si la columna no está presente.
-            if (Schema::hasColumn('users', 'avatar_version')) {
+            if (self::$hasAvatarVersionColumn === null) {
+                self::$hasAvatarVersionColumn = Schema::hasColumn('users', 'avatar_version');
+            }
+
+            if (self::$hasAvatarVersionColumn) {
                 $locked->avatar_version = null; // Limpia el campo
                 $locked->save(); // Guarda los cambios en la base de datos
             }
@@ -105,8 +120,85 @@ class DeleteAvatar
                 ));
             }
 
+            if ($cleanupArtifacts !== []) {
+                DB::afterCommit(function () use ($cleanupArtifacts) {
+                    CleanupMediaArtifactsJob::dispatch($cleanupArtifacts)
+                        ->delay(now()->addSeconds(self::CLEANUP_DELAY_SECONDS));
+                });
+            }
+
             // Retorna true para indicar que se eliminó un avatar exitosamente.
             return true;
         });
+    }
+
+    /**
+     * Prepara el payload de artefactos para cleanup aun si las conversions todavía no existen.
+     *
+     * @return array<string,list<array{dir:string,mediaId:string}>>
+     */
+    private function artifactsForCleanup(User $owner, Media $media): array
+    {
+        $entries = $this->artifactCollector->collectDetailed($owner, $media->collection_name);
+        $targetId = (string) $media->getKey();
+        $artifacts = [];
+
+        foreach ($entries as $entry) {
+            if (
+                !isset($entry['media']) ||
+                !$entry['media'] instanceof Media ||
+                (string) $entry['media']->getKey() !== $targetId ||
+                !isset($entry['disks']) ||
+                !is_array($entry['disks'])
+            ) {
+                continue;
+            }
+
+            foreach ($entry['disks'] as $disk => $types) {
+                if (!is_string($disk) || $disk === '' || !is_array($types)) {
+                    continue;
+                }
+
+                foreach (['original', 'conversions', 'responsive'] as $type) {
+                    $path = $types[$type]['path'] ?? null;
+                    if (!is_string($path) || $path === '') {
+                        continue;
+                    }
+
+                    $artifacts[$disk][] = [
+                        'dir'     => $path,
+                        'mediaId' => $targetId,
+                    ];
+                }
+            }
+        }
+
+        foreach ($artifacts as $disk => $items) {
+            $seen = [];
+            $deduped = [];
+
+            foreach ($items as $item) {
+                if (!isset($item['dir']) || !is_string($item['dir'])) {
+                    continue;
+                }
+
+                $key = $item['dir'] . '|' . ($item['mediaId'] ?? '');
+                if (isset($seen[$key])) {
+                    continue;
+                }
+
+                $seen[$key] = true;
+                $deduped[] = $item;
+            }
+
+            if ($deduped === []) {
+                unset($artifacts[$disk]);
+                continue;
+            }
+
+            $artifacts[$disk] = $deduped;
+        }
+
+        return $artifacts;
     }
 }
