@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support\Media\Profiles;
 
+use App\Support\Media\Contracts\MediaOwner;
 use App\Support\Media\ImageProfile;
 use App\Support\Media\ConversionProfiles\AvatarConversionProfile;
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
@@ -42,9 +41,25 @@ final class AvatarProfile implements ImageProfile
     public function conversions(): array
     {
         $sizes = config('image-pipeline.avatar_sizes', []);
-        return is_array($sizes) && !empty($sizes)
-            ? array_keys($sizes)
-            : self::DEFAULT_CONVERSIONS;
+        if (!is_array($sizes) || $sizes === []) {
+            return self::DEFAULT_CONVERSIONS;
+        }
+
+        $names = [];
+        foreach ($sizes as $name => $definition) {
+            if (!is_string($name)) {
+                continue;
+            }
+
+            $trimmed = trim($name);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            $names[] = $trimmed;
+        }
+
+        return $names !== [] ? array_values(array_unique($names)) : self::DEFAULT_CONVERSIONS;
     }
 
     /** @inheritDoc */
@@ -63,11 +78,17 @@ final class AvatarProfile implements ImageProfile
     /**
      * Aplica conversions de avatar sobre el modelo.
      *
-     * @param HasMedia&InteractsWithMedia $model Modelo que registra conversions.
+     * @param MediaOwner $model Modelo que registra conversions.
      * @param Media|null $media Media actual (no necesario para registrar conversions).
      */
-    public function applyConversions(HasMedia&InteractsWithMedia $model, ?Media $media = null): void
+    public function applyConversions(MediaOwner $model, ?Media $media = null): void
     {
-        AvatarConversionProfile::apply($model, $media);
+        AvatarConversionProfile::apply($model, $media, $this->collection());
+    }
+
+    /** @inheritDoc */
+    public function isSingleFile(): bool
+    {
+        return true;
     }
 }
