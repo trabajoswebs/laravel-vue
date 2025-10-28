@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
 
 import DeleteUser from '@/components/DeleteUser.vue';
-import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,8 @@ import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem, type User } from '@/types';
 import { useLanguage } from '@/composables/useLanguage';
 import LanguageSettings from '@/components/LanguageSettings.vue';
+import HeadingSmall from '@/components/HeadingSmall.vue';
+import AvatarUploader from '@/components/settings/AvatarUploader.vue';
 
 interface Props {
     mustVerifyEmail: boolean;
@@ -30,7 +32,7 @@ const breadcrumbItems: BreadcrumbItem[] = [
 ];
 
 const page = usePage();
-const user = page.props.auth.user as User;
+const user = computed<User>(() => page.props.auth.user as User);
 </script>
 
 <template>
@@ -40,6 +42,11 @@ const user = page.props.auth.user as User;
 
         <SettingsLayout>
             <div class="flex flex-col space-y-6">
+                <div class="space-y-4">
+                    <HeadingSmall :title="t('profile.avatar_title')" :description="t('profile.avatar_description')" />
+                    <AvatarUploader :user="user" />
+                </div>
+
                 <HeadingSmall :title="t('profile.personal_info')" :description="t('profile.update_profile')" />
 
                 <Form method="patch" :action="route('profile.update')" class="space-y-6"
