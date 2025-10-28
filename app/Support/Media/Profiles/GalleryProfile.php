@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Support\Media\Profiles;
 
+use App\Support\Media\Contracts\MediaOwner;
 use App\Support\Media\ImageProfile;
 use App\Support\Media\ConversionProfiles\FileConstraints;
+use Illuminate\Support\Facades\Log;
 use Spatie\Image\Enums\Fit;
-use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\Conversions\Conversion;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
@@ -36,10 +36,7 @@ final class GalleryProfile implements ImageProfile
     /** @inheritDoc */
     public function conversions(): array
     {
-        $sizes = config('image-pipeline.gallery_sizes', []);
-        return is_array($sizes) && !empty($sizes)
-            ? array_keys($sizes)
-            : ['thumb', 'medium', 'large'];
+        return array_keys($this->normalizedSizes());
     }
 
     /** @inheritDoc */
@@ -57,35 +54,158 @@ final class GalleryProfile implements ImageProfile
     /**
      * Registra conversions en la colección de galería usando WebP + optimize.
      *
-     * @param HasMedia&InteractsWithMedia $model
+     * @param MediaOwner $model
      * @param Media|null $media
      * @return void
      */
-    public function applyConversions(HasMedia&InteractsWithMedia $model, ?Media $media = null): void
+    public function applyConversions(MediaOwner $model, ?Media $media = null): void
     {
-        $sizes = config('image-pipeline.gallery_sizes', [
-            'thumb'  => [320, 320, Fit::Crop],
-            'medium' => [1280, 1280, Fit::Contain],
-            'large'  => [2048, 2048, Fit::Contain],
-        ]);
+        /** @var FileConstraints $constraints */
+        $constraints = app(FileConstraints::class);
+
+        $sizes = $this->normalizedSizes();
         $webpQ = FileConstraints::WEBP_QUALITY;
         $collection = $this->collection();
+        $queueDefault = $constraints->queueConversionsDefault();
 
         $apply = static function (Conversion $c, int $w, int $h, Fit $fit) use ($webpQ): void {
             $c->fit($fit, $w, $h)->format('webp')->quality($webpQ)->optimize()->sharpen(10);
         };
 
-        foreach ($sizes as $name => $def) {
-            if (!is_string($name) || !is_array($def) || count($def) < 3) {
-                continue;
-            }
-            [$w, $h, $fit] = $def;
+        foreach ($sizes as $name => [$w, $h, $fit]) {
             $conv = $model->addMediaConversion($name)
                 ->performOnCollections($collection)
                 ->withResponsiveImages();
-            FileConstraints::QUEUE_CONVERSIONS_DEFAULT ? $conv->queued() : $conv->nonQueued();
+            $queueDefault ? $conv->queued() : $conv->nonQueued();
             $conv->tap(fn(Conversion $c) => $apply($c, (int) $w, (int) $h, $fit));
         }
     }
-}
 
+    /** @inheritDoc */
+    public function isSingleFile(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @return array<string,array{0:int,1:int,2:Fit}>
+     */
+    private function normalizedSizes(): array
+    {
+        $defaults = [
+            'thumb'  => [320, 320, Fit::Crop],
+            'medium' => [1280, 1280, Fit::Contain],
+            'large'  => [2048, 2048, Fit::Contain],
+        ];
+
+        $raw = config('image-pipeline.gallery_sizes');
+        if (!is_array($raw) || $raw === []) {
+            return $defaults;
+        }
+
+        $normalized = [];
+        foreach ($raw as $name => $definition) {
+            if (!is_string($name) || trim($name) === '') {
+                Log::warning('media.gallery_sizes.invalid_name', [
+                    'name' => is_scalar($name) ? (string) $name : gettype($name),
+                ]);
+                continue;
+            }
+
+            $normalizedDef = $this->normalizeDefinition(trim($name), $definition, $defaults[$name] ?? null);
+            if ($normalizedDef !== null) {
+                $normalized[$name] = $normalizedDef;
+                continue;
+            }
+
+            if (isset($defaults[$name])) {
+                $normalized[$name] = $defaults[$name];
+            }
+        }
+
+        return $normalized !== [] ? $normalized : $defaults;
+    }
+
+    /**
+     * @param mixed $definition
+     * @param array{0:int,1:int,2:Fit}|null $fallback
+     * @return array{0:int,1:int,2:Fit}|null
+     */
+    private function normalizeDefinition(string $name, mixed $definition, ?array $fallback): ?array
+    {
+        $width = null;
+        $height = null;
+        $fitValue = null;
+
+        if (is_array($definition)) {
+            if (array_is_list($definition)) {
+                $width = $definition[0] ?? null;
+                $height = $definition[1] ?? null;
+                $fitValue = $definition[2] ?? null;
+            } else {
+                $width = $definition['width'] ?? ($definition['w'] ?? null);
+                $height = $definition['height'] ?? ($definition['h'] ?? null);
+                $fitValue = $definition['fit'] ?? null;
+            }
+        } else {
+            Log::warning('media.gallery_sizes.invalid_definition', [
+                'name' => $name,
+                'type' => gettype($definition),
+            ]);
+            return $fallback;
+        }
+
+        $width = $this->toPositiveInt($width);
+        $height = $this->toPositiveInt($height);
+        $fit = $this->coerceFit($fitValue);
+
+        if ($width === null || $height === null || $fit === null) {
+            Log::warning('media.gallery_sizes.invalid_entry', [
+                'name'   => $name,
+                'width'  => $width,
+                'height' => $height,
+                'fit'    => $fitValue,
+            ]);
+            return $fallback;
+        }
+
+        return [$width, $height, $fit];
+    }
+
+    private function toPositiveInt(mixed $value): ?int
+    {
+        if (is_int($value) && $value > 0) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            $int = (int) $value;
+            return $int > 0 ? $int : null;
+        }
+
+        return null;
+    }
+
+    private function coerceFit(mixed $value): ?Fit
+    {
+        if ($value instanceof Fit) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            $normalized = str_replace([' ', '-'], '_', $normalized);
+
+            foreach (Fit::cases() as $case) {
+                if (
+                    $normalized === strtolower($case->value) ||
+                    $normalized === strtolower($case->name)
+                ) {
+                    return $case;
+                }
+            }
+        }
+
+        return null;
+    }
+}
