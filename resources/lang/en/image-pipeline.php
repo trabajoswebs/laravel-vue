@@ -26,6 +26,7 @@ return [
     'temp_file_invalid' => 'The resulting temporary file is invalid.',
     'processing_failed' => 'Error in image processing.',
     'cleanup_failed' => 'Could not clean up the temporary file.',
+    'suspicious_payload' => 'Potentially malicious content was detected inside the image.',
 
     // Log messages
     'gif_clone_failed' => 'Error cloning GIF frame',
@@ -34,6 +35,7 @@ return [
     'cmyk_to_srgb' => 'CMYK to sRGB conversion detected',
     'srgb_failed' => 'Error in sRGB conversion',
     'image_pipeline_failed' => 'General error in image pipeline',
+    'image_pipeline_resource_limits_failed' => 'Failed to apply Imagick resource limits',
 
     // Success messages
     'image_processed' => 'Image processed successfully',
