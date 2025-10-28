@@ -9,6 +9,7 @@ import type { Errors, Page } from '@inertiajs/core';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from 'ziggy-js';
+import type { Config } from 'ziggy-js';
 import { initializeTheme } from './composables/useAppearance';
 import { i18n } from './i18n';
 import { router } from '@inertiajs/vue3';
@@ -356,9 +357,30 @@ createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) => resolvePageComponent(`./pages/${name}.vue`, import.meta.glob<DefineComponent>('./pages/**/*.vue')),
     setup({ el, App, props, plugin }) {
-        createApp({ render: () => h(App, props) })
+        const app = createApp({ render: () => h(App, props) });
+
+        const ziggyConfig = (props.initialPage.props as Record<string, unknown> | undefined)?.ziggy;
+        if (ziggyConfig && typeof ziggyConfig === 'object') {
+            const normalizedZiggy = {
+                ...ziggyConfig,
+                location:
+                    typeof ziggyConfig.location === 'string'
+                        ? new URL(ziggyConfig.location)
+                        : ziggyConfig.location,
+            } as Config;
+
+            // Mantener Ziggy disponible de forma global para utilidades que lo lean desde window.
+            if (typeof window !== 'undefined') {
+                (window as typeof window & { Ziggy?: Config }).Ziggy = normalizedZiggy;
+            }
+
+            app.use(ZiggyVue, normalizedZiggy);
+        } else {
+            app.use(ZiggyVue);
+        }
+
+        app
             .use(plugin)
-            .use(ZiggyVue)
             .use(i18n)
             .use(ToasterPlugin)
             .mount(el);
