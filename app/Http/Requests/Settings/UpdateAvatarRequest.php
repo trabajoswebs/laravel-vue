@@ -36,19 +36,19 @@ class UpdateAvatarRequest extends FormRequest
      */
     public function rules(): array
     {
-        // Leer desde configuración (SSOT). Laravel espera KB en 'max'.
-        $maxBytes = (int) (config('image-pipeline.max_bytes') ?? 5 * 1024 * 1024);
-        $maxKb = (int) ceil($maxBytes / 1024);
+        /** @var FC $constraints */
+        $constraints = app(FC::class);
 
-        // Dimensiones mín./máx. centralizadas.
-        $minW = FC::MIN_WIDTH;
-        $minH = FC::MIN_HEIGHT;
-        $maxW = FC::MAX_WIDTH;
-        $maxH = FC::MAX_HEIGHT;
+        // Laravel espera kilobytes en File::max().
+        $maxBytes = min($constraints->maxBytes, FC::MAX_BYTES);
+        $maxKb    = (int) ceil($maxBytes / 1024);
 
-        // Listas permitidas centralizadas.
-        $allowedExt   = FC::ALLOWED_EXTENSIONS;   // p.ej. ['jpg','jpeg','png','webp','avif']
-        $allowedMimes = FC::ALLOWED_MIME_TYPES;   // p.ej. ['image/jpeg','image/png','image/webp','image/avif']
+        // Dimensiones mín./máx. centralizadas (mismo valor para ancho/alto).
+        $minDim = max($constraints->minDimension, FC::MIN_WIDTH);
+        $maxDim = min($constraints->maxDimension, FC::MAX_WIDTH);
+
+        $allowedExt   = $constraints->allowedExtensions();
+        $allowedMimes = $constraints->allowedMimeTypes();
 
         return [
             'avatar' => [
@@ -63,11 +63,14 @@ class UpdateAvatarRequest extends FormRequest
                 'mimetypes:' . implode(',', $allowedMimes),
 
                 // 3) Dimensiones razonables (guard rápido).
-                "dimensions:min_width={$minW},min_height={$minH},max_width={$maxW},max_height={$maxH}",
+                "dimensions:min_width={$minDim},min_height={$minDim},max_width={$maxDim},max_height={$maxDim}",
 
                 // 4) Validación profunda (firma real, EXIF, poliglot, megapíxeles, etc.).
                 //    Pásale límites para que no dupliques números mágicos.
-                new SecureImageValidation(maxFileSizeBytes: $maxBytes),
+                new SecureImageValidation(
+                    maxFileSizeBytes: $maxBytes,
+                    constraints: $constraints
+                ),
             ],
         ];
     }
