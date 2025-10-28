@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace App\Support\Media\Services;
 
+use App\Jobs\CleanupMediaArtifactsJob;
 use App\Services\ImageUploadService;
 use App\Support\Media\Contracts\MediaOwner;
+use App\Support\Media\DTO\CleanupPayload;
+use App\Support\Media\DTO\ConversionExpectations;
+use App\Support\Media\DTO\ReplacementResult;
+use App\Support\Media\DTO\ReplacementSnapshot;
 use App\Support\Media\ImageProfile;
 use App\Support\Media\MediaArtifactCollector;
 use Illuminate\Http\UploadedFile;
@@ -53,36 +58,47 @@ final class MediaReplacementService
      */
     public function replace(MediaOwner $owner, UploadedFile $file, ImageProfile $profile): Media
     {
-        // Obtener el nombre de la colección multimedia donde se almacenará el archivo.
-        $collection = $profile->collection();
+        return $this->replaceWithSnapshot($owner, $file, $profile)->media;
+    }
 
-        // Recolectar artefactos residuales solo si es una colección de archivo único.
+    /**
+     * Ejecuta el reemplazo y devuelve DTO con snapshot + conversions esperadas.
+     */
+    public function replaceWithSnapshot(
+        MediaOwner $owner,
+        UploadedFile $file,
+        ImageProfile $profile
+    ): ReplacementResult {
         $snapshot = $profile->isSingleFile()
-            ? $this->collector->collect($owner, $collection) // Recolecta artefactos del archivo actual
-            : [];
+            ? ReplacementSnapshot::fromLegacy($this->collector->collect($owner, $profile->collection()))
+            : ReplacementSnapshot::empty();
 
-        // Subir el nuevo archivo multimedia usando el servicio de subida.
         $media = $this->uploader->upload($owner, $file, $profile);
-        $conversions = $this->prepareConversions($media, $profile);
+        $expectations = $this->prepareConversions($media, $profile);
 
-        // Si se recolectaron artefactos del archivo anterior, encolar un job para limpiarlos.
-        if ($snapshot !== []) {
-            $this->scheduleCleanupAfterCommit($snapshot, $media, $conversions); // Espera conversions del nuevo media antes de limpiar
+        if (!$snapshot->isEmpty()) {
+            $this->scheduleCleanupAfterCommit($snapshot, $media, $expectations);
         }
 
-        // Devolver la instancia del nuevo archivo multimedia.
-        return $media;
+        return ReplacementResult::make($media, $snapshot, $expectations);
     }
 
     /**
      * Normaliza conversions y marca cleanup pendiente.
      */
-    private function prepareConversions(Media $media, ImageProfile $profile): array
+    private function prepareConversions(Media $media, ImageProfile $profile): ConversionExpectations
     {
-        $conversions = $this->normalizeConversions($profile->conversions());
-        $this->cleanupScheduler->flagPendingConversions($media, $conversions);
+        $expectations = ConversionExpectations::fromList($profile->conversions());
+        try {
+            $this->cleanupScheduler->flagPendingConversions($media, $expectations->names);
+        } catch (\Throwable $exception) {
+            Log::warning('media.cleanup.flag_failed', [
+                'media_id' => $media->getKey(),
+                'error'    => $exception->getMessage(),
+            ]);
+        }
 
-        return $conversions;
+        return $expectations;
     }
 
     /**
@@ -92,111 +108,57 @@ final class MediaReplacementService
      * confirmada exitosamente (`DB::afterCommit`), asegurando que la base de datos refleje
      * el nuevo estado antes de intentar limpiar archivos residuales.
      *
-     * @param array<int, array{media: Media, artifacts: array<string, list<string>>}> $snapshot
-     *      Resultado de la recolección de artefactos.
+     * @param ReplacementSnapshot $snapshot Artefactos del media anterior agrupados por disco.
      * @param Media $newMedia Media recién creado que dispara el cleanup tras sus conversions.
+     * @param ConversionExpectations $expectations Conversions esperadas para el nuevo media.
      */
-    private function scheduleCleanupAfterCommit(array $snapshot, Media $newMedia, array $conversions): void
-    {
-        // Si no hay artefactos recolectados, no hay nada que limpiar.
-        if ($snapshot === []) {
+    private function scheduleCleanupAfterCommit(
+        ReplacementSnapshot $snapshot,
+        Media $newMedia,
+        ConversionExpectations $expectations
+    ): void {
+        if ($snapshot->isEmpty()) {
             return;
         }
 
-        // Ejecutar la lógica de limpieza solo después de que la transacción haya sido confirmada.
-        DB::afterCommit(function () use ($snapshot, $newMedia, $conversions) {
-            $preserve = [(string) $newMedia->getKey()];
+        DB::afterCommit(function () use ($snapshot, $newMedia, $expectations) {
+            $payload = CleanupPayload::fromSnapshot($snapshot, $newMedia, $expectations);
 
-            foreach ($snapshot as $entry) {
-                if (
-                    !isset($entry['media'], $entry['artifacts']) ||
-                    !$entry['media'] instanceof Media ||
-                    !is_array($entry['artifacts'])
-                ) {
-                    continue;
-                }
+            if (!$payload->hasArtifacts()) {
+                return;
+            }
 
-                $media = $entry['media'];
-                $mediaId = (string) $media->getKey();
-                $formatted = $this->formatArtifactsPerMedia($entry['artifacts'], $mediaId);
-
-                if ($formatted === []) {
-                    continue;
-                }
+            try {
+                $this->cleanupScheduler->scheduleCleanup(
+                    $payload->triggerMedia,
+                    $payload->artifacts,
+                    $payload->preserveIds,
+                    $payload->expectations->names
+                );
+            } catch (\Throwable $exception) {
+                Log::error('media.cleanup.schedule_failed', [
+                    'media_id' => $newMedia->getKey(),
+                    'error'    => $exception->getMessage(),
+                ]);
 
                 try {
-                    $this->cleanupScheduler->scheduleCleanup($media, $formatted, $preserve, $conversions);
-                } catch (\Throwable $exception) {
-                    Log::error('media.cleanup.schedule_failed', [
-                        'media_id' => $mediaId,
-                        'error'    => $exception->getMessage(),
+                    CleanupMediaArtifactsJob::dispatch(
+                        $payload->artifacts,
+                        $payload->preserveIds
+                    );
+
+                    Log::notice('media.cleanup.degraded_dispatch', [
+                        'media_id'  => $newMedia->getKey(),
+                        'reason'    => 'scheduler_unavailable',
+                        'artifacts' => array_keys($payload->artifacts),
+                    ]);
+                } catch (\Throwable $dispatchException) {
+                    Log::critical('media.cleanup.degraded_dispatch_failed', [
+                        'media_id' => $newMedia->getKey(),
+                        'error'    => $dispatchException->getMessage(),
                     ]);
                 }
             }
         });
-    }
-
-    /**
-     * @param array<int,string> $conversions
-     * @return array<int,string>
-     */
-    private function normalizeConversions(array $conversions): array
-    {
-        return array_values(array_unique(array_filter(
-            array_map(static fn ($value) => is_string($value) ? trim($value) : null, $conversions),
-            static fn ($value) => is_string($value) && $value !== ''
-        )));
-    }
-
-    /**
-     * @param array<string, mixed> $sources
-     * @return array<string, list<array{dir:string,mediaId:string}>>
-     */
-    private function formatArtifactsPerMedia(array $sources, string $mediaId): array
-    {
-        $grouped = [];
-
-        foreach ($sources as $disk => $paths) {
-            if (!is_string($disk) || $disk === '' || !is_array($paths)) {
-                continue;
-            }
-
-            foreach ($paths as $path) {
-                if (!is_string($path)) {
-                    continue;
-                }
-
-                $clean = trim($path);
-                if ($clean === '') {
-                    continue;
-                }
-
-                $grouped[$disk][] = [
-                    'dir'     => $clean,
-                    'mediaId' => $mediaId,
-                ];
-            }
-        }
-
-        foreach ($grouped as $disk => $entries) {
-            $seen = [];
-            $deduped = [];
-
-            foreach ($entries as $item) {
-                $key = $item['dir'] . '|' . $item['mediaId'];
-                if (isset($seen[$key])) {
-                    continue;
-                }
-                $seen[$key] = true;
-                $deduped[] = $item;
-            }
-
-            $grouped[$disk] = $deduped;
-        }
-
-        return array_filter(
-            $grouped,
-            static fn ($items) => is_array($items) && $items !== []
-        );
     }
 }
