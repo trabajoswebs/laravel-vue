@@ -14,7 +14,7 @@ use Intervention\Image\ImageManager;
 use RuntimeException;
 use SplFileObject;
 use Throwable;
-use App\Support\Media\ConversionProfiles\FileConstraints as FC;
+use App\Support\Media\ConversionProfiles\FileConstraints;
 
 /**
  * Regla de validación endurecida para archivos de imagen.
@@ -38,8 +38,8 @@ use App\Support\Media\ConversionProfiles\FileConstraints as FC;
  *  - No confíes solo en la extensión; por eso se verifica MIME vía `finfo` y se decodifica la imagen.
  *  - Mantén esta validación en combinación con políticas de subida (disco aislado, desactivar ejecución en el storage, etc.).
  *
- * @see https://www.php.net/manual/en/function.finfo-file.php   Detección MIME
- * @see https://image.intervention.io/   Uso de Intervention Image
+ * @see https://www.php.net/manual/en/function.finfo-file.php     Detección MIME
+ * @see https://image.intervention.io/     Uso de Intervention Image
  */
 class SecureImageValidation implements ValidationRule, DataAwareRule
 {
@@ -78,6 +78,11 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     private ?array $detectedDimensions = null;
 
     /**
+     * Constraints compartidos (SSOT).
+     */
+    private FileConstraints $constraints;
+
+    /**
      * Callable responsible for decoding the image path.
      *
      * @var \Closure(string):object
@@ -98,18 +103,28 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     /**
      * Initialize the rule and allow dependency injection of the decoder and size limit.
      *
-     * @param callable|null $decodeImage Callable to decode the image file. If null, uses default Intervention Image decoder.
-     * @param int|null $maxFileSizeBytes Max file size in bytes. If null, uses FC::MAX_BYTES.
+     * @param callable|null        $decodeImage        Callable to decode the image file. If null, uses default Intervention decoder.
+     * @param int|null             $maxFileSizeBytes   Max file size in bytes. If null, uses configurado en FileConstraints.
+     * @param bool|null            $normalize          Habilita normalización (re-encode) adicional.
+     * @param int|null             $bombRatioThreshold Umbral personalizado para detectar image bombs.
+     * @param FileConstraints|null $constraints        Conjunto de límites compartido (SSOT).
      */
-    public function __construct(?callable $decodeImage = null, ?int $maxFileSizeBytes = null, ?bool $normalize = null, ?int $bombRatioThreshold = null)
-    {
+    public function __construct(
+        ?callable $decodeImage = null,
+        ?int $maxFileSizeBytes = null,
+        ?bool $normalize = null,
+        ?int $bombRatioThreshold = null,
+        ?FileConstraints $constraints = null,
+    ) {
+        $this->constraints = $constraints ?? app(FileConstraints::class);
+
         $this->decodeImage = $decodeImage instanceof \Closure
             ? $decodeImage
             : $this->makeDefaultDecoder($decodeImage);
 
         // Usa límite desde configuración cuando no se pasa explícito (evita hardcodear).
         $this->maxFileSizeBytes = $maxFileSizeBytes
-            ?? (int) (config('image-pipeline.max_bytes') ?? (10 * 1024 * 1024));
+            ?? $this->constraints->maxBytes;
 
         // Optional hardening knobs
         $this->enableNormalization = (bool) ($normalize ?? false);
@@ -179,7 +194,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         }
 
         // Intervention Image v3 (Interface + container)
-        if (class_exists('Intervention\\Image\\Interfaces\\ImageManagerInterface')) {
+        if (interface_exists('Intervention\\Image\\Interfaces\\ImageManagerInterface')) {
             if (function_exists('app')) {
                 try {
                     return $cached = app('Intervention\\Image\\Interfaces\\ImageManagerInterface');
@@ -266,7 +281,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         }
 
         $extension = strtolower((string) $file->getClientOriginalExtension());
-        if ($extension === '' || !in_array($extension, FC::ALLOWED_EXTENSIONS, true)) {
+        if ($extension === '' || !in_array($extension, $this->constraints->allowedExtensions(), true)) {
             return false;
         }
 
@@ -303,10 +318,13 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         $this->detectedDimensions = [$width, $height];
 
         // Chequeo rápido de límites (FC)
+        $minDim = $this->constraints->minDimension;
+        $maxDim = $this->constraints->maxDimension;
+
         if (
             $width <= 0 || $height <= 0 ||
-            $width > FC::MAX_WIDTH || $height > FC::MAX_HEIGHT ||
-            $width < FC::MIN_WIDTH || $height < FC::MIN_HEIGHT
+            $width > $maxDim || $height > $maxDim ||
+            $width < $minDim || $height < $minDim
         ) {
             return false;
         }
@@ -329,7 +347,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             }
             if ($exifType !== false) {
                 $exifMime = image_type_to_mime_type((int) $exifType);
-                if (!in_array($exifMime, FC::ALLOWED_MIME_TYPES, true)) {
+                if (!in_array($exifMime, $this->constraints->allowedMimeTypes(), true)) {
                     return false;
                 }
             }
@@ -355,7 +373,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
                 restore_error_handler();
             }
         }
-        if ($detected === false || !in_array($detected, FC::ALLOWED_MIME_TYPES, true)) {
+        if ($detected === false || !in_array($detected, $this->constraints->allowedMimeTypes(), true)) {
             return false;
         }
 
@@ -392,7 +410,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             }
             $nW = (int) ($info[0] ?? 0);
             $nH = (int) ($info[1] ?? 0);
-            if ($nW <= 0 || $nH <= 0 || $nW > FC::MAX_WIDTH || $nH > FC::MAX_HEIGHT) {
+            if ($nW <= 0 || $nH <= 0 || $nW > $maxDim || $nH > $maxDim || $nW < $minDim || $nH < $minDim) {
                 return false;
             }
             $nBits = (int) ($info['bits'] ?? 24);
@@ -479,22 +497,26 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      * Asegura que las dimensiones (ancho/alto) estén dentro de los límites definidos.
      *
      * @param UploadedFile $file Archivo subido.
-     * @return bool True si ancho y alto son <= FC::MAX_*.
+     * @return bool True si ancho y alto están dentro de los límites configurados.
      */
     private function passesDimensionChecks(UploadedFile $file): bool
     {
+        $minDim = $this->constraints->minDimension;
+        $maxDim = $this->constraints->maxDimension;
+        $maxMp  = $this->constraints->maxMegapixels;
+
         if ($this->detectedDimensions !== null) {
             [$width, $height] = $this->detectedDimensions;
 
             if (
-                $width < FC::MIN_WIDTH || $height < FC::MIN_HEIGHT ||
-                $width > FC::MAX_WIDTH || $height > FC::MAX_HEIGHT
+                $width < $minDim || $height < $minDim ||
+                $width > $maxDim || $height > $maxDim
             ) {
                 return false;
             }
 
             $megapixels = ($width * $height) / 1_000_000;
-            if ($megapixels > FC::MAX_MEGAPIXELS) {
+            if ($megapixels > $maxMp) {
                 return false;
             }
 
@@ -510,14 +532,14 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             $height = (int) $this->decodedImage->height();
 
             if (
-                $width < FC::MIN_WIDTH || $height < FC::MIN_HEIGHT ||
-                $width > FC::MAX_WIDTH || $height > FC::MAX_HEIGHT
+                $width < $minDim || $height < $minDim ||
+                $width > $maxDim || $height > $maxDim
             ) {
                 return false;
             }
 
             $megapixels = ($width * $height) / 1_000_000;
-            return $megapixels <= FC::MAX_MEGAPIXELS;
+            return $megapixels <= $maxMp;
         }
 
         return false;
@@ -527,9 +549,10 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      * Escanea el segmento inicial del archivo para detectar patrones sospechosos.
      *
      * Patrones detectados (ejemplos):
-     *  - `<?php`
      *  - Funciones peligrosas: `eval(`, `system(`, `exec(`, etc.
      *  - `base64_decode(`
+     * También se reanudan las comprobaciones de etiquetas de código (`<?php`, `<?=`)
+     * para impedir imágenes poliglota que intenten ejecutar PHP incrustado.
      *
      * Esta inspección es heurística y debe verse como complemento a controles
      * más profundos (p. ej., antivirus o re-encode del archivo).
@@ -557,16 +580,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             return false;
         }
 
-        /** @var list<non-empty-string> $patterns */
-        $patterns = [
-            '/<\?php/i',
-            '/<\?=/i',
-            '/<\?(?!xml)/i',
-            '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i',
-            '/base64_decode\s*\(/i',
-        ];
-
-        foreach ($patterns as $pattern) {
+        foreach ($this->suspiciousPayloadPatterns() as $pattern) {
             if (preg_match($pattern, $content)) {
                 $this->logWarning('image_suspicious_payload', $file->getClientOriginalName(), ['pattern' => $pattern]);
                 return false;
@@ -665,19 +679,48 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     /** Reusa los patrones de scan sobre un contenido en memoria. */
     private function scanContentForSuspiciousPayload(string $content): bool
     {
-        $patterns = [
-            '/<\?php/i',
-            '/<\?=/i',
-            '/<\?(?!xml)/i',
-            '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i',
-            '/base64_decode\s*\(/i',
-        ];
-        foreach ($patterns as $pattern) {
+        foreach ($this->suspiciousPayloadPatterns() as $pattern) {
             if (preg_match($pattern, $content)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Patrón heurístico para detectar payloads sospechosos dentro de binarios de imagen.
+     *
+     * @return list<non-empty-string>
+     */
+    private function suspiciousPayloadPatterns(): array
+    {
+        $patterns = config('image-pipeline.suspicious_payload_patterns');
+
+        if (!is_array($patterns) || $patterns === []) {
+            return [
+                '/<\?php/i',
+                '/<\?=/i',
+                '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i',
+                '/base64_decode\s*\(/i',
+            ];
+        }
+
+        return array_values(
+            array_filter(
+                array_map(static function ($pattern) {
+                    if (is_string($pattern) && $pattern !== '') {
+                        return $pattern;
+                    }
+
+                    if (is_array($pattern) && isset($pattern['pattern']) && is_string($pattern['pattern'])) {
+                        return $pattern['pattern'];
+                    }
+
+                    return null;
+                }, $patterns),
+                static fn ($pattern) => is_string($pattern) && $pattern !== ''
+            )
+        );
     }
 
     /**
