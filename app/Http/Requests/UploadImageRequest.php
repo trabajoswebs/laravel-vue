@@ -29,24 +29,29 @@ class UploadImageRequest extends FormRequest
     /** @inheritDoc */
     public function rules(): array
     {
-        $maxBytes = (int) (config('image-pipeline.max_bytes') ?? 5 * 1024 * 1024);
-        $maxKb = (int) ceil($maxBytes / 1024);
+        /** @var FC $constraints */
+        $constraints = app(FC::class);
 
-        $minW = FC::MIN_WIDTH;  $minH = FC::MIN_HEIGHT;
-        $maxW = FC::MAX_WIDTH;  $maxH = FC::MAX_HEIGHT;
+        $maxBytes = $constraints->maxBytes;
+        $maxKb    = (int) ceil($maxBytes / 1024);
 
-        $ext   = FC::ALLOWED_EXTENSIONS;
-        $mimes = FC::ALLOWED_MIME_TYPES;
+        $minDim = $constraints->minDimension;
+        $maxDim = $constraints->maxDimension;
+
+        $ext   = $constraints->allowedExtensions();
+        $mimes = $constraints->allowedMimeTypes();
 
         return [
             'image' => [
                 'bail', 'required', 'file',
                 File::image()->max($maxKb)->types($ext),
                 'mimetypes:' . implode(',', $mimes),
-                "dimensions:min_width={$minW},min_height={$minH},max_width={$maxW},max_height={$maxH}",
-                new SecureImageValidation(maxFileSizeBytes: $maxBytes),
+                "dimensions:min_width={$minDim},min_height={$minDim},max_width={$maxDim},max_height={$maxDim}",
+                new SecureImageValidation(
+                    maxFileSizeBytes: $maxBytes,
+                    constraints: $constraints
+                ),
             ],
         ];
     }
 }
-
