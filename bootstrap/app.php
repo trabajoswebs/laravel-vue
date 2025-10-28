@@ -34,12 +34,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             HandleAppearance::class,
-            SanitizeInput::class,
+            SanitizeInput::class,                 // cuanto antes mejor
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
-            SecurityHeaders::class,
+            SecurityHeaders::class,               // tras Inertia/Link headers
             PreventBruteForce::class,
-            UserAudit::class,
+            UserAudit::class,                     //al final para registrar lo que pasó
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
