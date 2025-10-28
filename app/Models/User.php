@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\TracksMediaVersions;
+use App\Support\Media\Contracts\MediaOwner;
 use App\Support\Media\ConversionProfiles\AvatarConversionProfile;
+use App\Support\Media\Profiles\AvatarProfile;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -22,9 +26,9 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  * Incluye métodos para registrar colecciones y conversiones de medios,
  * así como accessors modernos para obtener las URLs del avatar con cache busting.
  */
-class User extends Authenticatable implements HasMedia
+class User extends Authenticatable implements HasMedia, MediaOwner
 {
-    use HasFactory, Notifiable, InteractsWithMedia;
+    use HasFactory, Notifiable, InteractsWithMedia, TracksMediaVersions;
 
     /**
      * Atributos que se pueden asignar masivamente.
@@ -103,7 +107,9 @@ class User extends Authenticatable implements HasMedia
     public function registerMediaConversions(?Media $media = null): void
     {
         // Aplica las conversiones definidas en el perfil AvatarConversionProfile
-        AvatarConversionProfile::apply($this, $media);
+        $collection = app(AvatarProfile::class)->collection();
+
+        AvatarConversionProfile::apply($this, $media, $collection);
     }
 
     /**
@@ -121,25 +127,15 @@ class User extends Authenticatable implements HasMedia
         return Attribute::make(
             // Función de acceso (getter)
             get: function (): ?string {
-                // Obtiene el primer archivo adjunto en la colección 'avatar'
                 $media = $this->getFirstMedia('avatar');
 
-                // Si no hay archivo adjunto, retorna null
-                if (!$media) return null;
+                if (!$media) {
+                    return null;
+                }
 
-                // Verifica si la conversión 'large' ya ha sido generada
-                // Si no, usa la URL del archivo original como fallback
-                $url = $media->hasGeneratedConversion('large')
-                    ? $media->getUrl('large')  // URL de la conversión 'large'
-                    : $media->getUrl();        // URL del archivo original
+                $url = $this->resolveConversionUrl($media, 'large') ?? $media->getUrl();
 
-                // Obtiene la versión del avatar para cache busting
-                // Prioriza la propiedad personalizada del medio, sino usa el campo del modelo
-                $version = $media->getCustomProperty('version')
-                    ?? $this->avatar_version;
-
-                // Retorna la URL con el parámetro de versión si existe, sino la URL simple
-                return $version ? "{$url}?v={$version}" : $url;
+                return $this->appendAvatarVersion($url, $media);
             }
         );
     }
@@ -158,26 +154,68 @@ class User extends Authenticatable implements HasMedia
         return Attribute::make(
             // Función de acceso (getter)
             get: function (): ?string {
-                // Obtiene el primer archivo adjunto en la colección 'avatar'
                 $media = $this->getFirstMedia('avatar');
 
-                // Si no hay archivo adjunto, retorna null
-                if (!$media) return null;
+                if (!$media) {
+                    return null;
+                }
 
-                // Verifica si la conversión 'thumb' ya ha sido generada
-                // Si no, usa la URL del archivo original como fallback
-                $url = $media->hasGeneratedConversion('thumb')
-                    ? $media->getUrl('thumb')  // URL de la conversión 'thumb'
-                    : $media->getUrl();        // URL del archivo original
+                $url = $this->resolveConversionUrl($media, 'thumb') ?? $media->getUrl();
 
-                // Obtiene la versión del avatar para cache busting
-                // Prioriza la propiedad personalizada del medio, sino usa el campo del modelo
-                $version = $media->getCustomProperty('version')
-                    ?? $this->avatar_version;
-
-                // Retorna la URL con el parámetro de versión si existe, sino la URL simple
-                return $version ? "{$url}?v={$version}" : $url;
+                return $this->appendAvatarVersion($url, $media);
             }
         );
+    }
+
+    /**
+     * Intenta resolver la URL de una conversión asegurándose de que el archivo exista.
+     *
+     * @param  Media   $media        Instancia del medio asociado.
+     * @param  string  $conversion   Nombre de la conversión (thumb, medium, large, etc.).
+     * @return string|null           URL de la conversión o null si no existe.
+     */
+    protected function resolveConversionUrl(Media $media, string $conversion): ?string
+    {
+        if ($media->hasGeneratedConversion($conversion)) {
+            return $media->getUrl($conversion);
+        }
+
+        try {
+            $relativePath = $media->getPathRelativeToRoot($conversion);
+        } catch (\Throwable $exception) {
+            return null;
+        }
+
+        if ($relativePath === '') {
+            return null;
+        }
+
+        $disk = $media->conversions_disk ?: $media->disk;
+
+        if (Storage::disk($disk)->exists($relativePath)) {
+            return $media->getUrl($conversion);
+        }
+
+        return null;
+    }
+
+    /**
+     * Agrega el parámetro de versión a la URL del avatar si está disponible.
+     *
+     * @param  string  $url
+     * @param  Media   $media
+     * @return string
+     */
+    protected function appendAvatarVersion(string $url, Media $media): string
+    {
+        $version = $media->getCustomProperty('version') ?? $this->avatar_version;
+
+        if (!$version) {
+            return $url;
+        }
+
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return "{$url}{$separator}v={$version}";
     }
 }
