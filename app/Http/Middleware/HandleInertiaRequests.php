@@ -107,6 +107,18 @@ class HandleInertiaRequests extends Middleware
 
         $userData = $user->only(['id', 'name', 'email', 'avatar', 'locale']);
 
+        $avatarUrl = $user->avatar_url ?? null;
+        $thumbnailUrl = $user->avatar_thumb_url ?? null;
+        $avatarVersion = $user->getAttribute('avatar_version');
+
+        if (is_string($avatarUrl) && $avatarUrl !== '') {
+            $userData['avatar'] = $avatarUrl;
+        }
+
+        $userData['avatar_url'] = $avatarUrl;
+        $userData['avatar_thumb_url'] = $thumbnailUrl;
+        $userData['avatar_version'] = $avatarVersion;
+
         return collect($userData)
             ->map(fn($value) => is_string($value) ? SecurityHelper::sanitizePlainText($value) : $value)
             ->toArray();
