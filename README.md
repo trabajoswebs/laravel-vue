@@ -331,8 +331,7 @@ php artisan serve
 │   │   └── PostProcessAvatarMedia.php     # Optimización original + conversions
 │   ├── Listeners/
 │   │   └── User/
-│   │       ├── QueueAvatarPostProcessing.php
-│   │       └── PurgeOldAvatar.php
+│   │       └── QueueAvatarPostProcessing.php
 │   ├── Models/
 │   │   └── User.php                        # Colección ML 'avatar' + accessors
 │   ├── Policies/
