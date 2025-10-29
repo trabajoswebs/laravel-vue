@@ -15,6 +15,7 @@ Route::middleware('auth')->group(function () {
 
     // Avatar endpoints (actualización y eliminación) protegidos por auth
     Route::patch('settings/avatar', [ProfileAvatarController::class, 'update'])
+        ->middleware('rate.uploads')
         ->name('settings.avatar.update');
     Route::delete('settings/avatar', [ProfileAvatarController::class, 'destroy'])
         ->name('settings.avatar.destroy');
