@@ -127,8 +127,17 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             ?? $this->constraints->maxBytes;
 
         // Optional hardening knobs
-        $this->enableNormalization = (bool) ($normalize ?? false);
-        $this->bombRatioThreshold = $bombRatioThreshold ?? self::BOMB_RATIO_THRESHOLD;
+        $normalizationEnabled = config('image-pipeline.normalization.enabled', false);
+        $this->enableNormalization = (bool) ($normalize ?? $normalizationEnabled);
+        $configRatio = (int) config('image-pipeline.bomb_ratio_threshold', self::BOMB_RATIO_THRESHOLD);
+        if ($configRatio <= 0) {
+            $configRatio = self::BOMB_RATIO_THRESHOLD;
+        }
+        if ($bombRatioThreshold !== null && $bombRatioThreshold > 0) {
+            $this->bombRatioThreshold = $bombRatioThreshold;
+        } else {
+            $this->bombRatioThreshold = $configRatio;
+        }
     }
 
     /**
@@ -181,6 +190,15 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         };
     }
 
+    private static function applyGdMemoryLimit(): void
+    {
+        $gdMb = (int) config('image-pipeline.resource_limits.gd_memory_mb', 0);
+
+        if ($gdMb > 0) {
+            @ini_set('memory_limit', max(64, $gdMb) . 'M');
+        }
+    }
+
     /**
      * Resolve a suitable Intervention Image manager instance or callable.
      *
@@ -210,10 +228,14 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             }
             if (class_exists('Intervention\\Image\\Drivers\\Gd\\Driver')) {
                 $driver = new \Intervention\Image\Drivers\Gd\Driver();
+                self::applyGdMemoryLimit();
                 return $cached = new ImageManager($driver);
             }
 
             $driverString = extension_loaded('imagick') ? 'imagick' : 'gd';
+            if ($driverString === 'gd') {
+                self::applyGdMemoryLimit();
+            }
             return $cached = new ImageManager($driverString);
         }
 
@@ -250,6 +272,11 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             return;
         }
 
+        if (! $this->scanForSuspiciousPayload($value)) {
+            $fail(__('validation.custom.image.malicious_payload'));
+            return;
+        }
+
         if (! $this->passesSignatureChecks($value)) {
             $fail(__('validation.custom.image.invalid_signature'));
             return;
@@ -258,10 +285,6 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         if (! $this->passesDimensionChecks($value)) {
             $fail(__('validation.custom.image.invalid_dimensions'));
             return;
-        }
-
-        if (! $this->scanForSuspiciousPayload($value)) {
-            $fail(__('validation.custom.image.malicious_payload'));
         }
     }
 
@@ -330,8 +353,9 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         }
 
         // Ratio de descompresión (image bomb)
-        $uncompressed = (int) ($width * $height * max(1, $bits) / 8);
-        if ($size > 0 && $uncompressed / $size > $this->bombRatioThreshold) {
+        $uncompressed = (float) $width * (float) $height * max(1.0, (float) $bits) / 8.0;
+        $ratio = $size > 0 ? $uncompressed / (float) $size : INF;
+        if ($ratio > (float) $this->bombRatioThreshold) {
             return false;
         }
 
@@ -415,8 +439,9 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             }
             $nBits = (int) ($info['bits'] ?? 24);
             $nSize = strlen($normalized);
-            $nUncompressed = (int) ($nW * $nH * max(1, $nBits) / 8);
-            if ($nSize > 0 && $nUncompressed / $nSize > $this->bombRatioThreshold) {
+            $nUncompressed = (float) $nW * (float) $nH * max(1.0, (float) $nBits) / 8.0;
+            $nRatio = $nSize > 0 ? $nUncompressed / (float) $nSize : INF;
+            if ($nRatio > (float) $this->bombRatioThreshold) {
                 return false;
             }
         }
@@ -467,29 +492,34 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             throw new RuntimeException('Unable to create temporary file');
         }
 
+        $cleanup = static function (string $path): void {
+            if (file_exists($path) && ! unlink($path)) {
+                Log::debug('secure_image_validation_temp_unlink_failed', ['path' => $path]);
+            }
+        };
+
         try {
             if (file_put_contents($tempPath, $content, LOCK_EX) === false) {
                 throw new RuntimeException('Unable to write temporary file');
             }
-            @chmod($tempPath, 0600);
+
+            if (! chmod($tempPath, 0600)) {
+                Log::debug('secure_image_validation_temp_chmod_failed', ['path' => $tempPath]);
+            }
 
             if (is_callable($manager)) {
                 /** @var object $img */
-                $img = $manager($tempPath);
-                return $img;
+                return $manager($tempPath);
             }
 
             if (is_object($manager) && method_exists($manager, 'read')) {
                 /** @var object $img */
-                $img = $manager->read($tempPath);
-                return $img;
+                return $manager->read($tempPath);
             }
-
-
 
             throw new RuntimeException('Unable to decode image: unsupported manager implementation.');
         } finally {
-            @unlink($tempPath);
+            $cleanup($tempPath);
         }
     }
 
@@ -504,24 +534,6 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         $minDim = $this->constraints->minDimension;
         $maxDim = $this->constraints->maxDimension;
         $maxMp  = $this->constraints->maxMegapixels;
-
-        if ($this->detectedDimensions !== null) {
-            [$width, $height] = $this->detectedDimensions;
-
-            if (
-                $width < $minDim || $height < $minDim ||
-                $width > $maxDim || $height > $maxDim
-            ) {
-                return false;
-            }
-
-            $megapixels = ($width * $height) / 1_000_000;
-            if ($megapixels > $maxMp) {
-                return false;
-            }
-
-            return true;
-        }
 
         if (
             $this->decodedImage !== null
@@ -540,6 +552,24 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
 
             $megapixels = ($width * $height) / 1_000_000;
             return $megapixels <= $maxMp;
+        }
+
+        if ($this->detectedDimensions !== null) {
+            [$width, $height] = $this->detectedDimensions;
+
+            if (
+                $width < $minDim || $height < $minDim ||
+                $width > $maxDim || $height > $maxDim
+            ) {
+                return false;
+            }
+
+            $megapixels = ($width * $height) / 1_000_000;
+            if ($megapixels > $maxMp) {
+                return false;
+            }
+
+            return true;
         }
 
         return false;
@@ -628,10 +658,16 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             }
             try {
                 $image->save($tmp);
-                $bytes = @file_get_contents($tmp);
-                return is_string($bytes) && $bytes !== '' ? $bytes : null;
+                $bytes = file_get_contents($tmp);
+                if (! is_string($bytes) || $bytes === '') {
+                    return null;
+                }
+
+                return $bytes;
             } finally {
-                @unlink($tmp);
+                if (file_exists($tmp) && ! unlink($tmp)) {
+                    Log::debug('secure_image_validation_temp_unlink_failed', ['path' => $tmp]);
+                }
             }
         }
 
