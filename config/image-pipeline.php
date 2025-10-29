@@ -1,5 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
+/**
+ * Configuración del pipeline de procesamiento de imágenes.
+ *
+ * Este archivo define todas las opciones de configuración para el procesamiento,
+ * validación, optimización y seguridad de imágenes subidas en la aplicación.
+ * Muchas de estas opciones pueden ser personalizadas mediante variables de entorno.
+ *
+ * @package App\Config
+ * @author  [Tu Nombre o Equipo]
+ */
+
 return [
 
     /*
@@ -14,6 +27,9 @@ return [
 
     // Tamaño máximo del archivo de entrada (bytes)
     'max_bytes' => env('IMG_MAX_BYTES', 15 * 1024 * 1024), // 15MB
+
+    // Umbral de ratio para detectar image bombs (descompresión vs tamaño en disco)
+    'bomb_ratio_threshold' => env('IMG_BOMB_RATIO', 100),
 
     // Extensiones de imagen permitidas (se normalizan a minúsculas)
     'allowed_extensions' => [
@@ -34,13 +50,168 @@ return [
         'image/gif'  => 'gif',
     ],
 
-    // Dimensión mínima (ancho y alto) requerida para aceptar la imagen
+    // Extensiones de archivo explícitamente prohibidas
+    'disallowed_extensions' => [
+        'svg', // Puede contener código malicioso
+        'svgz', // Versión comprimida de SVG
+        'zip', // Archivo comprimido
+    ],
+
+    // Tipos MIME explícitamente prohibidos
+    'disallowed_mimes' => [
+        'image/svg+xml', // Puede contener código malicioso
+        'application/zip', // Archivo comprimido
+        'application/x-zip-compressed', // Archivo comprimido
+    ],
+
+    // Configuración de normalización de imágenes
+    'normalization' => [
+        // Habilita la normalización de imágenes de entrada
+        'enabled' => env('IMG_NORMALIZE', true),
+    ],
+
+    // Rate limiting para subidas (protege los escaneos costosos).
+    'rate_limit' => [
+        'max_attempts' => env('IMG_RATE_MAX', 10),
+        'decay_seconds' => env('IMG_RATE_DECAY', 60),
+    ],
+
+    // Límites de recursos para las bibliotecas de procesamiento de imágenes
+    'resource_limits' => [
+        'imagick' => [
+            // Memoria máxima en MB para Imagick
+            'memory_mb' => env('IMG_IMAGICK_MEMORY_MB', 128),
+            // Memoria virtual máxima en MB para Imagick
+            'map_mb'    => env('IMG_IMAGICK_MAP_MB', 256),
+            // Tiempo máximo de ejecución en ms para operaciones de Imagick
+            'time_ms'   => env('IMG_IMAGICK_TIME_MS', 750),
+        ],
+        // Memoria máxima en MB para operaciones de GD (0 = ilimitada)
+        'gd_memory_mb' => env('IMG_GD_MEMORY_MB', 0),
+    ],
+
+    // Configuración del escaneo de seguridad de archivos
+    'scan' => [
+        // Tamaño del chunk para escaneo por partes (bytes)
+        'chunk_bytes' => env('IMG_SCAN_CHUNK_BYTES', 256 * 1024),
+        // Tamaño máximo del archivo para escaneo (bytes)
+        'max_bytes'   => env('IMG_SCAN_MAX_BYTES', 4 * 1024 * 1024),
+        // Modo estricto para el escaneo (puede rechazar más archivos)
+        'strict'      => filter_var(env('IMG_SCAN_STRICT', false), FILTER_VALIDATE_BOOLEAN),
+        // Modo estricto para debugging del escaneo
+        'debug_strict'=> filter_var(env('IMG_SCAN_DEBUG_STRICT', false), FILTER_VALIDATE_BOOLEAN),
+        // Directorio base permitido para escaneo (previene path traversal)
+        'allowed_base_path' => value(function () {
+            $default = sys_get_temp_dir();
+            $envPath = env('IMG_SCAN_ALLOWED_BASE', $default);
+
+            if (!is_string($envPath) || $envPath === '') {
+                return rtrim($default, DIRECTORY_SEPARATOR);
+            }
+
+            $normalized = rtrim($envPath, DIRECTORY_SEPARATOR);
+            if ($normalized === '') {
+                $normalized = DIRECTORY_SEPARATOR;
+            }
+
+            $dangerous = [
+                DIRECTORY_SEPARATOR, // Raíz del sistema
+                '/etc', '/var', '/usr', '/root', '/home', '/opt', // Directorios sensibles
+                '/proc', '/sys', '/dev', '/run', // Directorios virtuales
+            ];
+
+            foreach ($dangerous as $danger) {
+                $dangerNorm = rtrim($danger, DIRECTORY_SEPARATOR) ?: DIRECTORY_SEPARATOR;
+                if ($normalized === $dangerNorm || str_starts_with($normalized . DIRECTORY_SEPARATOR, $dangerNorm . DIRECTORY_SEPARATOR)) {
+                    // Si el path configurado es peligroso, se usa el predeterminado.
+                    return rtrim($default, DIRECTORY_SEPARATOR);
+                }
+            }
+
+            if (!is_dir($envPath) || is_link($envPath)) {
+                // Si no es un directorio o es un enlace simbólico, se usa el predeterminado.
+                return rtrim($default, DIRECTORY_SEPARATOR);
+            }
+
+            return $normalized;
+        }),
+        // Directorio base donde se almacenan las reglas de escaneo (YARA)
+        'allowed_rules_base_path' => value(function () {
+            $default = base_path('security/yara');
+            $envPath = env('IMG_SCAN_RULES_BASE', $default);
+
+            if (!is_string($envPath) || $envPath === '') {
+                return rtrim($default, DIRECTORY_SEPARATOR);
+            }
+
+            if (!is_dir($envPath) || is_link($envPath)) {
+                // Si no es un directorio o es un enlace simbólico, se usa el predeterminado.
+                return rtrim($default, DIRECTORY_SEPARATOR);
+            }
+
+            return rtrim($envPath, DIRECTORY_SEPARATOR);
+        }),
+        // Lista blanca de binarios ejecutables permitidos para escaneo
+        'bin_allowlist' => value(function () {
+            $candidates = [
+                env('IMG_SCAN_CLAMAV_BIN', '/usr/bin/clamdscan'),
+                env('IMG_SCAN_YARA_BIN', '/usr/bin/yara'),
+            ];
+
+            $envList = env('IMG_SCAN_BIN_ALLOWLIST');
+            if (is_string($envList) && $envList !== '') {
+                $candidates = array_merge($candidates, preg_split('/[,\s;]+/', $envList) ?: []);
+            }
+
+            $normalized = [];
+            foreach ($candidates as $candidate) {
+                if (!is_string($candidate)) {
+                    continue;
+                }
+
+                $trimmed = trim($candidate);
+                if ($trimmed === '') {
+                    continue;
+                }
+
+                $normalized[] = $trimmed;
+            }
+
+            return array_values(array_unique($normalized));
+        }),
+        // Tamaño máximo del archivo para escaneo individual (bytes)
+        'max_file_size_bytes' => env('IMG_SCAN_MAX_FILE_SIZE', 20 * 1024 * 1024),
+        // Tiempo de espera inactivo para escaneo (segundos)
+        'idle_timeout' => env('IMG_SCAN_IDLE_TIMEOUT', 10),
+        // Tamaño máximo de las reglas de escaneo (bytes)
+        'rules_max_bytes' => env('IMG_SCAN_RULES_MAX_BYTES', 2 * 1024 * 1024),
+        // Handlers de escaneo a utilizar
+        'handlers'    => array_values(array_filter([
+            env('IMG_SCAN_USE_CLAMAV', false) ? App\Services\Security\Scanners\ClamAvScanner::class : null,
+            env('IMG_SCAN_USE_YARA', false) ? App\Services\Security\Scanners\YaraScanner::class : null,
+        ], static fn ($handler) => is_string($handler) && $handler !== '')),
+        // Configuración específica para ClamAV
+        'clamav' => [
+            'binary'   => env('IMG_SCAN_CLAMAV_BIN', '/usr/bin/clamdscan'),
+            'timeout'  => env('IMG_SCAN_CLAMAV_TIMEOUT', 10),
+            'arguments'=> env('IMG_SCAN_CLAMAV_ARGS', '--no-summary --fdpass'),
+        ],
+        // Configuración específica para YARA
+        'yara' => [
+            'binary'    => env('IMG_SCAN_YARA_BIN', '/usr/bin/yara'),
+            'rules_path'=> env('IMG_SCAN_YARA_RULES', base_path('security/yara/images.yar')),
+            'timeout'   => env('IMG_SCAN_YARA_TIMEOUT', 5),
+            'arguments' => env('IMG_SCAN_YARA_ARGS', '--fail-on-warnings --nothreads'),
+        ],
+    ],
+
+    // Dimensión mínima (ancho y alto) requerida para aceptar la imagen (en píxeles)
     'min_dimension' => env('IMG_MIN_DIMENSION', 128), // px
 
     // Límite de megapíxeles admitidos (protección DoS)
     'max_megapixels' => env('IMG_MAX_MEGAPIXELS', 48.0),
 
-    // Lado mayor máximo del resultado (resize manteniendo proporción)
+    // Lado mayor máximo del resultado (resize manteniendo proporción) (en píxeles)
     'max_edge' => env('IMG_MAX_EDGE', 16384), // px
 
 
@@ -58,24 +229,21 @@ return [
     // JPEG: calidad 0–100 (82 recomendado)
     'jpeg_quality' => env('IMG_JPEG_QUALITY', 82),
 
-    // WebP: calidad 0–100 (70–80 recomendado)
-    // Nota: la clave 'webp_quality' se define más abajo como valor único (evita duplicados).
-
     // Si la imagen tiene transparencia, ¿forzar WebP?
     'alpha_to_webp' => env('IMG_ALPHA_TO_WEBP', true),
 
-    // Umbral a partir del cual activar JPEG progresivo
-    'jpeg_progressive_min' => env('IMG_JPEG_PROGRESSIVE_MIN', 1200), // px (lado mayor)
+    // Umbral a partir del cual activar JPEG progresivo (en píxeles, lado mayor)
+    'jpeg_progressive_min' => env('IMG_JPEG_PROGRESSIVE_MIN', 1200), // px
 
     // Método de WebP (0–6). 6 = más calidad/tiempo
     'webp_method' => env('IMG_WEBP_METHOD', 6),
 
     // Patrón de firmas sospechosas dentro de binarios de imagen (regex). Ajustable por entorno.
     'suspicious_payload_patterns' => [
-        '/<\?php/i',
-        '/<\?=/i',
-        '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i',
-        '/base64_decode\s*\(/i',
+        '/<\?php/i', // Código PHP
+        '/<\?=/i',  // Código PHP corto
+        '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i', // Funciones peligrosas
+        '/base64_decode\s*\(/i', // Decodificación de base64
     ],
 
     // Preferencia por defecto para encolar conversions (true = queued, false = sync)
@@ -143,6 +311,7 @@ return [
 
     /*---------------------------------------*/
 
+    // Tamaños predefinidos para la colección de avatares
     'avatar_sizes' => [
         'thumb'  => 128,
         'medium' => 256,
@@ -160,6 +329,7 @@ return [
     // Usa env AVATAR_DISK o cae al disco por defecto
     'avatar_disk' => env('AVATAR_DISK', env('FILESYSTEM_DISK', 'local')),
 
+    // Nombre de la colección de avatar
     'avatar_collection' => env('AVATAR_COLLECTION', 'avatar'),
 
     /*
@@ -171,8 +341,11 @@ return [
     | Puedes ajustar estos valores por entorno o sobrescribir sizes por modelo.
     |
     */
+    // Disco donde se almacenará la colección de galería
     'gallery_disk' => env('GALLERY_DISK', env('FILESYSTEM_DISK', 'local')),
+    // Nombre de la colección de galería
     'gallery_collection' => env('GALLERY_COLLECTION', 'gallery'),
+    // Tamaños predefinidos para la colección de galería
     'gallery_sizes' => [
         'thumb'  => 320,
         'medium' => 1280,
@@ -188,6 +361,6 @@ return [
     | encola la optimización tras las conversions (default: avatar,gallery).
     |
     */
+    // Lista de colecciones para las cuales se ejecutará el postproceso de optimización
     'postprocess_collections' => env('IMG_POSTPROCESS_COLLECTIONS', 'avatar,gallery'),
-
 ];
