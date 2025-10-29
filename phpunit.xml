@@ -28,5 +28,10 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="IMG_SCAN_CLAMAV_BIN" value=""/>
+        <env name="IMG_SCAN_YARA_BIN" value=""/>
+        <env name="IMG_SCAN_BIN_ALLOWLIST" value=""/>
+        <env name="IMG_SCAN_RULES_BASE" value="/tmp"/>
+        <env name="IMG_SCAN_ALLOWED_BASE" value="/tmp"/>
     </php>
 </phpunit>
