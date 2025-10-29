@@ -1,71 +1,123 @@
-app/
-├── Actions/
-│   └── Profile/
-│       ├── DeleteAvatar.php
-│       └── UpdateAvatar.php
-├── Console/
-│   └── Commands/
-│       └── CleanAuditLogs.php
-├── Events/
-│   └── User/
-│       ├── AvatarDeleted.php
-│       └── AvatarUpdated.php
-├── Helpers/
-│   └── SecurityHelper.php
-├── Http/
-│   ├── Controllers/
-│   │   ├── Auth/
-│   │   │   ├── AuthenticatedSessionController.php
-│   │   │   ├── ConfirmablePasswordController.php
-│   │   │   ├── EmailVerificationNotificationController.php
-│   │   │   ├── EmailVerificationPromptController.php
-│   │   │   ├── NewPasswordController.php
-│   │   │   ├── PasswordResetLinkController.php
-│   │   │   ├── RegisteredUserController.php
-│   │   │   └── VerifyEmailController.php
-│   │   ├── Settings/
-│   │   │   ├── PasswordController.php
-│   │   │   ├── ProfileAvatarController.php
-│   │   │   └── ProfileController.php
-│   │   ├── Controller.php
-│   │   └── LanguageController.php
-│   ├── Middleware/
-│   │   ├── HandleAppearance.php
-│   │   ├── HandleInertiaRequests.php
-│   │   ├── PreventBruteForce.php
-│   │   ├── SanitizeInput.php
-│   │   ├── SecurityHeaders.php
-│   │   ├── TrustProxies.php
-│   │   └── UserAudit.php
-│   └── Requests/
-│       ├── Auth/
-│       │   └── LoginRequest.php
-│       └── Settings/
-│           ├── DeleteAvatarRequest.php
-│           ├── ProfileUpdateRequest.php
-│           └── UpdateAvatarRequest.php
-├── Jobs/
-│   └── PostProcessAvatarMedia.php
-├── Listeners/
-│   └── User/
-│       └── QueueAvatarPostProcessing.php
-├── Models/
-│   └── User.php
-├── Policies/
-│   └── UserPolicy.php
-├── Providers/
-│   ├── AppServiceProvider.php
-│   ├── AuthServiceProvider.php
-│   ├── EventServiceProvider.php
-│   └── HtmlPurifierServiceProvider.php
-├── Rules/
-│   └── SecureImageValidation.php
-├── Services/
-│   ├── ImagePipeline.php
-│   ├── OptimizerService.php
-│   └── TranslationService.php
-└── Support/
-    └── Media/
-        └── ConversionProfiles/
-            ├── AvatarConversionProfile.php
-            └── FileConstraints.php
+Actions/
+  Profile/
+    DeleteAvatar.php - Accion invocable que elimina el avatar de un usuario eliminando media y eventos.
+    UpdateAvatar.php - Accion transaccional que reemplaza el avatar gestionando versionado, logs y eventos.
+Console/
+  Commands/
+    CleanAuditLogs.php - Comando Artisan que depura registros de auditoria antiguos.
+Events/
+  User/
+    AvatarDeleted.php - Evento de dominio emitido al borrar un avatar.
+    AvatarUpdated.php - Evento emitido tras actualizar el avatar con metadata previa.
+Helpers/
+  SecurityHelper.php - Utilidades de sanitizacion y validacion segura de entradas y logs.
+Http/
+  Controllers/
+    Auth/
+      AuthenticatedSessionController.php - Controller Inertia para login y manejo de sesion.
+      ConfirmablePasswordController.php - Solicita confirmacion de password en acciones sensibles.
+      EmailVerificationNotificationController.php - Reenvia notificaciones de verificacion de email.
+      EmailVerificationPromptController.php - Muestra pantalla para usuarios pendientes de verificacion.
+      NewPasswordController.php - Aplica password nuevo desde flujo de reset.
+      PasswordResetLinkController.php - Genera y envia enlace de reseteo de password.
+      RegisteredUserController.php - Gestiona registro de usuarios.
+      VerifyEmailController.php - Confirma verificacion de email desde enlace.
+    Controller.php - Base de controllers con helpers comunes.
+    LanguageController.php - Permite al usuario cambiar idioma de la aplicacion.
+    Settings/
+      PasswordController.php - Actualiza la password desde panel de ajustes.
+      ProfileAvatarController.php - Gestiona subida y vista previa de avatar.
+      ProfileController.php - Actualiza datos generales del perfil.
+  Middleware/
+    HandleAppearance.php - Aplica preferencias de apariencia (tema).
+    HandleInertiaRequests.php - Define props globales para Inertia y versionado.
+    PreventBruteForce.php - Limita intentos repetidos para evitar fuerza bruta.
+    RateLimitUploads.php - Middleware que aplica throttling configurable a las subidas de imagen.
+    SanitizeInput.php - Normaliza y limpia inputs de formularios.
+    SecurityHeaders.php - Inyecta cabeceras CSP/HSTS personalizadas.
+    TrustProxies.php - Configura proxies de confianza.
+    UserAudit.php - Registra acciones sensibles del usuario autenticado.
+  Requests/
+    Auth/
+      LoginRequest.php - Valida credenciales y aplica rate limit.
+    Settings/
+      DeleteAvatarRequest.php - Autoriza y valida peticion de borrado de avatar.
+      ProfileUpdateRequest.php - Valida actualizacion de datos del perfil.
+      UpdateAvatarRequest.php - Valida subida de avatar con limites estrictos.
+    UploadImageRequest.php - Request generico para subidas de imagen.
+Jobs/
+  CleanupMediaArtifactsJob.php - Elimina artefactos residuales de media antigua.
+  PostProcessAvatarMedia.php - Encola postproceso/optimizacion del avatar.
+Listeners/
+  Media/
+    RunPendingMediaCleanup.php - Dispara limpieza pendiente tras conversions.
+  User/
+    QueueAvatarPostProcessing.php - Encola postproceso tras actualizacion de avatar.
+Models/
+  Concerns/
+    TracksMediaVersions.php - Trait que sincroniza columnas de version con media.
+  User.php - Modelo de usuario con relaciones y atributos principales.
+Observers/
+  MediaObserver.php - Observa eventos de media para limpieza y logs.
+Policies/
+  UserPolicy.php - Autoriza acciones sobre usuarios.
+  Providers/
+    AppServiceProvider.php - Registra bindings base de la aplicacion.
+    AuthServiceProvider.php - Registra politicas de autenticacion.
+    EventServiceProvider.php - Mapea eventos a listeners.
+    ImagePipelineServiceProvider.php - Alias de middleware y sanity checks para el pipeline de imagen.
+    HtmlPurifierServiceProvider.php - Configura perfiles de HTMLPurifier.
+    MediaLibraryBindingsServiceProvider.php - Enlaces personalizados para media library.
+Rules/
+  SecureImageValidation.php - Regla avanzada de validacion de imagenes (firma, payloads).
+Services/
+  Concerns/
+    GuardsUploadedImage.php - Helpers reutilizables para servicios que manejan imagenes subidas.
+  ImagePipeline/
+    FallbackWorkflow.php - Workflow de pipeline cuando no hay driver especializado.
+    ImageProcessingException.php - Excepcion especifica del pipeline de imagen.
+    ImagickWorkflow.php - Workflow basado en Imagick.
+    PipelineArtifacts.php - DTO para archivos generados por el pipeline.
+    PipelineConfig.php - Encapsula configuracion del pipeline de imagen.
+    PipelineLogger.php - Logger dedicado para ejecuciones de pipeline.
+  ImagePipeline.php - Fachada que coordina workflows de procesamiento.
+  ImagePipelineResult.php - Resultado estandarizado con hash, mime, dimensiones.
+  ImageUploadService.php - Coordinador que procesa y adjunta imagenes via media library.
+  Optimizer/
+    Adapters/
+      LocalOptimizationAdapter.php - Ejecuta optimizaciones locales (pngquant, etc.).
+      RemoteDownloader.php - Descarga artefactos optimizados desde servicio remoto.
+      RemoteUploader.php - Sube imagen a optimizador remoto.
+  OptimizerService.php - Selecciona adapter y ejecuta optimizacion.
+  Security/
+    Scanners/
+      AbstractScanner.php - Clase base con resolucion de binarios, rutas seguras y ejecucion de procesos.
+      ClamAvScanner.php - Implementacion concreta para clamdscan aprovechando la base compartida.
+      YaraScanner.php - Scanner YARA que reutiliza la base y aplica reglas allowlist.
+  TranslationService.php - Gestiona traducciones cargadas dinamicamente.
+Support/
+  Media/
+    Contracts/
+      MediaOwner.php - Interfaz para modelos que exponen media.
+    ConversionProfiles/
+      AvatarConversionProfile.php - Define conversions especificas de avatar.
+      FileConstraints.php - Single source of truth de limites de archivos.
+    DTO/
+      CleanupPayload.php - DTO para limpiar artefactos luego del reemplazo.
+      ConversionExpectations.php - DTO que lista conversions esperadas.
+      ReplacementResult.php - DTO que combina media nuevo y snapshot anterior.
+      ReplacementSnapshot.php - Snapshot de artefactos a limpiar.
+      ReplacementSnapshotItem.php - Elemento individual dentro del snapshot.
+    ImageProfile.php - Contrato para definir perfiles de colecciones media.
+    Jobs/
+      PerformConversionsJob.php - Job que ejecuta conversions en cola.
+    MediaArtifactCollector.php - Identifica archivos relacionados con media previo.
+    MediaLifecycleCoordinator.php - Coordina limpieza y estados de media.
+    Models/
+      MediaCleanupState.php - Persistencia del estado de limpieza por media.
+    Profiles/
+      AvatarProfile.php - Perfil preconfigurado para coleccion avatar.
+      GalleryProfile.php - Perfil para coleccion de galeria.
+    Services/
+      MediaCleanupScheduler.php - Agenda trabajos de limpieza y conversions.
+      MediaReplacementService.php - Reemplaza media existente, disparando cleanup.
