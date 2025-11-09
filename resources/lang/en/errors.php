@@ -232,4 +232,5 @@ return [
     'loop_detected' => 'Loop detected',
     'not_extended' => 'Not extended',
     'network_authentication_required' => 'Network authentication required',
+    'page_expired' => 'The page has expired. Please refresh and try again.',
 ];

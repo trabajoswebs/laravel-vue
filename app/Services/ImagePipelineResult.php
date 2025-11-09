@@ -7,12 +7,12 @@ namespace App\Services;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Value Object del resultado del pipeline con cleanup automático del temporal.
- * 
- * Representa el resultado del procesamiento de una imagen. Almacena información
- * como la ruta del archivo, dimensiones, tipo MIME, etc. Se encarga de eliminar
- * automáticamente el archivo temporal cuando la instancia es destruida.
- * 
+ * Value Object que representa el resultado del procesamiento de una imagen.
+ *
+ * Almacena información sobre el archivo procesado (ruta, dimensiones, MIME, etc.)
+ * y se encarga de eliminar automáticamente el archivo temporal asociado
+ * cuando la instancia es destruida o cuando se llama explícitamente al método `cleanup()`.
+ *
  * @example
  * $result = $pipeline->process($file);
  * echo $result->width; // 800
@@ -20,8 +20,22 @@ use Illuminate\Support\Facades\Log;
  */
 final class ImagePipelineResult
 {
+    /**
+     * Indica si el archivo temporal ya ha sido limpiado.
+     */
     private bool $cleaned = false;
 
+    /**
+     * Constructor del Value Object.
+     *
+     * @param string $path Ruta del archivo temporal procesado.
+     * @param string $mime Tipo MIME del archivo (e.g., image/jpeg).
+     * @param string $extension Extensión del archivo (e.g., jpg).
+     * @param int $width Ancho de la imagen en píxeles.
+     * @param int $height Alto de la imagen en píxeles.
+     * @param int $bytes Tamaño del archivo en bytes.
+     * @param string $contentHash Hash SHA1 del contenido del archivo.
+     */
     public function __construct(
         private string $path,        // Ruta del archivo temporal procesado
         private string $mime,        // Tipo MIME del archivo (e.g., image/jpeg)
@@ -32,36 +46,71 @@ final class ImagePipelineResult
         private string $contentHash, // Hash SHA1 del contenido del archivo
     ) {}
 
+    /**
+     * Obtiene la ruta del archivo temporal procesado.
+     *
+     * @return string Ruta del archivo.
+     */
     public function path(): string
     {
         return $this->path;
     }
 
+    /**
+     * Obtiene el tipo MIME del archivo procesado.
+     *
+     * @return string Tipo MIME (e.g., image/jpeg).
+     */
     public function mime(): string
     {
         return $this->mime;
     }
 
+    /**
+     * Obtiene la extensión del archivo procesado.
+     *
+     * @return string Extensión (e.g., jpg).
+     */
     public function extension(): string
     {
         return $this->extension;
     }
 
+    /**
+     * Obtiene el ancho de la imagen en píxeles.
+     *
+     * @return int Ancho de la imagen.
+     */
     public function width(): int
     {
         return $this->width;
     }
 
+    /**
+     * Obtiene el alto de la imagen en píxeles.
+     *
+     * @return int Alto de la imagen.
+     */
     public function height(): int
     {
         return $this->height;
     }
 
+    /**
+     * Obtiene el tamaño del archivo en bytes.
+     *
+     * @return int Tamaño del archivo.
+     */
     public function bytes(): int
     {
         return $this->bytes;
     }
 
+    /**
+     * Obtiene el hash SHA1 del contenido del archivo.
+     *
+     * @return string Hash SHA1 del contenido.
+     */
     public function contentHash(): string
     {
         return $this->contentHash;
@@ -69,6 +118,8 @@ final class ImagePipelineResult
 
     /**
      * Indica si el archivo temporal ya fue limpiado.
+     *
+     * @return bool `true` si el archivo fue limpiado, `false` en caso contrario.
      */
     public function isCleaned(): bool
     {
@@ -77,8 +128,11 @@ final class ImagePipelineResult
 
     /**
      * Elimina manualmente el archivo temporal asociado a este resultado.
-     * 
-     * Si la operación falla, registra un mensaje de aviso.
+     *
+     * Si el archivo ya fue limpiado previamente o no se encuentra en un directorio
+     * temporal seguro, la operación se omite. Si falla al eliminarlo, registra un mensaje de aviso.
+     *
+     * @return void
      */
     public function cleanup(): void
     {
@@ -105,6 +159,11 @@ final class ImagePipelineResult
 
     /**
      * Destructor: intenta limpiar el archivo temporal si sigue existiendo.
+     *
+     * Este método se llama automáticamente cuando la instancia deja de tener referencias.
+     * Registra un mensaje de depuración si ocurre una excepción durante la limpieza.
+     *
+     * @return void
      */
     public function __destruct()
     {
@@ -117,6 +176,15 @@ final class ImagePipelineResult
         }
     }
 
+    /**
+     * Verifica si la ruta del archivo es segura para ser eliminada.
+     *
+     * Comprueba que la ruta sea un archivo regular, esté dentro del directorio
+     * temporal del sistema y sea escribible. Esto previene la eliminación accidental
+     * de archivos importantes fuera del directorio temporal.
+     *
+     * @return bool `true` si la ruta es segura para eliminar, `false` en caso contrario.
+     */
     private function isPathDeletable(): bool
     {
         if (!\is_string($this->path) || $this->path === '') {

@@ -11,3 +11,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     imagemagick libmagickwand-dev \
     php8.4-exif php8.4-gd php8.4-imagick \
     && rm -rf /var/lib/apt/lists/*
+
+COPY docker/8.4/nginx/default.conf /etc/nginx/conf.d/default.conf

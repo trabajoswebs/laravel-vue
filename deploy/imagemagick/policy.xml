@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policymap SYSTEM "../../share/doc/ImageMagick-6/www/policy.xml">
+<policymap>
+  <!-- Deshabilita formatos vectoriales con intérpretes complejos -->
+  <policy domain="coder" rights="none" pattern="PS" />
+  <policy domain="coder" rights="none" pattern="PS2" />
+  <policy domain="coder" rights="none" pattern="PS3" />
+  <policy domain="coder" rights="none" pattern="PDF" />
+  <policy domain="coder" rights="none" pattern="XPS" />
+  <policy domain="coder" rights="none" pattern="EPS" />
+  <policy domain="coder" rights="none" pattern="EPI" />
+  <policy domain="coder" rights="none" pattern="EPS2" />
+  <policy domain="coder" rights="none" pattern="EPS3" />
+  <policy domain="coder" rights="none" pattern="EPSF" />
+  <policy domain="coder" rights="none" pattern="EPDF" />
+  <policy domain="coder" rights="none" pattern="SVG" />
+  <policy domain="coder" rights="none" pattern="MVG" />
+  <policy domain="coder" rights="none" pattern="MSL" />
+  <policy domain="coder" rights="none" pattern="MSVG" />
+  <policy domain="coder" rights="none" pattern="WMF" />
+  <policy domain="coder" rights="none" pattern="WPG" />
+  <policy domain="coder" rights="none" pattern="CGM" />
+
+  <!-- Previene fuga de datos vía delegates -->
+  <policy domain="path" rights="none" pattern="@*" />
+  <policy domain="path" rights="none" pattern="[\@]*" />
+
+  <!-- Límite defensivo: bloquea “URL coders” -->
+  <policy domain="coder" rights="none" pattern="URL" />
+  <policy domain="coder" rights="none" pattern="HTTPS" />
+  <policy domain="coder" rights="none" pattern="HTTP" />
+
+  <!-- Evita ejecución de perfiles peligrosos -->
+  <policy domain="resource" name="temporary-path" value="/tmp" />
+  <policy domain="resource" name="memory" value="256MiB" />
+  <policy domain="resource" name="map" value="512MiB" />
+  <policy domain="resource" name="thread" value="2" />
+  <policy domain="resource" name="disk" value="1GiB" />
+</policymap>

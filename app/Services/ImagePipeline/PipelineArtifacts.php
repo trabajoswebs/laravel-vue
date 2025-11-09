@@ -72,14 +72,22 @@ final class PipelineArtifacts
      */
     public function computeContentHash(string $tempPath): string
     {
-        $hash = @\hash_file('sha1', $tempPath);
+        $attempts = 0;
+        while ($attempts < 2) {
+            $hash = @\hash_file('sha1', $tempPath);
+            if (\is_string($hash) && $hash !== '') {
+                return $hash;
+            }
 
-        if (!\is_string($hash) || $hash === '') {
-            // Genera un hash aleatorio como fallback si no se puede leer el archivo
-            return \bin2hex(\random_bytes(8));
+            \clearstatcache(true, $tempPath);
+            $attempts++;
         }
 
-        return $hash;
+        $this->logger->log('error', 'image_pipeline_hash_failed', [
+            'path' => \basename($tempPath),
+        ]);
+
+        throw new RuntimeException(__('image-pipeline.content_hash_failed'));
     }
 
     /**

@@ -48,10 +48,5 @@
     "request_timeout": "La solicitud ha expirado. Por favor, intenta nuevamente.",
     "internal_server_error": "Error interno del servidor. Por favor, contacta al administrador.",
     "service_unavailable": "Servicio no disponible. Por favor, vuelve más tarde.",
-    "gateway_timeout": "Tiempo de espera agotado. Por favor, intenta nuevamente.",
-    "Avatar actualizado correctamente.": "Avatar actualizado correctamente.",
-    "No se pudo actualizar el avatar. Inténtalo de nuevo.": "No se pudo actualizar el avatar. Inténtalo de nuevo.",
-    "Avatar eliminado correctamente.": "Avatar eliminado correctamente.",
-    "No había avatar para eliminar (operación idempotente).": "No había avatar para eliminar (operación idempotente).",
-    "No se pudo eliminar el avatar. Inténtalo de nuevo.": "No se pudo eliminar el avatar. Inténtalo de nuevo."
+    "gateway_timeout": "Tiempo de espera agotado. Por favor, intenta nuevamente."
 }

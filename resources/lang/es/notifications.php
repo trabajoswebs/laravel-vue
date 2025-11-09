@@ -4,90 +4,112 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Notification Language Lines
+    | Líneas de Idioma para Notificaciones
     |--------------------------------------------------------------------------
     |
-    | The following language lines are used for various notifications that
-    | we need to display to the user. You are free to modify these language
-    | lines according to your application's requirements.
+    | Notificaciones con un tono cercano y natural para el usuario
     |
     */
 
     'welcome' => [
-        'title' => '¡Bienvenido a :app_name!',
-        'message' => 'Gracias por unirte. Estamos encantados de acompañarte en la gestión de tu negocio.',
-        'action' => 'Empezar ahora',
+        'title' => '¡Te damos la bienvenida a :app_name!',
+        'message' => 'Estamos encantados de que te unas. Todo está listo para que empieces a gestionar tu negocio.',
+        'action' => 'Comenzar',
     ],
 
     'password_reset' => [
-        'title' => 'Solicitud de restablecimiento de contraseña',
-        'message' => 'Hemos recibido una petición para restablecer la contraseña de tu cuenta.',
-        'action' => 'Restablecer contraseña',
-        'warning' => 'Si no lo has pedido tú, ignora este correo y tu contraseña seguirá siendo la misma.',
+        'title' => '¿Has olvidado tu contraseña?',
+        'message' => 'Hemos recibido una solicitud para cambiar la contraseña de tu cuenta.',
+        'action' => 'Crear nueva contraseña',
+        'warning' => 'Si no has sido tú quien lo ha pedido, no te preocupes, puedes ignorar este mensaje.',
     ],
 
     'email_verification' => [
-        'title' => 'Verifica tu correo electrónico',
-        'message' => 'Solo falta confirmar tu dirección de correo para activar la cuenta.',
-        'action' => 'Verificar correo',
-        'warning' => 'Si no has creado una cuenta, puedes ignorar este mensaje.',
+        'title' => 'Confirma tu correo electrónico',
+        'message' => 'Solo nos falta verificar tu dirección de correo para activar tu cuenta.',
+        'action' => 'Confirmar correo',
+        'warning' => 'Si no has creado esta cuenta, puedes borrar este mensaje sin problema.',
     ],
 
     'account_created' => [
-        'title' => 'Cuenta creada',
-        'message' => 'Tu cuenta en :app_name ya está lista.',
-        'action' => 'Completar configuración',
+        'title' => '¡Cuenta lista!',
+        'message' => 'Tu cuenta en :app_name ya está creada y preparada para usar.',
+        'action' => 'Configurar cuenta',
     ],
 
     'login_alert' => [
-        'title' => 'Nuevo inicio de sesión',
-        'message' => 'Tu cuenta se ha usado para iniciar sesión desde :location con :device.',
-        'action' => 'Ver actividad',
-        'warning' => 'Si no reconoces el acceso, cambia la contraseña y revisa tu seguridad.',
+        'title' => 'Nuevo acceso a tu cuenta',
+        'message' => 'Alguien ha iniciado sesión en tu cuenta desde :location usando :device.',
+        'action' => 'Revisar actividad',
+        'warning' => 'Si no has sido tú, te recomendamos cambiar tu contraseña cuanto antes.',
     ],
 
     'security_alert' => [
-        'title' => 'Aviso de seguridad',
-        'message' => 'Hemos detectado actividad poco habitual en tu cuenta. Revísala y actúa si hace falta.',
-        'action' => 'Revisar actividad',
-        'warning' => 'Mensaje automático de seguridad.',
+        'title' => 'Actividad inusual detectada',
+        'message' => 'Hemos visto movimientos extraños en tu cuenta. Échale un vistazo por si hay algo raro.',
+        'action' => 'Comprobar seguridad',
+        'warning' => 'Es un aviso automático de nuestro sistema de protección.',
     ],
 
     'profile_updated' => [
-        'title' => 'Perfil Actualizado',
-        'message' => 'Ya hemos guardado los cambios en tu perfil.',
-        'action' => 'Ver perfil',
+        'title' => 'Perfil actualizado',
+        'message' => 'Los cambios en tu perfil se han guardado correctamente.',
+        'action' => 'Ver mi perfil',
     ],
 
     'settings_updated' => [
-        'title' => 'Ajustes actualizados',
-        'message' => 'Hemos guardado la nueva configuración de tu cuenta.',
+        'title' => 'Ajustes guardados',
+        'message' => 'Hemos actualizado la configuración de tu cuenta con los nuevos cambios.',
         'action' => 'Ver ajustes',
     ],
 
     'two_factor_enabled' => [
-        'title' => 'Autenticación en dos pasos activada',
-        'message' => 'Tu cuenta ya tiene activada la autenticación en dos pasos.',
-        'action' => 'Gestionar 2FA',
+        'title' => 'Verificación en dos pasos activada',
+        'message' => 'Ya tienes activada la verificación en dos pasos. Tu cuenta está más protegida.',
+        'action' => 'Gestionar verificación',
     ],
 
     'two_factor_disabled' => [
-        'title' => 'Autenticación en dos pasos desactivada',
-        'message' => 'Has desactivado la autenticación en dos pasos para tu cuenta.',
-        'action' => 'Activar 2FA',
+        'title' => 'Verificación en dos pasos desactivada',
+        'message' => 'Has desactivado la verificación en dos pasos de tu cuenta.',
+        'action' => 'Activar verificación',
     ],
 
     'account_locked' => [
-        'title' => 'Cuenta bloqueada temporalmente',
-        'message' => 'Hemos bloqueado la cuenta tras varios intentos fallidos de acceso.',
-        'action' => 'Desbloquear cuenta',
-        'warning' => 'Es una medida preventiva para protegerte.',
+        'title' => 'Cuenta bloqueada por seguridad',
+        'message' => 'Hemos bloqueado temporalmente tu cuenta después de varios intentos fallidos de acceso.',
+        'action' => 'Recuperar cuenta',
+        'warning' => 'Es una medida de protección automática para mantener tu cuenta segura.',
     ],
 
     'account_unlocked' => [
-        'title' => 'Cuenta desbloqueada',
-        'message' => 'Tu cuenta vuelve a estar disponible. Ya puedes iniciar sesión.',
-        'action' => 'Iniciar sesión',
+        'title' => 'Cuenta recuperada',
+        'message' => 'Tu cuenta ya está desbloqueada y puedes volver a acceder con normalidad.',
+        'action' => 'Entrar ahora',
+    ],
+
+    'payment_received' => [
+        'title' => 'Pago confirmado',
+        'message' => 'Hemos recibido tu pago correctamente. ¡Gracias!',
+        'action' => 'Ver detalles',
+    ],
+
+    'trial_ending' => [
+        'title' => 'Tu periodo de prueba termina pronto',
+        'message' => 'Tu prueba gratuita finaliza en :days días. ¿Quieres continuar?',
+        'action' => 'Elegir plan',
+    ],
+
+    'new_message' => [
+        'title' => 'Tienes un nuevo mensaje',
+        'message' => 'Has recibido un mensaje de :sender',
+        'action' => 'Leer mensaje',
+    ],
+
+    'task_reminder' => [
+        'title' => 'Recordatorio de tarea',
+        'message' => 'Tienes una tarea pendiente: ":task"',
+        'action' => 'Ver tarea',
     ],
 
 ];

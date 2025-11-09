@@ -683,28 +683,53 @@ abstract class AbstractScanner
             return null;
         }
 
-        $path = tempnam(sys_get_temp_dir(), $prefix);
-        if ($path === false) {
+        $directory = rtrim((string) sys_get_temp_dir(), DIRECTORY_SEPARATOR);
+        if ($directory === '') {
             return null;
         }
 
-        if (! unlink($path)) {
+        $handle = null;
+        $path = null;
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            try {
+                $name = $prefix . bin2hex(random_bytes(16));
+            } catch (Throwable $exception) {
+                Log::error(
+                    sprintf('image_scan.%s_temp_random_failed', $this->scannerKey()),
+                    ['error' => $exception->getMessage()]
+                );
+                return null;
+            }
+
+            $candidate = $directory . DIRECTORY_SEPARATOR . $name;
+            $handle = @fopen($candidate, 'xb');
+            if ($handle !== false) {
+                $path = $candidate;
+                break;
+            }
+        }
+
+        if (! is_resource($handle) || $path === null) {
+            Log::error(sprintf('image_scan.%s_temp_open_failed', $this->scannerKey()));
             return null;
         }
 
-        $handle = fopen($path, 'xb'); // 'x' crea el archivo exclusivamente, 'b' lo abre en modo binario.
-        if ($handle === false) {
-            return null;
+        $copySucceeded = false;
+        try {
+            $copySucceeded = stream_copy_to_stream($input, $handle) !== false;
+        } finally {
+            if (fclose($handle) === false) {
+                Log::error(sprintf('image_scan.%s_temp_close_failed', $this->scannerKey()));
+                $copySucceeded = false;
+            }
+
+            if (! $copySucceeded && $path !== null) {
+                @unlink($path);
+            }
         }
 
-        if (stream_copy_to_stream($input, $handle) === false) {
-            fclose($handle);
-            unlink($path);
-            return null;
-        }
-
-        if (fclose($handle) === false) {
-            unlink($path);
+        if (! $copySucceeded) {
             return null;
         }
 

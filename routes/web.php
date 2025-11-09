@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\LanguageController;
+use App\Http\Controllers\Media\ShowAvatar;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
@@ -11,6 +12,11 @@ Route::get('/', function () {
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::get('media/avatar/{media}', ShowAvatar::class)
+    ->middleware(['signed', 'throttle:60,1']) // firma + rate limit
+    ->name('media.avatar.show')
+    ->whereNumber('media');
 
 if (app()->environment('local')) {
     Route::get('test-flash-event', function () {

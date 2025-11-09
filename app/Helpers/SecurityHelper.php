@@ -1,13 +1,29 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Helpers;
 
-use Illuminate\Support\Facades\Log;
 use HTMLPurifier;
 use HTMLPurifier_Config;
+use Illuminate\Support\Facades\Log;
 
-class SecurityHelper
+/**
+ * Conjunto de métodos utilitarios para sanitizar, validar y proteger datos.
+ *
+ * Esta clase centraliza las operaciones de seguridad comunes, como la limpieza de
+ * entradas de usuario, la validación de formatos (email, nombre, etc.), la
+ * sanitización de HTML, la prevención de divulgación de información sensible
+ * en logs, y la validación de URLs. Utiliza bibliotecas como HTMLPurifier
+ * para la limpieza de HTML y constantes para definir límites de seguridad.
+ * Todos los métodos son estáticos para un acceso directo y sin necesidad de instanciar.
+ */
+final class SecurityHelper
 {
+    private function __construct()
+    {
+    }
+
     // Configuración de límites de seguridad
     private const MAX_INPUT_LENGTH = 10000;
     private const MAX_NAME_LENGTH = 100;
@@ -17,6 +33,23 @@ class SecurityHelper
 
     /** @var array<string, HTMLPurifier> */
     private static array $purifierCache = [];
+
+    // Patrones reutilizables
+    private const INVISIBLE_CHARS_REGEX = '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u';
+    private const USERNAME_REGEX = '/^[\p{L}\p{M}\p{Zs}\-\.\']+$/u';
+    private const LOCALE_REGEX = '/^[a-z]{2}(-[a-z]{2})?$/';
+    private const SANITIZE_PATH_SEGMENT = '/^[\p{L}\p{N}\-_\.]+$/u';
+    private const ON_EVENT_ATTRS_REGEX = '/\s*on\w+\s*=\s*(?:"(?:[^"]*)"|\'(?:[^\']*)\'|[^>\s]+)/i';
+    private const SCRIPT_TAG_REGEX = '/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi';
+    private const IFRAME_TAG_REGEX = '/<iframe\b[^>]*>(.*?)<\/iframe>/mi';
+    private const TOKEN_ALLOWED_REGEX = '/[^a-zA-Z0-9\-_\.]/';
+    private const EMAIL_BAD_CHARS_REGEX = '/[<>"\'\\\\]/';
+    private const PATH_LEAK_REGEX = '/\/[a-zA-Z0-9_\-\/\.]+\.(php|js|css|html)/';
+    private const IPV4_REGEX = '/\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/';
+    private const IPV6_REGEX = '/\b(?:[a-f0-9]{1,4}:){1,7}(?:[a-f0-9]{1,4}|:)\b/i';
+    private const EMAIL_LEAK_REGEX = '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i';
+    private const CRLF_REGEX = '/(?:\r|\n|%0d|%0a)/i';
+    private const MAX_URL_LENGTH = 4096;
 
     // Patrones de contenido sensible
     private const SENSITIVE_PATTERNS = [
@@ -33,11 +66,32 @@ class SecurityHelper
         '/postgresql/i',
     ];
 
+    /** @var string[] */
+    private const MALICIOUS_PATTERNS = [
+        self::SCRIPT_TAG_REGEX,
+        '/\bjavascript:/i',
+        '/\bvbscript:/i',
+        '/\bon\w+\s*=/i',
+        '/<iframe\b/i',
+        '/<object\b/i',
+        '/<embed\b/i',
+        '/<applet\b/i',
+        '/expression\s*\(/i',
+        '/import\s+["\']javascript:/i',
+        '/\bsrcdoc\s*=/i',
+        '/\bdata:\s*(?:text\/html|image\/svg\+xml|application\/(?:x-)?javascript)/i',
+    ];
+
     /**
-     * Crear y configurar instancia de HTMLPurifier usando configuración de config/htmlpurifier.php
+     * Obtiene o crea una instancia de HTMLPurifier configurada según un perfil.
      *
-     * @param string $profile Perfil de configuración a usar (default, strict, permissive, translations)
-     * @return HTMLPurifier Instancia configurada
+     * Este método implementa un patrón de caché simple para reutilizar instancias
+     * de HTMLPurifier, lo que mejora el rendimiento al evitar recrear la
+     * configuración en cada llamada.
+     *
+     * @param string $profile Perfil de configuración de HTMLPurifier (e.g., 'default', 'strict', 'translations').
+     *                        Si el perfil no existe, se usa 'default'.
+     * @return HTMLPurifier Instancia configurada de HTMLPurifier.
      */
     private static function getHtmlPurifier(string $profile = 'default'): HTMLPurifier
     {
@@ -70,23 +124,33 @@ class SecurityHelper
         return self::$purifierCache[$profile] = $purifier; // Cachea instancia por perfil
     }
 
-
-    
+    /**
+     * Limpia el caché interno de instancias de HTMLPurifier.
+     *
+     * Útil en pruebas o cuando se ajusta la configuración en tiempo de ejecución.
+     */
+    public static function resetPurifierCache(): void
+    {
+        self::$purifierCache = [];
+    }
 
     /**
-     * Sanitiza contenido HTML usando HTMLPurifier
+     * Sanitiza contenido HTML usando HTMLPurifier.
      *
-     * @param string $content Contenido HTML
-     * @param string $config Configuración opcional
-     * @return string HTML limpio
+     * Este método limpia el HTML de entradas potencialmente peligrosas
+     * (scripts, iframes, etc.) según la configuración del perfil especificado.
+     *
+     * @param string|null $content Contenido HTML a limpiar.
+     * @param string $config (Opcional) Nombre del perfil de configuración de HTMLPurifier.
+     * @return string HTML limpio y seguro para mostrar.
      */
-    public static function sanitizeHtml(string $content, string $config = 'default'): string
+    public static function sanitizeHtml(?string $content, string $config = 'default'): string
     {
-        try {
-            if (empty($content)) {
-                return ''; // Ej: "" si $content = ""
-            }
+        if ($content === null || $content === '') {
+            return '';
+        }
 
+        try {
             $purifier = self::getHtmlPurifier($config); // Ej: HTMLPurifier listo
             return $purifier->purify($content); // Ej: "<script>x</script>" => ""
         } catch (\Exception $e) {
@@ -101,57 +165,80 @@ class SecurityHelper
     }
 
     /**
-     * Sanitiza entrada de usuario para texto plano
+     * Sanitiza entrada de usuario para texto plano.
      *
-     * @param string $input Texto del usuario
-     * @return string Texto limpio
+     * Limpia cadenas de texto de caracteres peligrosos o invisibles,
+     * y aplica codificación HTML para prevenir XSS en contextos de texto plano.
+     * Trunca la entrada si excede el límite definido.
+     *
+     * @param string|null $input Texto del usuario a limpiar.
+     * @return string Texto limpio y seguro.
      */
-    public static function sanitizeUserInput(string $input): string
+    public static function sanitizeUserInput(?string $input): string
     {
         if ($input === null || $input === '') {
             return ''; // Ej: "" si input vacío
         }
 
         $input = trim($input); // Ej: " hola " => "hola"
-        $input = html_entity_decode($input, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); // Evita doble escapado
-        $sanitized = htmlspecialchars($input, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); // Ej: "<b>" => "&lt;b&gt;"
-        $sanitized = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $sanitized); // Ej: elimina caracteres invisibles
-        return mb_substr($sanitized, 0, self::MAX_INPUT_LENGTH); // Ej: corta a 10000 caracteres
+        if ($input === '') {
+            return '';
+        }
+
+        $input = self::normalizeUnicode($input);
+        $decoded = html_entity_decode($input, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); // Evita doble escapado
+        $escaped = htmlspecialchars($decoded, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); // Ej: "<b>" => "&lt;b&gt;"
+        $sanitized = preg_replace(self::INVISIBLE_CHARS_REGEX, '', $escaped) ?? '';
+
+        return mb_substr($sanitized, 0, self::MAX_INPUT_LENGTH, 'UTF-8'); // Ej: corta a 10000 caracteres
     }
 
     /**
      * Sanitiza texto plano preservando caracteres comunes (&, tildes, etc.).
      *
-     * @param string $input Texto del usuario
-     * @return string Texto limpio para persistencia
+     * Similar a `sanitizeUserInput`, pero elimina también etiquetas HTML.
+     * Útil para textos que deben ser almacenados como texto plano sin formato.
+     *
+     * @param string|null $input Texto del usuario a limpiar.
+     * @return string Texto limpio y seguro para persistencia.
      */
-    public static function sanitizePlainText(string $input): string
+    public static function sanitizePlainText(?string $input): string
     {
         if ($input === null || $input === '') {
             return '';
         }
 
-        $decoded = html_entity_decode(trim($input), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $input = trim($input);
+        if ($input === '') {
+            return '';
+        }
+
+        $input = self::normalizeUnicode($input);
+        $decoded = html_entity_decode($input, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $stripped = strip_tags($decoded);
-        $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $stripped);
-        return mb_substr($clean, 0, self::MAX_INPUT_LENGTH);
+        $clean = preg_replace(self::INVISIBLE_CHARS_REGEX, '', $stripped) ?? '';
+
+        return mb_substr($clean, 0, self::MAX_INPUT_LENGTH, 'UTF-8');
     }
 
     /**
-     * Sanitiza contenido para salida segura (previene XSS)
+     * Sanitiza contenido para salida segura (previene XSS).
      *
-     * @param string $output HTML potencialmente inseguro
-     * @return string HTML seguro
+     * Realiza una limpieza preliminar de elementos HTML comunes y peligrosos,
+     * y luego aplica `HTMLPurifier` para un filtrado más robusto.
+     *
+     * @param string|null $output HTML potencialmente inseguro.
+     * @return string HTML seguro para mostrar al usuario.
      */
-    public static function sanitizeOutput(string $output): string
+    public static function sanitizeOutput(?string $output): string
     {
-        if ($output === '') {
+        if ($output === null || $output === '') {
             return ''; // Ej: "" si output vacío
         }
 
-        $clean = preg_replace('/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi', '', $output); // Ej: "<script>1</script>" => ""
-        $clean = preg_replace('/<iframe\b[^>]*>(.*?)<\/iframe>/mi', '', $clean); // Ej: "<iframe src='evil'></iframe>" => ""
-        $clean = preg_replace('/\s*on\w+\s*=\s*(?:"(?:[^"]*)"|\'(?:[^\']*)\'|[^>\s]+)/i', '', $clean); // Ej: "<a onclick='x'>" => "<a>"
+        $clean = preg_replace(self::SCRIPT_TAG_REGEX, '', $output) ?? '';
+        $clean = preg_replace(self::IFRAME_TAG_REGEX, '', $clean) ?? '';
+        $clean = preg_replace(self::ON_EVENT_ATTRS_REGEX, '', $clean) ?? '';
 
         try {
             $purifier = self::getHtmlPurifier('default'); // Ej: crea purificador
@@ -168,10 +255,13 @@ class SecurityHelper
     }
 
     /**
-     * Sanitiza array de datos para JSON
+     * Sanitiza array de datos para JSON.
      *
-     * @param array $data Datos de entrada
-     * @return array Datos sanitizados
+     * Recursivamente limpia todos los valores de tipo string dentro de un array,
+     * ideal para preparar datos que se enviarán como respuesta JSON.
+     *
+     * @param array $data Array de datos de entrada.
+     * @return array Array con valores de string sanitizados.
      */
     public static function sanitizeForJson(array $data): array
     {
@@ -180,25 +270,28 @@ class SecurityHelper
                 return self::sanitizePlainText($value);
             }
             if (is_array($value)) {
-                return self::sanitizeForJson($value); // Ej: ["<b>hola</b>"] => ["&lt;b&gt;hola&lt;/b&gt;"]
+                return self::sanitizeForJson($value); // Ej: ["<b>hola</b>"] => ["<b>hola</b>"]
             }
             return $value; // Ej: 123 => 123
         }, $data);
     }
 
     /**
-     * Sanitiza contenido específico para traducciones
+     * Sanitiza contenido específico para traducciones.
      *
-     * @param string $content Texto traducible
-     * @return string Texto limpio
+     * Utiliza un perfil específico de `HTMLPurifier` (esperado como un servicio de Laravel)
+     * para limpiar textos traducibles, permitiendo un control más fino sobre el HTML permitido.
+     *
+     * @param string|null $content Texto traducible a limpiar.
+     * @return string Texto limpio.
      */
-    public static function sanitizeTranslationContent(string $content): string
+    public static function sanitizeTranslationContent(?string $content): string
     {
-        try {
-            if (empty($content)) {
-                return ''; // Ej: "" si $content vacío
-            }
+        if ($content === null || $content === '') {
+            return '';
+        }
 
+        try {
             $purifier = app('htmlpurifier.translations'); // Ej: instancia configurada para traducciones
             return $purifier->purify($content); // Ej: "<script>x</script>" => ""
         } catch (\Exception $e) {
@@ -212,199 +305,268 @@ class SecurityHelper
     }
 
     /**
-     * Sanitiza nombre de usuario (más estricto)
+     * Sanitiza nombre de usuario (más estricto).
      *
-     * @param string $name Nombre a validar
-     * @return string Nombre seguro
+     * Valida que el nombre contenga solo caracteres alfabéticos, espacios, guiones y apóstrofos.
+     * Lanza una excepción si el nombre no cumple con los criterios.
+     *
+     * @param string|null $name Nombre a validar y limpiar.
+     * @return string Nombre seguro y formateado.
+     * @throws \InvalidArgumentException Si el nombre es inválido.
      */
-    public static function sanitizeUserName(string $name): string
+    public static function sanitizeUserName(?string $name): string
     {
-        if (empty($name)) {
+        if ($name === null || $name === '') {
             return ''; // Ej: "" si name vacío
         }
 
-        $name = mb_substr(trim($name), 0, self::MAX_NAME_LENGTH); // Ej: "   Juan   " => "Juan"
+        $name = mb_substr(trim($name), 0, self::MAX_NAME_LENGTH, 'UTF-8'); // Ej: "   Juan   " => "Juan"
 
-        if (!preg_match('/^[\p{L}\p{M}\p{Zs}\-\.\']+$/u', $name)) {
+        if (!preg_match(self::USERNAME_REGEX, $name)) {
             throw new \InvalidArgumentException('Nombre contiene caracteres no válidos'); // Ej: "Juan123" => excepción
         }
 
-        return preg_replace('/\s+/', ' ', $name); // Ej: "Juan   Pérez" => "Juan Pérez"
+        return preg_replace('/\s+/', ' ', $name) ?? $name; // Ej: "Juan   Pérez" => "Juan Pérez"
     }
 
     /**
-     * Sanitiza email (validación básica adicional)
+     * Sanitiza email (validación básica adicional).
      *
-     * @param string $email Correo a validar
-     * @return string Email válido
+     * Valida el formato del email usando `filter_var` y verifica que no contenga
+     * caracteres peligrosos. Lanza una excepción si el email no es válido.
+     *
+     * @param string $email Correo a validar y limpiar.
+     * @return string Email válido y seguro.
+     * @throws \InvalidArgumentException Si el email es inválido.
      */
     public static function sanitizeEmail(string $email): string
     {
-        if (empty($email)) {
+        $email = trim($email);
+        if ($email === '') {
             throw new \InvalidArgumentException('Email no puede estar vacío'); // Ej: "" => excepción
         }
-
-        $email = trim(strtolower($email)); // Ej: " TEST@MAIL.COM " => "test@mail.com"
 
         if (mb_strlen($email, 'UTF-8') > self::MAX_EMAIL_LENGTH) {
             throw new \InvalidArgumentException('Email demasiado largo'); // Ej: 300 chars => excepción
         }
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new \InvalidArgumentException('Formato de email inválido'); // Ej: "pepe@" => excepción
-        }
-
-        if (preg_match('/[<>"\'\\\]/', $email)) {
+        if (preg_match(self::EMAIL_BAD_CHARS_REGEX, $email)) {
             throw new \InvalidArgumentException('Email contiene caracteres no válidos'); // Ej: "pepe<@mail.com"
         }
 
-        return $email; // Ej: "pepe@mail.com"
+        if (!str_contains($email, '@')) {
+            throw new \InvalidArgumentException('Formato de email inválido'); // Ej: "pepe@" => excepción
+        }
+
+        [$local, $domain] = explode('@', $email, 2);
+        if ($local === '' || $domain === '') {
+            throw new \InvalidArgumentException('Formato de email inválido');
+        }
+
+        $domain = mb_strtolower($domain, 'UTF-8'); // Solo normaliza dominio
+
+        if (function_exists('idn_to_ascii') && preg_match('/[^\x20-\x7f]/u', $domain)) {
+            $asciiDomain = idn_to_ascii($domain, IDNA_DEFAULT);
+            if ($asciiDomain === false) {
+                throw new \InvalidArgumentException('Formato de email inválido');
+            }
+            $domain = $asciiDomain;
+        }
+
+        $normalizedEmail = $local . '@' . $domain;
+
+        if (strlen($normalizedEmail) > self::MAX_EMAIL_LENGTH) {
+            throw new \InvalidArgumentException('Email demasiado largo');
+        }
+
+        if (!filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL)) {
+            throw new \InvalidArgumentException('Formato de email inválido'); // Ej: "pepe@" => excepción
+        }
+
+        return $normalizedEmail; // Ej: "pepe@mail.com"
     }
 
     /**
-     * Sanitiza mensajes de error para mostrar al usuario
+     * Sanitiza mensajes de error para mostrar al usuario.
      *
-     * @param string $message Mensaje crudo
-     * @return string Mensaje limpio
+     * Limpia el mensaje de errores de código HTML, lo trunca si es muy largo,
+     * y reemplaza patrones sensibles (como contraseñas, claves) por `[REDACTED]`.
+     *
+     * @param string|null $message Mensaje de error crudo.
+     * @return string Mensaje de error limpio y seguro para mostrar.
      */
-    public static function sanitizeErrorMessage(string $message): string
+    public static function sanitizeErrorMessage(?string $message): string
     {
-        if (empty($message)) {
+        if ($message === null || $message === '') {
             return ''; // Ej: "" si vacío
         }
 
-        $sanitized = self::sanitizeUserInput($message); // Ej: "<b>Error</b>" => "&lt;b&gt;Error&lt;/b&gt;"
+        $sanitized = self::sanitizeUserInput($message); // Ej: "<b>Error</b>" => "<b>Error</b>"
         $sanitized = mb_substr($sanitized, 0, self::MAX_ERROR_MESSAGE_LENGTH, 'UTF-8'); // Ej: corta a 500 chars
 
         foreach (self::SENSITIVE_PATTERNS as $pattern) {
-            $sanitized = preg_replace($pattern, '[REDACTED]', $sanitized); // Ej: "password=123" => "[REDACTED]"
+            $sanitized = preg_replace($pattern, '[REDACTED]', $sanitized, -1) ?? $sanitized; // Evita null por regex inválido
         }
 
-        $sanitized = preg_replace('/\/[a-zA-Z0-9_\-\/\.]+\.(php|js|css|html)/', '[PATH]', $sanitized); // Ej: "/var/www/app.php" => "[PATH]"
-        $sanitized = preg_replace('/\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/', '[IP]', $sanitized); // Ej: "192.168.1.1" => "[IP]"
+        $sanitized = preg_replace(self::PATH_LEAK_REGEX, '[PATH]', $sanitized) ?? $sanitized; // Ej: "/var/www/app.php" => "[PATH]"
+        $sanitized = preg_replace(self::IPV4_REGEX, '[IP]', $sanitized) ?? $sanitized; // Ej: "192.168.1.1" => "[IP]"
+        $sanitized = preg_replace(self::IPV6_REGEX, '[IP]', $sanitized) ?? $sanitized; // Ej: "[2001:db8::1]" => "[IP]"
+        $sanitized = preg_replace(self::EMAIL_LEAK_REGEX, '[EMAIL]', $sanitized) ?? $sanitized; // Ej: "user@mail.com" => "[EMAIL]"
 
         return $sanitized;
     }
 
     /**
-     * Valida y sanitiza locale
+     * Valida y sanitiza locale.
      *
-     * @param string $locale Cadena de idioma
-     * @return string Locale válido
+     * Asegura que la cadena de idioma sea válida y segura para su uso en la aplicación.
+     * Si no es válida, devuelve el locale por defecto de la aplicación.
+     *
+     * @param string|null $locale Cadena de idioma (e.g., 'es', 'en_US').
+     * @return string Locale válido y seguro.
      */
-    public static function sanitizeLocale(string $locale): string
+    public static function sanitizeLocale(?string $locale): string
     {
-        if (empty($locale)) {
-            return config('app.locale', 'en'); // Ej: "" => "en"
+        $fallback = (string) config('app.locale', 'en');
+
+        if ($locale === null || $locale === '') {
+            return $fallback; // Ej: "" => "en"
         }
 
-        $sanitized = preg_replace('/[^a-zA-Z0-9_\-]/', '', trim($locale)); // Ej: "es_ES!" => "es_ES"
+        $sanitized = preg_replace('/[^a-zA-Z0-9_\-]/', '', trim($locale)) ?? ''; // Ej: "es_ES!" => "es_ES"
 
-        if (empty($sanitized)) {
-            return config('app.locale', 'en'); // Ej: "!@#" => "en"
+        if ($sanitized === '') {
+            return $fallback; // Ej: "!@#" => "en"
         }
 
-        $sanitized = strtolower($sanitized); // Ej: "ES" => "es"
+        $sanitized = mb_strtolower($sanitized, 'UTF-8'); // Ej: "ES" => "es"
         $sanitized = str_replace('_', '-', $sanitized); // Ej: "es_ES" => "es-es"
         $sanitized = mb_substr($sanitized, 0, self::MAX_LOCALE_LENGTH, 'UTF-8'); // Ej: "es-mx-variant" => "es-mx"
 
-        if (!preg_match('/^[a-z]{2}(-[a-z]{2})?$/', $sanitized)) {
-            return config('app.locale', 'en'); // Ej: "zzz" => "en"
+        if (!preg_match(self::LOCALE_REGEX, $sanitized)) {
+            return $fallback; // Ej: "zzz" => "en"
         }
 
         return $sanitized; // Ej: "es-es"
     }
 
     /**
-     * Sanitiza URL para uso en CSP
+     * Sanitiza URL para uso en CSP u otros contextos seguros.
      *
-     * @param string $url URL candidata
-     * @return ?string URL válida o null
+     * Valida que la URL sea absoluta, use un esquema seguro (http/https),
+     * no apunte a direcciones IP privadas/reservadas ni a hosts bloqueados,
+     * y no use puertos no estándar.
+     *
+     * @param string|null $url URL candidata a validar.
+     * @return string|null URL válida y segura, o null si es inválida.
      */
-    public static function sanitizeUrl(string $url): ?string
+    public static function sanitizeUrl(?string $url): ?string
     {
-        $trimmed = trim($url);
-        if ($trimmed === '') {
+        if ($url === null) {
             return null;
         }
 
-        $cleanUrl = filter_var($trimmed, FILTER_SANITIZE_URL);
-        if ($cleanUrl === false || $cleanUrl === '') {
-            return null; // Ej: "htp:/mal" => null
+        $trimmed = trim($url);
+        if ($trimmed === '' || mb_strlen($trimmed, 'UTF-8') > self::MAX_URL_LENGTH) {
+            return null;
         }
 
-        $parsed = parse_url($cleanUrl); // Ej: devuelve ["scheme"=>"https","host"=>"google.com"]
+        if (preg_match(self::CRLF_REGEX, $trimmed)) {
+            return null;
+        }
+
+        $parsed = @parse_url($trimmed);
         if (!$parsed || empty($parsed['scheme']) || empty($parsed['host'])) {
             return null;
         }
 
-        $host = $parsed['host'];
-        $normalizedHost = strtolower(rtrim($host, '.'));
+        $scheme = mb_strtolower((string) $parsed['scheme'], 'UTF-8');
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
 
-        if (function_exists('idn_to_ascii') && preg_match('/[^\x20-\x7f]/u', $host)) {
-            $asciiHost = idn_to_ascii($host, IDNA_DEFAULT);
+        if (!empty($parsed['user']) || !empty($parsed['pass'])) {
+            return null;
+        }
+
+        $host = rtrim((string) $parsed['host'], '.');
+        $normalizedHost = mb_strtolower($host, 'UTF-8');
+        if ($normalizedHost === '') {
+            return null;
+        }
+
+        if (function_exists('idn_to_ascii') && preg_match('/[^\x20-\x7f]/u', $normalizedHost)) {
+            $asciiHost = idn_to_ascii($normalizedHost, IDNA_DEFAULT);
             if ($asciiHost === false) {
                 return null;
             }
 
-            $normalizedHost = strtolower(rtrim($asciiHost, '.'));
+            $normalizedHost = mb_strtolower(rtrim($asciiHost, '.'), 'UTF-8');
         }
 
-        $parsed['host'] = $normalizedHost;
-        $cleanUrl = self::rebuildUrlFromParts($parsed);
-
         $hostForValidation = trim($normalizedHost, '[]');
-
-        $blockedHosts = ['localhost'];
-        if (in_array($hostForValidation, $blockedHosts, true)) {
-            return null; // Ej: "localhost" => null
+        if ($hostForValidation === '' || $hostForValidation === 'localhost') {
+            return null;
         }
 
         if (filter_var($hostForValidation, FILTER_VALIDATE_IP)) {
             if (!filter_var($hostForValidation, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                return null; // Ej: "192.168.1.5" => null
+                return null;
             }
         } else {
             $resolvedIps = self::resolveHostIps($normalizedHost);
-            if (empty($resolvedIps)) {
+            if ($resolvedIps === []) {
                 return null;
             }
 
             foreach ($resolvedIps as $ip) {
                 if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-                    return null; // Ej: "192.168.1.5" => null
+                    return null;
                 }
             }
         }
 
-        $allowedSchemes = ['http', 'https'];
-        if (!in_array(strtolower($parsed['scheme']), $allowedSchemes, true)) {
-            return null; // Ej: "ftp://" => null
+        $allowedPorts = (array) config('security.allowed_ports', [80, 443]);
+        if (isset($parsed['port']) && !in_array((int) $parsed['port'], $allowedPorts, true)) {
+            return null;
         }
 
-        if (isset($parsed['port']) && !in_array((int) $parsed['port'], [80, 443], true)) {
-            return null; // Ej: puerto 8080 => null
+        if (!empty($parsed['path'])) {
+            $segments = array_map('rawurlencode', array_map('urldecode', explode('/', $parsed['path'])));
+            $parsed['path'] = preg_replace('#/+#', '/', implode('/', $segments));
         }
 
-        return $cleanUrl; // Ej: "https://google.com"
+        $parsed['scheme'] = $scheme;
+        $parsed['host'] = $normalizedHost;
+
+        $cleanUrl = self::rebuildUrlFromParts($parsed);
+
+        return $cleanUrl !== '' ? $cleanUrl : null;
     }
 
-
-
-
     /**
-     * Sanitiza rutas de archivo y previene path traversal
+     * Sanitiza rutas de archivo y previene path traversal.
      *
-     * @param string $path Ruta de archivo
-     * @return string Ruta limpia
-     * @throws \InvalidArgumentException Cuando se detectan segmentos no permitidos
+     * Valida que la ruta no contenga segmentos como `..` o `.` que podrían
+     * permitir acceder a directorios fuera de un path permitido.
+     * Lanza una excepción si se detectan segmentos no permitidos.
+     *
+     * @param string|null $path Ruta de archivo a limpiar.
+     * @return string Ruta limpia y segura.
+     * @throws \InvalidArgumentException Cuando se detectan segmentos no permitidos.
      */
-    public static function sanitizeFilePath(string $path): string
+    public static function sanitizeFilePath(?string $path): string
     {
-        if (trim($path) === '') {
+        if ($path === null) {
             return ''; // Ej: "" => ""
         }
 
+        $path = trim($path);
+        if ($path === '') {
+            return '';
+        }
+
+        $path = self::normalizeUnicode($path);
         $normalized = str_replace('\\', '/', $path);
         $normalized = preg_replace('/[^\p{L}\p{N}\-_\.\/]/u', '', $normalized) ?? '';
         $normalized = ltrim($normalized, '/');
@@ -423,7 +585,7 @@ class SecurityHelper
                 throw new \InvalidArgumentException('Ruta contiene segmentos no permitidos');
             }
 
-            if (!preg_match('/^[\p{L}\p{N}\-_\.]+$/u', $segment)) {
+            if (!preg_match(self::SANITIZE_PATH_SEGMENT, $segment)) {
                 throw new \InvalidArgumentException('Segmento de ruta inválido');
             }
 
@@ -434,20 +596,24 @@ class SecurityHelper
     }
 
     /**
-     * Valida y sanitiza tokens o hashes
+     * Valida y sanitiza tokens o hashes.
      *
-     * @param string $token Token a limpiar
-     * @return string Token válido
+     * Limpia el token de caracteres no alfanuméricos ni guiones, puntos o subrayados.
+     * Lanza una excepción si el token es inválido o vacío.
+     *
+     * @param string|null $token Token a limpiar.
+     * @return string Token válido y seguro.
+     * @throws \InvalidArgumentException Si el token es inválido.
      */
-    public static function sanitizeToken(string $token): string
+    public static function sanitizeToken(?string $token): string
     {
-        if (empty($token)) {
+        if ($token === null || $token === '') {
             throw new \InvalidArgumentException('Token no puede estar vacío'); // Ej: "" => excepción
         }
 
-        $sanitized = preg_replace('/[^a-zA-Z0-9\-_\.]/', '', $token); // Ej: "abc$%123" => "abc123"
+        $sanitized = preg_replace(self::TOKEN_ALLOWED_REGEX, '', $token) ?? ''; // Ej: "abc$%123" => "abc123"
 
-        if (empty($sanitized)) {
+        if ($sanitized === '') {
             throw new \InvalidArgumentException('Token contiene caracteres no válidos'); // Ej: "&&&" => excepción
         }
 
@@ -455,17 +621,27 @@ class SecurityHelper
     }
 
     /**
-     * Sanitiza datos antes de loguearlos (oculta información sensible)
+     * Sanitiza datos antes de loguearlos (oculta información sensible).
      *
-     * @param array $data Datos a limpiar
-     * @return array Datos limpios
+     * Reemplaza valores de claves conocidas (como 'password', 'token', etc.)
+     * por `[REDACTED]` para prevenir la divulgación accidental de datos sensibles en los logs.
+     * Trunca cadenas largas.
+     *
+     * @param array $data Array de datos a limpiar para logging.
+     * @return array Array con datos sensibles redactados.
      */
     public static function sanitizeForLogging(array $data): array
     {
         static $configuredSensitive = null;
 
         if ($configuredSensitive === null) {
-            $configuredSensitive = array_map('strtolower', config('audit.sensitive_fields', []));
+            $configuredSensitive = [];
+
+            foreach ((array) config('audit.sensitive_fields', []) as $field) {
+                if (is_string($field) && $field !== '') {
+                    $configuredSensitive[] = strtolower($field);
+                }
+            }
         }
 
         $defaultSensitive = [
@@ -487,42 +663,59 @@ class SecurityHelper
         $sanitized = []; // Ej: resultado final inicializado
 
         foreach ($data as $key => $value) {
-            if (in_array(strtolower($key), $sensitiveKeys, true)) {
+            $lowerKey = is_string($key) ? strtolower($key) : (string) $key;
+
+            if (in_array($lowerKey, $sensitiveKeys, true)) {
                 $sanitized[$key] = '[REDACTED]'; // Ej: "password" => "[REDACTED]"
-            } elseif (is_array($value)) {
+                continue;
+            }
+
+            if (is_array($value)) {
                 $sanitized[$key] = self::sanitizeForLogging($value); // Ej: array anidado => recursivo
-            } elseif (is_string($value)) {
+                continue;
+            }
+
+            if (is_string($value)) {
                 $length = mb_strlen($value, 'UTF-8');
                 $sanitized[$key] = $length > 200 ? mb_substr($value, 0, 200, 'UTF-8') . '...' : $value; // Ej: string largo => truncado
-            } else {
-                $sanitized[$key] = $value; // Ej: int/boolean => sin cambios
+                continue;
             }
+
+            $sanitized[$key] = $value; // Ej: int/boolean => sin cambios
         }
 
         return $sanitized; // Ej: datos listos para log seguro
     }
 
     /**
-     * Genera hash seguro de una IP para logging sin exponer la real
+     * Genera hash seguro de una IP para logging sin exponer la real.
      *
-     * @param string $ip Dirección IP
-     * @return string Hash parcial
+     * Utiliza SHA256 con una sal para generar un hash irreversible de la IP,
+     * útil para auditoría o correlación de eventos sin comprometer la privacidad.
+     *
+     * @param string|null $ip Dirección IP a hashear.
+     * @return string Hash parcial de la IP.
      */
-    public static function hashIp(string $ip): string
+    public static function hashIp(?string $ip): string
     {
-        if (empty($ip)) {
+        if ($ip === null || trim($ip) === '') {
             return 'unknown'; // Ej: "" => "unknown"
         }
 
-        $salt = config('app.key', 'default_salt'); // Ej: obtiene clave del .env
-        return substr(hash('sha256', $ip . $salt), 0, 12); // Ej: "192.168.1.1" => "a94f6d3bc12f"
+        $salt = (string) config('app.key', 'default_salt'); // Ej: obtiene clave del .env
+        $normalizedIp = trim($ip);
+
+        return substr(hash('sha256', $normalizedIp . $salt), 0, 12); // Ej: "192.168.1.1" => "a94f6d3bc12f"
     }
 
     /**
-     * Reconstruye un URL desde sus partes normalizadas
+     * Reconstruye un URL desde sus partes normalizadas.
      *
-     * @param array $parts Partes generadas por parse_url
-     * @return string URL reconstruida
+     * Toma un array de partes (como el devuelto por `parse_url`) y las
+     * vuelve a unir en una URL válida y bien formada.
+     *
+     * @param array $parts Partes del URL (scheme, host, path, etc.).
+     * @return string URL reconstruida.
      */
     private static function rebuildUrlFromParts(array $parts): string
     {
@@ -545,11 +738,22 @@ class SecurityHelper
     }
 
     /**
-     * Resuelve registros DNS a IPs válidas evitando loops de CNAME
+     * Normaliza cadenas Unicode para evitar representaciones canónicas ambiguas.
+     */
+    private static function normalizeUnicode(string $s): string
+    {
+        return class_exists(\Normalizer::class) ? \Normalizer::normalize($s, \Normalizer::FORM_C) ?? $s : $s;
+    }
+
+    /**
+     * Resuelve registros DNS a IPs válidas evitando loops de CNAME.
      *
-     * @param string $host Host a resolver
-     * @param array<string,bool> $visited Hosts ya visitados
-     * @return array<int,string> Lista de IPs públicas
+     * Utiliza `dns_get_record` para obtener direcciones IP de un host,
+     * manejando recursivamente los registros CNAME para evitar bucles infinitos.
+     *
+     * @param string $host Host a resolver.
+     * @param array<string, bool> $visited (Interno) Hosts ya visitados para evitar ciclos.
+     * @return array<int, string> Lista de direcciones IP públicas resueltas.
      */
     private static function resolveHostIps(string $host, array $visited = []): array
     {
@@ -593,31 +797,25 @@ class SecurityHelper
             }
         }
 
-        return array_values(array_unique($ips));
+        $ips = array_values(array_unique($ips));
+
+        return array_values(array_filter($ips, static function (string $ip): bool {
+            return (bool) filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+        }));
     }
 
     /**
-     * Verifica si un string contiene contenido peligroso (XSS, JS, etc.)
+     * Verifica si un string contiene contenido peligroso (XSS, JS, etc.).
      *
-     * @param string $content Texto a validar
-     * @return bool True si se detecta algo malicioso
+     * Utiliza una lista de patrones comunes para detectar código HTML/JS potencialmente malicioso.
+     * No es un sustituto de `HTMLPurifier`, sino una verificación rápida.
+     *
+     * @param string $content Texto a analizar.
+     * @return bool `true` si se detecta contenido malicioso, `false` en caso contrario.
      */
     public static function containsMaliciousContent(string $content): bool
     {
-        $maliciousPatterns = [
-            '/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/mi',
-            '/javascript:/i',
-            '/vbscript:/i',
-            '/on\w+\s*=/i',
-            '/<iframe\b/i',
-            '/<object\b/i',
-            '/<embed\b/i',
-            '/<applet\b/i',
-            '/expression\s*\(/i',
-            '/import\s+["\']javascript:/i',
-        ];
-
-        foreach ($maliciousPatterns as $pattern) {
+        foreach (self::MALICIOUS_PATTERNS as $pattern) {
             if (preg_match($pattern, $content)) {
                 return true; // Ej: "<script>alert(1)</script>" => true
             }
@@ -625,5 +823,4 @@ class SecurityHelper
 
         return false; // Ej: "hola mundo" => false
     }
-
 }

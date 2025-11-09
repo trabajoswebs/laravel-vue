@@ -6,6 +6,8 @@ namespace App\Support\Media\Services;
 
 use App\Jobs\CleanupMediaArtifactsJob;
 use App\Support\Media\Models\MediaCleanupState;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
@@ -33,7 +35,7 @@ final class MediaCleanupScheduler
                 $state->conversions = [];
                 $state->flagged_at = null;
                 if (!$this->saveOrDeleteState($state)) {
-                    Log::warning('media_cleanup.state_persistence_failed', [
+                    Log::warning(__('media.cleanup.state_persistence_failed'), [
                         'media_id' => $mediaId,
                         'reason'   => 'clear_conversions',
                     ]);
@@ -47,7 +49,7 @@ final class MediaCleanupScheduler
                 $state->conversions = [];
                 $state->flagged_at = null;
                 if (!$this->saveOrDeleteState($state)) {
-                    Log::warning('media_cleanup.state_persistence_failed', [
+                    Log::warning(__('media.cleanup.state_persistence_failed'), [
                         'media_id' => $mediaId,
                         'reason'   => 'conversions_completed',
                     ]);
@@ -68,14 +70,14 @@ final class MediaCleanupScheduler
         $state->conversions = $conversions;
         $state->flagged_at = now();
         if (!$this->persistState($state)) {
-            Log::warning('media_cleanup.state_persistence_failed', [
+            Log::warning(__('media.cleanup.state_persistence_failed'), [
                 'media_id'    => $mediaId,
                 'reason'      => 'flag_pending',
                 'conversions' => $conversions,
             ]);
         }
 
-        Log::debug('media_cleanup.pending_flagged', [
+        Log::debug(__('media.cleanup.pending_flagged'), [
             'media_id'       => $mediaId,
             'collection'     => $media->collection_name,
             'conversions'    => $conversions,
@@ -108,7 +110,7 @@ final class MediaCleanupScheduler
         $origins = $this->extractOriginMediaIds($artifacts);
         $preserve = $this->normalizePreserveIds($preserveMediaIds);
 
-        Log::info('media_cleanup.conversions_progress', [
+        Log::info(__('media.cleanup.conversions_progress'), [
             'media_id'        => $triggerMediaId,
             'collection'      => $triggerMedia->collection_name,
             'expected'        => $progress['expected'],
@@ -139,7 +141,7 @@ final class MediaCleanupScheduler
         );
 
         if ($stored === false) {
-            Log::notice('media_cleanup.degraded_dispatch', [
+            Log::notice(__('media.cleanup.degraded_dispatch'), [
                 'media_id'      => $triggerMediaId,
                 'reason'        => 'state_persistence_failed',
                 'pending_flag'  => $hasPendingFlag,
@@ -175,7 +177,7 @@ final class MediaCleanupScheduler
 
         $progress = $this->evaluateConversions($media, $conversions, true);
 
-        Log::info('media_cleanup.conversions_progress', [
+        Log::info(__('media.cleanup.conversions_progress'), [
             'media_id'      => $mediaId,
             'collection'    => $media->collection_name,
             'expected'      => $progress['expected'],
@@ -194,7 +196,7 @@ final class MediaCleanupScheduler
         $state->payload = null;
         $state->payload_queued_at = null;
         if (!$this->saveOrDeleteState($state)) {
-            Log::warning('media_cleanup.state_persistence_failed', [
+            Log::warning(__('media.cleanup.state_persistence_failed'), [
                 'media_id' => $mediaId,
                 'reason'   => 'conversion_event_clear',
             ]);
@@ -233,7 +235,7 @@ final class MediaCleanupScheduler
         $state->payload = null;
         $state->payload_queued_at = null;
         if (!$this->saveOrDeleteState($state)) {
-            Log::warning('media_cleanup.state_persistence_failed', [
+            Log::warning(__('media.cleanup.state_persistence_failed'), [
                 'media_id' => $mediaId,
                 'reason'   => 'flush_expired_clear',
             ]);
@@ -250,6 +252,49 @@ final class MediaCleanupScheduler
                 ]
             );
         }
+    }
+
+    /**
+     * Purga estados expirados y ejecuta limpiezas degradadas si es necesario.
+     *
+     * @param int|null $maxAgeHours Horas máximas que puede permanecer un estado antes de considerarse expirado.
+     * @param int $chunkSize Cantidad de registros procesados por lote.
+     * @return int Número de estados purgados.
+     */
+    public function purgeExpired(?int $maxAgeHours = null, int $chunkSize = 100): int
+    {
+        $hours = $maxAgeHours ?? (int) config('media.cleanup.state_ttl_hours', 48);
+        $hours = $hours > 0 ? $hours : 48;
+        $cutoff = now()->subHours($hours);
+        $purged = 0;
+
+        MediaCleanupState::query()
+            ->where(function ($query) use ($cutoff) {
+                $query->where(function ($sub) use ($cutoff) {
+                    $sub->whereNotNull('flagged_at')
+                        ->where('flagged_at', '<=', $cutoff);
+                })->orWhere(function ($sub) use ($cutoff) {
+                    $sub->whereNotNull('payload_queued_at')
+                        ->where('payload_queued_at', '<=', $cutoff);
+                });
+            })
+            ->orderBy('media_id')
+            ->chunk($chunkSize, function ($states) use (&$purged) {
+                foreach ($states as $state) {
+                    $this->flushExpired((string) $state->media_id);
+                    $purged++;
+                }
+            });
+
+        if ($purged > 0) {
+            Log::info(__('media.cleanup.states_expired_purged'), [
+                'count'  => $purged,
+                'cutoff' => $cutoff->toIso8601String(),
+                'hours'  => $hours,
+            ]);
+        }
+
+        return $purged;
     }
 
     /**
@@ -277,7 +322,7 @@ final class MediaCleanupScheduler
 
         CleanupMediaArtifactsJob::dispatch($artifacts, $normalizedPreserveIds);
 
-        Log::info('media_cleanup.dispatched', array_merge([
+        Log::info(__('media.cleanup.dispatched'), array_merge([
             'disks'          => array_keys($artifacts),
             'preserve'       => $normalizedPreserveIds,
             'artifact_count' => array_sum(array_map('count', $artifacts)),
@@ -324,7 +369,7 @@ final class MediaCleanupScheduler
         ];
         $state->payload_queued_at = now();
         if (!$this->persistState($state)) {
-            Log::warning('media_cleanup.state_persistence_failed', [
+            Log::warning(__('media.cleanup.state_persistence_failed'), [
                 'media_id' => $mediaId,
                 'reason'   => 'store_payload',
             ]);
@@ -332,7 +377,7 @@ final class MediaCleanupScheduler
             return false;
         }
 
-        Log::info('media_cleanup.deferred', [
+        Log::info(__('media.cleanup.deferred'), [
             'media_id'      => $mediaId,
             'disks'         => array_keys($artifacts),
             'origins'       => $origins,
@@ -440,7 +485,7 @@ final class MediaCleanupScheduler
         try {
             $fresh = $media->exists ? $media->fresh() : Media::find($media->getKey());
         } catch (\Throwable $e) {
-            Log::debug('media_cleanup.conversion_status_unavailable', [
+            Log::debug(__('media.cleanup.conversion_status_unavailable'), [
                 'media_id' => $this->mediaId($media),
                 'error'    => $e->getMessage(),
             ]);
@@ -491,7 +536,7 @@ final class MediaCleanupScheduler
         try {
             return MediaCleanupState::query()->find($mediaId);
         } catch (\Throwable $e) {
-            Log::warning('media_cleanup.state_unavailable', [
+            Log::warning(__('media.cleanup.state_unavailable'), [
                 'media_id' => $mediaId,
                 'error'    => $e->getMessage(),
             ]);
@@ -523,16 +568,48 @@ final class MediaCleanupScheduler
 
     private function persistState(MediaCleanupState $state): bool
     {
+        $lock = null;
+        $save = function () use ($state): bool {
+            try {
+                $state->save();
+                return true;
+            } catch (\Throwable $e) {
+                Log::warning(__('media.cleanup.state_save_failed'), [
+                    'media_id' => $state->media_id,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                return false;
+            }
+        };
+
         try {
-            $state->save();
-            return true;
-        } catch (\Throwable $e) {
-            Log::warning('media_cleanup.state_save_failed', [
+            $lock = Cache::lock("media_state:{$state->media_id}", 10);
+        } catch (\Throwable $lockError) {
+            Log::notice(__('media.cleanup.state_lock_unavailable'), [
                 'media_id' => $state->media_id,
-                'error'    => $e->getMessage(),
+                'error'    => $lockError->getMessage(),
             ]);
 
+            return $save();
+        }
+
+        try {
+            return $lock->block(5, $save);
+        } catch (LockTimeoutException $exception) {
+            Log::warning(__('media.cleanup.state_lock_timeout'), [
+                'media_id' => $state->media_id,
+                'error'    => $exception->getMessage(),
+            ]);
             return false;
+        } finally {
+            if ($lock !== null) {
+                try {
+                    $lock->release();
+                } catch (\Throwable) {
+                    // Ignorar si el lock ya no pertenece al proceso actual.
+                }
+            }
         }
     }
 
@@ -542,7 +619,7 @@ final class MediaCleanupScheduler
             $state->delete();
             return true;
         } catch (\Throwable $e) {
-            Log::warning('media_cleanup.state_delete_failed', [
+            Log::warning(__('media.cleanup.state_delete_failed'), [
                 'media_id' => $state->media_id,
                 'error'    => $e->getMessage(),
             ]);

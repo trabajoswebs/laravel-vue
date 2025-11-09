@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Observers\MediaObserver;
+use App\Services\Upload\Core\LocalQuarantineRepository;
+use App\Services\Upload\Core\QuarantineRepository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -15,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(QuarantineRepository::class, static function (): QuarantineRepository {
+            return new LocalQuarantineRepository();
+        });
     }
 
     /**

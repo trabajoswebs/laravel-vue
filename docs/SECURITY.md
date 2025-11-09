@@ -64,7 +64,65 @@ Para tareas costosas (notificaciones, auditoría pesada) configura `QUEUE_CONNEC
 - Sirve los assets estáticos mediante CDN (S3 + CloudFront) y habilita `Cache-Control`/`ETag` a nivel CDN.
 - Define en tu CDN políticas de expiración adecuadas (p.ej. 1 año para archivos versionados).
 
-## 7. Referencias rápidas
+## 7. Límites de subida
+
+- El backend y la pipeline comparten un límite máximo de `25 MB` (`IMG_MAX_BYTES=26214400`) y un techo de `16` megapíxeles para evitar image bombs.
+- Asegura que el reverse proxy aplique el mismo tope:
+
+```nginx
+client_max_body_size 25M;
+client_body_timeout 30s;
+```
+
+- Replica los valores en `php.ini` para evitar desincronizaciones:
+
+```ini
+upload_max_filesize=25M
+post_max_size=25M
+memory_limit=512M
+max_execution_time=30
+```
+
+## 8. Migración a discos privados
+
+- `config/filesystems.php` define los discos `avatars`, `gallery` y `quarantine` como locales privados (`storage/app/private/...`) con permisos `0600`/`0700`. No se usan automáticamente.
+- Antes de apuntar `AVATAR_DISK` o `GALLERY_DISK` a estos discos, crea los directorios y ajusta ownership para el usuario del proceso (`mkdir -p storage/app/private/{avatars,gallery,quarantine}`).
+- Verifica que `php artisan config:cache` siga funcionando después de cualquier cambio en `filesystems.php`; si falla, revisa comillas o permisos declarados.
+- El disco `quarantine` servirá para retener subidas pendientes de análisis cuando se active ClamAV/YARA; mantén bloqueado el acceso público.
+
+## 9. Bloqueo de ejecución en `/storage`
+
+- A nivel de Nginx añade una regla para negar la ejecución de PHP/PHAR servidos desde `public/storage`:
+
+```nginx
+location ~* ^/storage/.*\.(php|phtml|phar)$ {
+    deny all;
+    return 403;
+}
+```
+
+- En entornos Docker (Laravel Sail) este repositorio copia `docker/8.4/nginx/default.conf` dentro de la imagen, incluyendo la directiva anterior por defecto.
+- Si tu proxy frontal es distinto (Caddy, Traefik), replica la lógica equivalente (`respond 403` para esos patrones).
+
+- El script `scripts/check_storage_exec.sh` sube un `test.php` temporal al disco público y espera recibir `403/404`; si el servidor responde `200`, el script falla.
+
+## 10. Endurecimiento de ImageMagick
+
+- La política por defecto de ImageMagick debe bloquear intérpretes complejos (PDF/PS/EPS/XPS/SVG). Usa `deploy/imagemagick/policy.xml` como base y móntalo en `/etc/ImageMagick-6/policy.xml` (o `/etc/ImageMagick-7/policy.xml` según la versión).
+    - Ejemplo Docker Compose: `- ./deploy/imagemagick/policy.xml:/etc/ImageMagick-6/policy.xml:ro`
+    - En servidores bare-metal, copia el archivo y reinicia el servicio PHP-FPM.
+- El pipeline utiliza límites defensivos (`IMG_IMAGICK_MEMORY_MB`, `IMG_IMAGICK_MAP_MB`, `IMG_IMAGICK_THREADS`) y fuerza orientación/top-left, espacio de color sRGB y `strip` para eliminar perfiles peligrosos.
+- Controla el timeout de decodificación con `IMG_DECODE_TIMEOUT_SECONDS` para cortar procesamiento de bombas de descompresión extremadamente lentas.
+- Para animaciones GIF, ajusta `IMG_MAX_GIF_FRAMES` (por defecto 60) y se rechazarán entradas con más fotogramas o delays nulos.
+
+## 11. Servido firmado de conversiones
+
+- Control de feature: `MEDIA_SIGNED_SERVE_ENABLED=false` por defecto. Actívalo en entornos donde quieras probar el endpoint firmado sin exponerlo globalmente.
+- Ruta: `GET /media/avatar/{media}?c=thumb|medium|large` protegida con middleware `signed`. Usa `URL::temporarySignedRoute('media.avatar.show', now()->addMinutes(5), [...])`.
+- El controlador valida colección, conversión y devuelve `response()->file()` con `X-Content-Type-Options: nosniff` y `Cache-Control` agresivo.
+- Mantén este flag desactivado hasta que tengas front firmado o CDN privado; mientras tanto, úsalo solo para pruebas manuales o herramientas internas.
+
+## 12. Referencias rápidas
 
 | Archivo | Responsabilidad |
 |---------|-----------------|

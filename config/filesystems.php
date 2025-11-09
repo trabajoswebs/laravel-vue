@@ -47,6 +47,54 @@ return [
             'report' => false,
         ],
 
+        'avatars' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/avatars'),
+            'visibility' => 'private',
+            'permissions' => [
+                'file' => [
+                    'private' => 0600,
+                ],
+                'dir' => [
+                    'private' => 0700,
+                ],
+            ],
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'gallery' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/gallery'),
+            'visibility' => 'private',
+            'permissions' => [
+                'file' => [
+                    'private' => 0600,
+                ],
+                'dir' => [
+                    'private' => 0700,
+                ],
+            ],
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'quarantine' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/quarantine'),
+            'visibility' => 'private',
+            'permissions' => [
+                'file' => [
+                    'private' => 0600,
+                ],
+                'dir' => [
+                    'private' => 0700,
+                ],
+            ],
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

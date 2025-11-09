@@ -58,12 +58,12 @@ final class FileConstraints
     public readonly ?bool $avatarQueuePreference;
 
     /** Tamaño máximo de archivo (bytes). */
-    // Constante con el valor por defecto para maxBytes (15 MB).
-    public const MAX_BYTES = 15 * 1024 * 1024; // 10 MB
+    // Constante con el valor por defecto para maxBytes (25 MB).
+    public const MAX_BYTES = 25 * 1024 * 1024;
 
     /** Límite de megapíxeles (ancho*alto / 1e6). */
-    // Constante con el valor por defecto para maxMegapixels (24 MP).
-    public const MAX_MEGAPIXELS = 24; // 24 MP (p.ej., 6000x4000)
+    // Constante con el valor por defecto para maxMegapixels (48 MP).
+    public const MAX_MEGAPIXELS = 48.0;
 
     /** Dimensiones mínimas y máximas permitidas. */
     // Constantes con valores por defecto para dimensiones mínimas y máximas.

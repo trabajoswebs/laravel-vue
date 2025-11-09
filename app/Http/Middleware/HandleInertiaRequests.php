@@ -82,12 +82,17 @@ class HandleInertiaRequests extends Middleware
 
             return $data;
         } catch (\Throwable $e) {
-            Log::error('Error in HandleInertiaRequests::share', [
+            $context = [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
                 'user_id' => $request->user()?->id,
                 'url' => $request->url(),
-            ]);
+            ];
+
+            if (config('app.debug', false)) {
+                $context['trace'] = $e->getTraceAsString();
+            }
+
+            Log::error('Error in HandleInertiaRequests::share', $context);
 
             return $this->getFallbackShareData($request);
         }

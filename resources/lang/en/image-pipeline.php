@@ -21,11 +21,16 @@ return [
     'gif_clone_failed' => 'Could not extract the first frame from the GIF.',
     'gif_frame_invalid' => 'Invalid GIF frame at index :index.',
     'dimensions_too_small' => 'Minimum dimensions not reached.',
+    'dimensions_too_large' => 'The image exceeds the maximum allowed dimensions.',
     'megapixels_exceeded' => 'The image exceeds the allowed megapixel limit.',
+    'gif_too_many_frames' => 'The GIF has too many frames (maximum :max).',
     'write_failed' => 'Error writing the processed image.',
     'temp_file_invalid' => 'The resulting temporary file is invalid.',
+    'content_hash_failed' => 'Could not compute a stable content hash for the processed image.',
     'processing_failed' => 'Error in image processing.',
     'cleanup_failed' => 'Could not clean up the temporary file.',
+    'output_too_large' => 'The processed image exceeds the maximum allowed size.',
+    'resource_limits_failed' => 'Image processing limits could not be applied.',
     'suspicious_payload' => 'Potentially malicious content was detected inside the image.',
 
     // Log messages

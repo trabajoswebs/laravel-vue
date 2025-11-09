@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Settings;
 
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rules\File;
 use App\Rules\SecureImageValidation;
 use App\Support\Media\ConversionProfiles\FileConstraints as FC;
@@ -49,6 +51,9 @@ class UpdateAvatarRequest extends FormRequest
 
         $allowedExt   = $constraints->allowedExtensions();
         $allowedMimes = $constraints->allowedMimeTypes();
+        $disallowedExt = array_map('strtolower', (array) config('image-pipeline.disallowed_extensions', []));
+        $disallowedMimes = array_map('strtolower', (array) config('image-pipeline.disallowed_mimes', []));
+        $maxMegapixels = $constraints->maxMegapixels;
 
         return [
             'avatar' => [
@@ -69,8 +74,43 @@ class UpdateAvatarRequest extends FormRequest
                 //    Pásale límites para que no dupliques números mágicos.
                 new SecureImageValidation(
                     maxFileSizeBytes: $maxBytes,
+                    normalize: true,
                     constraints: $constraints
                 ),
+
+                // 5) Reglas rápidas para bloquear SVG/ZIP y megapíxeles excesivos antes de procesos caros.
+                static function (string $attribute, mixed $value, Closure $fail) use (
+                    $disallowedExt,
+                    $disallowedMimes,
+                    $maxMegapixels
+                ): void {
+                    if (!$value instanceof UploadedFile) {
+                        return;
+                    }
+
+                    $mime = strtolower((string) $value->getMimeType());
+                    if ($mime !== '' && in_array($mime, $disallowedMimes, true)) {
+                        $fail(__('image-pipeline.validation.avatar_mime'));
+                        return;
+                    }
+
+                    $ext = strtolower((string) $value->getClientOriginalExtension());
+                    if ($ext !== '' && in_array($ext, $disallowedExt, true)) {
+                        $fail(__('image-pipeline.validation.avatar_mime'));
+                        return;
+                    }
+
+                    $path = $value->getRealPath();
+                    if ($path !== false) {
+                        $info = @getimagesize($path);
+                        if (is_array($info) && isset($info[0], $info[1])) {
+                            $megapixels = ($info[0] * $info[1]) / 1_000_000;
+                            if ($megapixels > $maxMegapixels) {
+                                $fail(__('file-constraints.megapixels_exceeded', ['max' => $maxMegapixels]));
+                            }
+                        }
+                    }
+                },
             ],
         ];
     }

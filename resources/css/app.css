@@ -235,7 +235,7 @@
     /* Tokens para toasts en oscuro (usamos sufijo -dark para separar de los claros). */
     --success-bg: hsl(156 44% 16%);
     --success-border: hsl(156 48% 30%);
-    --success-text: hsl(140 89% 30%);
+    --success-text: hsl(156 56% 78%);
 
     --warning-bg: hsl(38 78% 14%);
     --warning-border: hsl(37 84% 32%);
@@ -354,7 +354,7 @@
 [data-rich-colors='true'][data-sonner-toast].toast-success,
 [data-sonner-toast][data-type='success'].toast-success {
     background: var(--success-bg);
-    color: var(--toast-success-text);
+    color: var(--success-text);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-warning,

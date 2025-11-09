@@ -14,10 +14,11 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 - **Traducciones dinámicas** - Sistema híbrido cliente-servidor
 - **Diseño responsive** - Funciona en todos los dispositivos
 - **Modo oscuro** - Soporte para temas claro/oscuro
-- **Procesamiento de imágenes avanzado** - Pipeline de optimización con ImagePipeline y OptimizerService
+- **Procesamiento de imágenes endurecido** - Pipeline multi-etapas con SecureImageValidation, normalización y OptimizerService (local/remoto)
+- **Media lifecycle resiliente** - Scheduler transaccional + CleanupMediaArtifactsJob para limpiar artefactos en cualquier disco
 - **Media Library** - Gestión avanzada de archivos multimedia con Spatie
 - **Docker & Laravel Sail** - Entorno de desarrollo containerizado
-- **Herramientas de desarrollo** - ESLint, Prettier, TypeScript configurados
+- **Herramientas de desarrollo** - ESLint, Prettier, TypeScript configurados y listas para CI/CD
 - **Capa de seguridad documentada** - CSP, rate limiting, auditoría y cabeceras listas para producción ([ver guía](docs/SECURITY.md))
 
 ## 🌍 Sistema de Internacionalización
@@ -65,6 +66,14 @@ Servicio de optimización de imágenes para Media Library:
 ✅ **Métricas detalladas** - Ahorro de espacio y estadísticas por archivo  
 ✅ **Límites de seguridad** - Protección contra archivos excesivamente grandes  
 ✅ **Whitelist de formatos** - Solo optimiza formatos compatibles  
+✅ **Streaming seguro** - `RemoteDownloader` y `RemoteUploader` aseguran transferencias por stream sin agotar memoria
+
+### Validación y protección de subidas
+
+✅ **SecureImageValidation** - Reglas endurecidas: finfo + magic bytes, decodificación con Intervention, normalización opcional, detección de image-bombs y escaneo heurístico (`<?php`, `eval(`, `base64_decode(`, etc.)  
+✅ **Rate limiting dedicado** - Middleware `rate.uploads` (registrado por `ImagePipelineServiceProvider`) limita subidas costosas según `image-pipeline.rate_limit`  
+✅ **Autodiagnóstico** - `ImagePipelineServiceProvider` valida `config/image-pipeline.php` (max_bytes, bomb_ratio, rutas de escaneo, binarios permitidos) y aplica fallbacks seguros en producción  
+✅ **Controles de recursos** - Límite de memoria/tokens para Imagick y GD (`resource_limits`) y escaneo seguro de archivos (`scan.*`)
 
 ### Configuración
 
@@ -75,6 +84,13 @@ sudo apt-get install jpegoptim pngquant webp gifsicle
 # Configurar parámetros en config/image-pipeline.php
 # Personalizar calidades, dimensiones máximas, etc.
 ```
+
+Variables de entorno clave:
+
+- `IMG_RATE_MAX` / `IMG_RATE_DECAY` → controlan el throttling del middleware `rate.uploads`.
+- `IMG_SCAN_ALLOWED_BASE` / `IMG_SCAN_RULES_BASE` → definen rutas seguras para escaneo (yara/clamav).
+- `IMG_SCAN_BIN_ALLOWLIST` / `IMG_SCAN_USE_*` → habilitan escáneres remotos (clamdscan, yara) y su lista blanca.
+- `IMG_BOMB_RATIO` y `IMG_MAX_MEGAPIXELS` → protegen contra image bombs y archivos gigantes.
 
 ### Arquitectura reutilizable por colección
 
@@ -89,6 +105,15 @@ Este proyecto implementa una arquitectura de subida de imágenes reutilizable ba
   - `Profiles/GalleryProfile`: define conversions típicas de galería con tamaños configurables.
 - Listener multi-colecta:
   - `QueueAvatarPostProcessing` ahora soporta múltiples colecciones configurables en `image-pipeline.postprocess_collections` (por defecto `avatar,gallery`).
+
+### Limpieza y lifecycle de medios
+
+- `MediaLifecycleCoordinator` coordina replace + conversions + cleanup usando DTO compartidos.
+- `MediaCleanupScheduler` guarda el estado por media y programa limpieza tras conversions (local o discos remotos).
+- `CleanupMediaArtifactsJob` elimina artefactos residuales (originales, conversions, responsive-images) de forma idempotente y segura.
+- `RunPendingMediaCleanup` escucha eventos de Spatie (`ConversionHasBeenCompleted/Failed`) y dispara el scheduler oportunamente.
+- Métricas centralizadas en logs (`cleanup_media_artifacts_completed`, `media_cleanup.*`) para observabilidad.
+- Guía detallada en `docs/media-lifecycle.md`.
 
 Uso rápido para otra colección (ej. galería):
 
@@ -315,6 +340,7 @@ php artisan serve
 │   │   │   │   └── ProfileAvatarController.php
 │   │   │   └── Auth/*
 │   │   ├── Middleware/
+│   │   │   ├── RateLimitUploads.php       # Limita subidas costosas
 │   │   │   ├── SecurityHeaders.php        # CSP y cabeceras de seguridad
 │   │   │   ├── HandleInertiaRequests.php
 │   │   │   ├── SanitizeInput.php
@@ -322,41 +348,76 @@ php artisan serve
 │   │   │   ├── PreventBruteForce.php
 │   │   │   └── UserAudit.php
 │   │   └── Requests/
-│   │       ├── UploadImageRequest.php         # Request genérico (SecureImageValidation)
+│   │       ├── UploadImageRequest.php     # Request genérico (SecureImageValidation)
 │   │       └── Settings/
 │   │           ├── UpdateAvatarRequest.php
 │   │           ├── DeleteAvatarRequest.php
 │   │           └── ProfileUpdateRequest.php
 │   ├── Jobs/
+│   │   ├── CleanupMediaArtifactsJob.php   # Limpia artefactos residuales multi-disco
 │   │   └── PostProcessAvatarMedia.php     # Optimización original + conversions
 │   ├── Listeners/
+│   │   ├── Media/
+│   │   │   └── RunPendingMediaCleanup.php
 │   │   └── User/
 │   │       └── QueueAvatarPostProcessing.php
 │   ├── Models/
 │   │   └── User.php                        # Colección ML 'avatar' + accessors
+│   ├── Observers/
+│   │   └── MediaObserver.php               # Dispara limpieza tras borrar media
 │   ├── Policies/
 │   │   └── UserPolicy.php
 │   ├── Providers/
 │   │   ├── AppServiceProvider.php
 │   │   ├── AuthServiceProvider.php
 │   │   ├── EventServiceProvider.php
-│   │   └── HtmlPurifierServiceProvider.php
+│   │   ├── HtmlPurifierServiceProvider.php
+│   │   └── ImagePipelineServiceProvider.php
 │   ├── Rules/
 │   │   └── SecureImageValidation.php       # Regla endurecida (magic bytes, bomb)
 │   ├── Services/
-│   │   ├── ImagePipeline.php               # Saneado/resize/re-encode (Imagick)
+│   │   ├── Concerns/
+│   │   │   └── GuardsUploadedImage.php
+│   │   ├── ImagePipeline/
+│   │   │   ├── PipelineConfig.php
+│   │   │   ├── PipelineLogger.php
+│   │   │   ├── ImagickWorkflow.php
+│   │   │   ├── FallbackWorkflow.php
+│   │   │   └── PipelineArtifacts.php
+│   │   ├── Optimizer/
+│   │   │   └── Adapters/
+│   │   │       ├── LocalOptimizationAdapter.php
+│   │   │       ├── RemoteDownloader.php
+│   │   │       └── RemoteUploader.php
+│   │   ├── ImagePipeline.php               # Saneado/resize/re-encode (Imagick/GD)
+│   │   ├── ImagePipelineResult.php
 │   │   ├── ImageUploadService.php          # Servicio común de subida por perfil
 │   │   ├── OptimizerService.php            # Spatie Image Optimizer (local/S3)
 │   │   └── TranslationService.php
 │   ├── Support/
 │   │   └── Media/
+│   │       ├── MediaLifecycleCoordinator.php
+│   │       ├── MediaArtifactCollector.php
 │   │       ├── ImageProfile.php            # Contrato de perfiles
 │   │       ├── Profiles/
 │   │       │   ├── AvatarProfile.php
 │   │       │   └── GalleryProfile.php
-│   │       └── ConversionProfiles/
-│   │           ├── AvatarConversionProfile.php
-│   │           └── FileConstraints.php
+│   │       ├── ConversionProfiles/
+│   │       │   ├── AvatarConversionProfile.php
+│   │       │   └── FileConstraints.php
+│   │       ├── Services/
+│   │       │   ├── MediaCleanupScheduler.php
+│   │       │   └── MediaReplacementService.php
+│   │       ├── Jobs/
+│   │       │   └── PerformConversionsJob.php
+│   │       ├── Models/
+│   │       │   └── MediaCleanupState.php
+│   │       └── DTO/
+│   │           ├── CleanupPayload.php
+│   │           ├── ConversionExpectations.php
+│   │           ├── ReplacementResult.php
+│   │           ├── ReplacementSnapshot.php
+│   │           └── ReplacementSnapshotItem.php
 │   └── Helpers/
 │       └── SecurityHelper.php
 ├── bootstrap/
@@ -377,7 +438,8 @@ php artisan serve
 │   └── console.php
 ├── docs/
 │   ├── SECURITY.md
-│   └── TRANSLATIONS_DYNAMIC.md
+│   ├── TRANSLATIONS_DYNAMIC.md
+│   └── media-lifecycle.md
 ├── resources/
 │   ├── js/                                 # Vue 3 + Inertia
 │   ├── lang/                               # Traducciones (es/en)
@@ -551,6 +613,7 @@ curl /api/language/translations/es
 
 - [Sistema de Traducciones Dinámicas](docs/TRANSLATIONS_DYNAMIC.md) - Guía completa del sistema i18n
 - [Guía de Seguridad](docs/SECURITY.md) - Configuración de seguridad para producción
+- [Media Lifecycle & Cleanup](docs/media-lifecycle.md) - Coordinación de replacements, conversions y limpieza segura
 - [Laravel Documentation](https://laravel.com/docs) - Documentación oficial de Laravel
 - [Vue.js Documentation](https://vuejs.org/guide/) - Documentación oficial de Vue
 - [Inertia.js Documentation](https://inertiajs.com/) - Documentación oficial de Inertia

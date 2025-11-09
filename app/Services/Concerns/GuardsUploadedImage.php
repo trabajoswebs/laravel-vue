@@ -91,7 +91,7 @@ trait GuardsUploadedImage
                 Log::warning('image_pipeline_suspicious_payload_detected', [
                     'pattern' => $pattern,
                     'path' => basename($path),
-                    'sha1' => \sha1($buffer),
+                    'sha256' => hash('sha256', $buffer)
                 ]);
 
                 throw new RuntimeException(__('image-pipeline.suspicious_payload'));

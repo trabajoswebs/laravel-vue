@@ -186,12 +186,17 @@ class SecurityHeaders
             $csp = $this->buildCSP($isDev, $frontendUrl, $viteUrl, $appUrl, $nonce);
             $response->headers->set('Content-Security-Policy', $csp);
         } catch (\Throwable $exception) {
-            Log::error('Failed to build Content-Security-Policy, applying fallback.', [
+            $context = [
                 'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
                 'environment' => app()->environment(),
                 'url' => $request->fullUrl(),
-            ]);
+            ];
+
+            if (config('app.debug', false)) {
+                $context['trace'] = $exception->getTraceAsString();
+            }
+
+            Log::error('Failed to build Content-Security-Policy, applying fallback.', $context);
             $csp = self::FALLBACK_CSP;
             $response->headers->set('Content-Security-Policy', $csp);
         }
@@ -201,12 +206,17 @@ class SecurityHeaders
         try {
             $this->applySecurityHeaders($response, $request, $securityConfig);
         } catch (\Throwable $exception) {
-            Log::error('Failed to apply security headers.', [
+            $context = [
                 'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
                 'environment' => app()->environment(),
                 'url' => $request->fullUrl(),
-            ]);
+            ];
+
+            if (config('app.debug', false)) {
+                $context['trace'] = $exception->getTraceAsString();
+            }
+
+            Log::error('Failed to apply security headers.', $context);
         }
 
         $this->applyReportToHeader($response);

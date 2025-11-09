@@ -7,10 +7,10 @@ declare(strict_types=1);
 namespace App\Services\ImagePipeline;
 
 // 3. Importaciones de clases y facades necesarios.
+use Imagick;
+use Throwable;
 use App\Services\ImagePipelineResult;
 use App\Services\ImagePipeline\ImageProcessingException;
-use RuntimeException;
-use Throwable;
 
 /**
  * Encapsula el flujo basado en Imagick para normalizar imágenes.
@@ -136,16 +136,56 @@ final class ImagickWorkflow
      * Lee un archivo de imagen en una instancia de Imagick.
      *
      * @param array{real_path:string, mime:string, width?:int, height?:int, size?:int} $descriptor Ruta y metadata básica.
-     * @return \Imagick Instancia de Imagick cargada con la imagen.
+     * @return Imagick Instancia de Imagick cargada con la imagen.
      * @throws ImageProcessingException Si no se puede leer la imagen.
      */
-    private function readImagick(array $descriptor): \Imagick
+    private function readImagick(array $descriptor): Imagick
     {
-        $imagick = new \Imagick();
+        $realPath = $descriptor['real_path'] ?? null;
+        if (!is_string($realPath) || $realPath === '' || !is_file($realPath)) {
+            throw new ImageProcessingException(
+                reason: 'imagick_precheck_failed',
+                message: __('image-pipeline.image_load_failed'),
+                recoverable: true
+            );
+        }
+
+        $precheck = @getimagesize($realPath);
+        if ($precheck === false || !isset($precheck[0], $precheck[1])) {
+            throw new ImageProcessingException(
+                reason: 'imagick_precheck_failed',
+                message: __('image-pipeline.image_load_failed'),
+                recoverable: true
+            );
+        }
+
+        $width = (int) $precheck[0];
+        $height = (int) $precheck[1];
+        $maxEdge = max($this->config->maxEdge, 1);
+        if ($width > $maxEdge || $height > $maxEdge) {
+            throw new ImageProcessingException(
+                reason: 'dimensions_exceed_limit',
+                message: __('image-pipeline.dimensions_too_large'),
+                recoverable: false,
+                context: ['width' => $width, 'height' => $height, 'max_edge' => $maxEdge]
+            );
+        }
+
+        $megapixels = ($width * $height) / 1_000_000;
+        if ($megapixels > $this->config->maxMegapixels) {
+            throw new ImageProcessingException(
+                reason: 'megapixels_exceeded',
+                message: __('image-pipeline.megapixels_exceeded'),
+                recoverable: false,
+                context: ['megapixels' => $megapixels]
+            );
+        }
+
+        $imagick = new Imagick();
         // 17. Aplica límites defensivos de recursos para evitar problemas de memoria.
         $this->applyResourceLimits($imagick, $descriptor);
         // 18. Intenta leer la imagen desde la ruta especificada.
-        $imagick->readImage($descriptor['real_path']);
+        $imagick->readImage($realPath);
 
         if ($imagick->valid()) {
             return $imagick;
@@ -165,28 +205,62 @@ final class ImagickWorkflow
     /**
      * Configura límites defensivos de recursos sobre la instancia de Imagick.
      *
-     * @param \Imagick $imagick
+     * @param Imagick $imagick
      * @param array{mime:string,width?:int,height?:int,size?:int} $descriptor
      */
-    private function applyResourceLimits(\Imagick $imagick, array $descriptor): void
+    private function applyResourceLimits(Imagick $imagick, array $descriptor): void
     {
         // 20. Calcula límites basados en la configuración.
         $maxBytes = max($this->config->maxBytes, 1);
         $pixelBudget = (int) ceil(max($this->config->maxMegapixels, 0.1) * 1_000_000);
         $maxEdge = max($this->config->maxEdge, 1);
 
+        $memoryLimit = max(1, (int) config('image-pipeline.resource_limits.imagick.memory_mb', 256)) * 1024 * 1024;
+        $mapLimit = max(1, (int) config('image-pipeline.resource_limits.imagick.map_mb', 512)) * 1024 * 1024;
+        $threadLimit = max(1, (int) config('image-pipeline.resource_limits.imagick.threads', 2));
+
+        $limitsApplied = 0;
         try {
-            // 21. Establece límites de memoria, área, y dimensiones máximas.
-            $imagick->setResourceLimit(\Imagick::RESOURCETYPE_MEMORY, $maxBytes * 2);
-            $imagick->setResourceLimit(\Imagick::RESOURCETYPE_MAP, $maxBytes * 2);
-            $imagick->setResourceLimit(\Imagick::RESOURCETYPE_AREA, $pixelBudget);
-            $imagick->setResourceLimit(\Imagick::RESOURCETYPE_WIDTH, $maxEdge);
-            $imagick->setResourceLimit(\Imagick::RESOURCETYPE_HEIGHT, $maxEdge);
+            if ($imagick->setResourceLimit(Imagick::RESOURCETYPE_MEMORY, $memoryLimit)) {
+                $limitsApplied++;
+            }
+            if ($imagick->setResourceLimit(Imagick::RESOURCETYPE_MAP, $mapLimit)) {
+                $limitsApplied++;
+            }
+            if ($imagick->setResourceLimit(Imagick::RESOURCETYPE_AREA, $pixelBudget)) {
+                $limitsApplied++;
+            }
+            if (defined(Imagick::class . '::RESOURCETYPE_WIDTH')) {
+                $resource = constant(Imagick::class . '::RESOURCETYPE_WIDTH');
+                if ($imagick->setResourceLimit($resource, $maxEdge)) {
+                    $limitsApplied++;
+                }
+            }
+            if (defined(Imagick::class . '::RESOURCETYPE_HEIGHT')) {
+                $resource = constant(Imagick::class . '::RESOURCETYPE_HEIGHT');
+                if ($imagick->setResourceLimit($resource, $maxEdge)) {
+                    $limitsApplied++;
+                }
+            }
+            if (defined(Imagick::class . '::RESOURCETYPE_THREAD')) {
+                $resource = constant(Imagick::class . '::RESOURCETYPE_THREAD');
+                if ($imagick->setResourceLimit($resource, $threadLimit)) {
+                    $limitsApplied++;
+                }
+            }
         } catch (Throwable $exception) {
             // 22. Registra un error si no se pueden aplicar los límites.
-            $this->logger->log('debug', 'image_pipeline_resource_limits_failed', [
+            $this->logger->log('warning', 'image_pipeline_resource_limits_failed', [
                 'error' => $this->logger->limit($exception->getMessage()),
             ]);
+        }
+
+        if ($limitsApplied === 0) {
+            throw new ImageProcessingException(
+                reason: 'resource_limits_unavailable',
+                message: __('image-pipeline.resource_limits_failed'),
+                recoverable: true
+            );
         }
 
         // 23. Establece el tamaño esperado si está disponible en el descriptor.
@@ -199,15 +273,25 @@ final class ImagickWorkflow
      * Normaliza una secuencia de GIF, coalescando si está animado y la configuración lo permite,
      * o extrayendo solo el primer frame.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      * @param string $mime Tipo MIME de la imagen.
-     * @return \Imagick Nueva instancia de Imagick con la imagen normalizada.
+     * @return Imagick Nueva instancia de Imagick con la imagen normalizada.
      */
-    private function normalizeGifSequence(\Imagick $image, string $mime): \Imagick
+    private function normalizeGifSequence(Imagick $image, string $mime): Imagick
     {
         // 24. Si no es un GIF o no está animado, lo devuelve tal cual.
         if ($mime !== 'image/gif' || $image->getNumberImages() <= 1) {
             return $image;
+        }
+
+        $frameCount = $image->getNumberImages();
+        if ($frameCount > $this->config->maxGifFrames) {
+            throw new ImageProcessingException(
+                reason: 'gif_too_many_frames',
+                message: __('image-pipeline.gif_too_many_frames', ['max' => $this->config->maxGifFrames]),
+                recoverable: false,
+                context: ['frames' => $frameCount]
+            );
         }
 
         if ($this->config->preserveGifAnimation) {
@@ -224,20 +308,26 @@ final class ImagickWorkflow
     /**
      * Extrae solo el primer frame de un GIF animado.
      *
-     * @param \Imagick $image Instancia de Imagick con el GIF.
-     * @return \Imagick Nueva instancia de Imagick con solo el primer frame.
+     * @param Imagick $image Instancia de Imagick con el GIF.
+     * @return Imagick Nueva instancia de Imagick con solo el primer frame.
      * @throws ImageProcessingException Si falla al clonar el frame.
      */
-    private function extractGifFirstFrame(\Imagick $image): \Imagick
+    private function extractGifFirstFrame(Imagick $image): Imagick
     {
         $image->setFirstIterator();
 
         try {
-            // 27. Clona el primer frame y establece que solo tiene una iteración.
-            $first = clone $image;
-            $first->setImageIterations(1);
+            $currentFrame = $image->getImage();
+            $single = new Imagick();
+            $single->addImage($currentFrame);
+            $single->setFormat('gif');
+            $single->setImageIterations(1);
+            $single->setFirstIterator();
 
-            return $first;
+            $currentFrame->clear();
+            $currentFrame->destroy();
+
+            return $single;
         } catch (Throwable $exception) {
             // 28. Registra un error si falla el clonado y lanza una excepción recuperable.
             $this->logger->log('error', 'image_pipeline_gif_clone_failed', [
@@ -256,51 +346,72 @@ final class ImagickWorkflow
     /**
      * Coalesca y sanitiza cada frame de un GIF animado.
      *
-     * @param \Imagick $image Instancia de Imagick con el GIF animado.
-     * @return \Imagick Nueva instancia de Imagick con los frames coalescados y sanitizados.
+     * @param Imagick $image Instancia de Imagick con el GIF animado.
+     * @return Imagick Nueva instancia de Imagick con los frames coalescados y sanitizados.
      * @throws ImageProcessingException Si un frame es inválido.
      */
-    private function sanitizeGifAnimation(\Imagick $image): \Imagick
+    private function sanitizeGifAnimation(Imagick $image): Imagick
     {
         // 29. Coalesca todos los frames en una secuencia.
         $coalesced = $image->coalesceImages();
+        $sanitized = new Imagick();
+        $sanitized->setFormat('gif');
+
         $index = 0;
 
         foreach ($coalesced as $frame) {
-            if ($frame->valid()) {
-                // 30. Aplica sanitización a cada frame válido.
-                $this->autoOrient($frame);
-                $frame->stripImage();
-                $this->toSrgb($frame);
-                $index++;
-                continue;
+            if ($index >= $this->config->maxGifFrames) {
+                break;
             }
 
-            // 31. Si un frame es inválido, lanza una excepción recuperable.
-            $message = __('image-pipeline.gif_frame_invalid', ['index' => $index]);
-            $this->logger->log('warning', $message, ['index' => $index]);
+            if (!$frame->valid()) {
+                $message = __('image-pipeline.gif_frame_invalid', ['index' => $index]);
+                $this->logger->log('warning', $message, ['index' => $index]);
 
-            throw new ImageProcessingException(
-                reason: 'gif_frame_invalid',
-                message: $message,
-                recoverable: true,
-                context: ['frame_index' => $index],
-            );
+                throw new ImageProcessingException(
+                    reason: 'gif_frame_invalid',
+                    message: $message,
+                    recoverable: true,
+                    context: ['frame_index' => $index],
+                );
+            }
+
+            // 30. Aplica sanitización a cada frame válido.
+            $this->autoOrient($frame);
+            $frame->stripImage();
+            $this->toSrgb($frame);
+
+            $delay = max(1, $frame->getImageDelay());
+            $frame->setImageDelay($delay);
+
+            $frameClone = clone $frame;
+            $frameClone->setImageDelay($delay);
+            $frameClone->setImageDispose($frame->getImageDispose());
+
+            $sanitized->addImage($frameClone);
+            $sanitized->setImageDelay($delay);
+            $sanitized->setImageDispose($frameClone->getImageDispose());
+
+            $index++;
         }
 
-        $coalesced->setFirstIterator();
+        $coalesced->clear();
+        $coalesced->destroy();
 
-        return $coalesced;
+        $sanitized->setFirstIterator();
+        $sanitized->setImageIterations(0);
+
+        return $sanitized;
     }
 
     /**
      * Aplica sanitización a una imagen estática (no GIF animado).
      * Rotación automática, remoción de metadata y conversión a sRGB.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      * @param string $mime Tipo MIME.
      */
-    private function sanitizeStaticImage(\Imagick $image, string $mime): void
+    private function sanitizeStaticImage(Imagick $image, string $mime): void
     {
         // 32. Solo aplica sanitización si no es un GIF animado.
         if ($mime === 'image/gif' && $image->getNumberImages() > 1) {
@@ -316,13 +427,13 @@ final class ImagickWorkflow
     /**
      * Redimensiona la imagen si sus dimensiones exceden el tamaño máximo configurado.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      * @param string $mime Tipo MIME.
      * @param int $width Ancho actual.
      * @param int $height Alto actual.
-     * @return array{0:\Imagick,1:int,2:int} Nueva instancia de Imagick y nuevas dimensiones.
+     * @return array{0:Imagick,1:int,2:int} Nueva instancia de Imagick y nuevas dimensiones.
      */
-    private function resizeIfNeeded(\Imagick $image, string $mime, int $width, int $height): array
+    private function resizeIfNeeded(Imagick $image, string $mime, int $width, int $height): array
     {
         $maxEdge = \max($width, $height);
         // 34. Si no excede el tamaño máximo, devuelve la imagen sin cambios.
@@ -341,7 +452,7 @@ final class ImagickWorkflow
             $image = $this->replaceImagickInstance($image, $resized);
         } else {
             // 37. Si es una imagen estática, redimensiona directamente.
-            $image->resizeImage($newWidth, $newHeight, \Imagick::FILTER_LANCZOS, 1, true);
+            $image->resizeImage($newWidth, $newHeight, Imagick::FILTER_LANCZOS, 1, true);
         }
 
         return [$image, $newWidth, $newHeight];
@@ -391,24 +502,24 @@ final class ImagickWorkflow
     /**
      * Prepara la imagen Imagick para ser codificada, aplicando calidad, filtros y formato.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      * @param string $format Formato de salida ('jpeg', 'webp', 'png', 'gif').
      * @param int $width Ancho de la imagen.
      * @param int $height Alto de la imagen.
      */
-    private function prepareForEncoding(\Imagick $image, string $format, int $width, int $height): void
+    private function prepareForEncoding(Imagick $image, string $format, int $width, int $height): void
     {
         // 42. Aplica ajustes específicos según el formato de salida.
         switch ($format) {
             case 'jpeg':
                 $image->setImageFormat('jpeg');
-                $image->setImageCompression(\Imagick::COMPRESSION_JPEG);
+                $image->setImageCompression(Imagick::COMPRESSION_JPEG);
                 $image->setImageCompressionQuality($this->config->jpegQuality);
                 // 43. Decide si usar JPEG progresivo basado en el tamaño.
                 if (\max($width, $height) >= $this->config->jpegProgressiveMin) {
-                    $image->setInterlaceScheme(\Imagick::INTERLACE_JPEG);
+                    $image->setInterlaceScheme(Imagick::INTERLACE_JPEG);
                 } else {
-                    $image->setInterlaceScheme(\Imagick::INTERLACE_NO);
+                    $image->setInterlaceScheme(Imagick::INTERLACE_NO);
                 }
                 break;
             case 'webp':
@@ -436,13 +547,13 @@ final class ImagickWorkflow
     /**
      * Escribe la imagen Imagick en un archivo temporal.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      * @param string $format Formato de imagen.
      * @param string $extension Extensión del archivo.
      * @return string Ruta del archivo temporal generado.
      * @throws ImageProcessingException Si falla al escribir el archivo.
      */
-    private function writeEncodedImage(\Imagick $image, string $format, string $extension): string
+    private function writeEncodedImage(Imagick $image, string $format, string $extension): string
     {
         // 44. Genera una ruta temporal para el archivo.
         $tempPath = $this->artifacts->tempFilePath($extension);
@@ -452,6 +563,18 @@ final class ImagickWorkflow
             : $image->writeImage($tempPath);       // Para imágenes estáticas
 
         if ($written === true) {
+            $outputSize = @filesize($tempPath);
+            if ($outputSize === false || $outputSize > $this->config->maxBytes) {
+                $this->artifacts->safeUnlink($tempPath);
+
+                throw new ImageProcessingException(
+                    reason: 'output_too_large',
+                    message: __('image-pipeline.output_too_large'),
+                    recoverable: false,
+                    context: ['size' => $outputSize]
+                );
+            }
+
             return $tempPath;
         }
 
@@ -468,11 +591,11 @@ final class ImagickWorkflow
     /**
      * Reemplaza una instancia de Imagick por otra y libera la memoria de la anterior.
      *
-     * @param \Imagick $current Instancia actual.
-     * @param \Imagick $replacement Nueva instancia.
-     * @return \Imagick La nueva instancia.
+     * @param Imagick $current Instancia actual.
+     * @param Imagick $replacement Nueva instancia.
+     * @return Imagick La nueva instancia.
      */
-    private function replaceImagickInstance(\Imagick $current, \Imagick $replacement): \Imagick
+    private function replaceImagickInstance(Imagick $current, Imagick $replacement): Imagick
     {
         // 47. Libera la memoria de la instancia actual.
         $current->clear();
@@ -484,100 +607,105 @@ final class ImagickWorkflow
     /**
      * Crea una versión redimensionada de un GIF limitando el número de frames.
      *
-     * @param \Imagick $src Instancia original con todos los frames.
+     * @param Imagick $src Instancia original con todos los frames.
      * @param int $width Nuevo ancho.
      * @param int $height Nuevo alto.
-     * @return \Imagick Nueva instancia con los frames limitados y redimensionados.
+     * @return Imagick Nueva instancia con los frames limitados y redimensionados.
      */
-    private function buildLimitedGif(\Imagick $src, int $width, int $height): \Imagick
+    private function buildLimitedGif(Imagick $src, int $width, int $height): Imagick
     {
-        $limited = new \Imagick();
+        $limited = new Imagick();
         $limited->setFormat('gif');
 
         $count = 0;
         foreach ($src as $frame) {
+            if ($count >= $this->config->maxGifFrames) {
+                break;
+            }
+
             // 48. Clona, redimensiona y agrega cada frame al nuevo GIF.
             $clone = clone $frame;
             $clone->resizeImage($width, $height, $this->config->gifResizeFilter, 1, true);
 
+            $delay = max(1, $clone->getImageDelay());
+            $clone->setImageDelay($delay);
+
             $limited->addImage($clone);
-            $limited->setImageDelay($clone->getImageDelay());
+            $limited->setImageDelay($delay);
             $limited->setImageDispose($clone->getImageDispose());
 
             $count++;
-            // 49. Limita el número de frames.
-            if ($count >= $this->config->maxGifFrames) {
-                break;
-            }
         }
 
         // 50. Deconstruye las imágenes para crear un GIF optimizado.
-        return $limited->deconstructImages();
+        $result = $limited->deconstructImages();
+        $result->setFirstIterator();
+        $result->setImageIterations(0);
+
+        return $result;
     }
 
     /**
      * Corrige la orientación de la imagen según el EXIF.
      * Intenta usar el método autoOrient si está disponible, si no, lo hace manualmente.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      */
-    private function autoOrient(\Imagick $image): void
+    private function autoOrient(Imagick $image): void
     {
         if (\method_exists($image, 'autoOrient')) {
-            // 51. Usa el método nativo si está disponible.
             $image->autoOrient();
-            return;
+        } else {
+            $orientation = $image->getImageOrientation();
+            switch ($orientation) {
+                case Imagick::ORIENTATION_TOPRIGHT:
+                    $image->flopImage();
+                    break;
+                case Imagick::ORIENTATION_BOTTOMRIGHT:
+                    $image->rotateImage('#000', 180);
+                    break;
+                case Imagick::ORIENTATION_BOTTOMLEFT:
+                    $image->flipImage();
+                    break;
+                case Imagick::ORIENTATION_LEFTTOP:
+                    $image->flopImage();
+                    $image->rotateImage('#000', 90);
+                    break;
+                case Imagick::ORIENTATION_RIGHTTOP:
+                    $image->rotateImage('#000', 90);
+                    break;
+                case Imagick::ORIENTATION_RIGHTBOTTOM:
+                    $image->flopImage();
+                    $image->rotateImage('#000', -90);
+                    break;
+                case Imagick::ORIENTATION_LEFTBOTTOM:
+                    $image->rotateImage('#000', -90);
+                    break;
+                default:
+                    break;
+            }
         }
 
-        // 52. Si no, aplica la rotación manualmente según la orientación EXIF.
-        $orientation = $image->getImageOrientation();
-        switch ($orientation) {
-            case \Imagick::ORIENTATION_TOPRIGHT:
-                $image->flopImage();
-                break;
-            case \Imagick::ORIENTATION_BOTTOMRIGHT:
-                $image->rotateImage('#000', 180);
-                break;
-            case \Imagick::ORIENTATION_BOTTOMLEFT:
-                $image->flipImage();
-                break;
-            case \Imagick::ORIENTATION_LEFTTOP:
-                $image->flopImage();
-                $image->rotateImage('#000', 90);
-                break;
-            case \Imagick::ORIENTATION_RIGHTTOP:
-                $image->rotateImage('#000', 90);
-                break;
-            case \Imagick::ORIENTATION_RIGHTBOTTOM:
-                $image->flopImage();
-                $image->rotateImage('#000', -90);
-                break;
-            case \Imagick::ORIENTATION_LEFTBOTTOM:
-                $image->rotateImage('#000', -90);
-                break;
-            default:
-                break;
-        }
-
-        $image->setImageOrientation(\Imagick::ORIENTATION_TOPLEFT);
+        $image->setImageOrientation(Imagick::ORIENTATION_TOPLEFT);
     }
 
     /**
      * Fuerza el espacio de color de la imagen a sRGB.
      * Útil para convertir imágenes CMYK a RGB.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      */
-    private function toSrgb(\Imagick $image): void
+    private function toSrgb(Imagick $image): void
     {
         try {
-            // 53. Verifica si la imagen está en CMYK y lo registra.
-            if (\method_exists($image, 'getImageColorspace') && $image->getImageColorspace() === \Imagick::COLORSPACE_CMYK) {
+            if (\method_exists($image, 'getImageColorspace') && $image->getImageColorspace() === Imagick::COLORSPACE_CMYK) {
                 $this->logger->log('notice', 'image_pipeline_cmyk_to_srgb', []);
+                $image->stripImage();
+                $image->transformImageColorspace(Imagick::COLORSPACE_SRGB);
+                return;
             }
 
-            // 54. Convierte el espacio de color a sRGB.
-            $image->setImageColorspace(\Imagick::COLORSPACE_SRGB);
+            $image->setImageColorspace(Imagick::COLORSPACE_SRGB);
         } catch (Throwable $exception) {
             // 55. Registra un error si falla la conversión.
             $this->logger->log('debug', 'image_pipeline_srgb_failed', [
@@ -589,10 +717,10 @@ final class ImagickWorkflow
     /**
      * Obtiene las dimensiones de la primera imagen de la secuencia.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      * @return array{0:int,1:int} Ancho y alto.
      */
-    private function dimensions(\Imagick $image): array
+    private function dimensions(Imagick $image): array
     {
         if ($image->getNumberImages() > 1) {
             // 56. Si es una secuencia (como un GIF animado), se posiciona en el primer frame.
@@ -638,10 +766,10 @@ final class ImagickWorkflow
      * Determina si la imagen tiene un canal alfa (transparencia).
      * Para GIFs animados, revisa cada frame.
      *
-     * @param \Imagick $image Instancia de Imagick.
+     * @param Imagick $image Instancia de Imagick.
      * @return bool True si tiene canal alfa.
      */
-    private function hasAlphaChannel(\Imagick $image): bool
+    private function hasAlphaChannel(Imagick $image): bool
     {
         if ($image->getNumberImages() <= 1) {
             // 60. Para imágenes estáticas, revisa directamente el canal alfa.

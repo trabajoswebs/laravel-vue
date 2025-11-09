@@ -17,17 +17,21 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Coordina el ciclo de vida replace→convert→cleanup de un Media.
+ * Coordina el ciclo de vida completo de un archivo multimedia: reemplazo, conversión y limpieza.
  *
- * Mantiene los servicios existentes pero encapsula el flujo principal con DTOs tipados.
+ * Esta clase centraliza la lógica de negocio relacionada con la gestión de medios,
+ * delegando tareas específicas a otros servicios. Utiliza DTOs para encapsular
+ * datos y mantener una comunicación clara y tipada entre los diferentes componentes.
+ * Proporciona métodos para reemplazar medios, construir payloads de limpieza y
+ * forzar manualmente la limpieza de archivos huérfanos si es necesario.
  */
 final class MediaLifecycleCoordinator
 {
     /**
      * Constructor que inyecta las dependencias necesarias.
      *
-     * @param MediaReplacementService $replacementService Servicio para reemplazar medios.
-     * @param MediaCleanupScheduler $cleanupScheduler Servicio para programar la limpieza de archivos huérfanos.
+     * @param MediaReplacementService $replacementService Servicio encargado del reemplazo y conversión de medios.
+     * @param MediaCleanupScheduler   $cleanupScheduler   Servicio encargado de programar y ejecutar la limpieza de archivos huérfanos.
      */
     public function __construct(
         private readonly MediaReplacementService $replacementService, // 4. Servicio para reemplazar medios.
@@ -35,12 +39,16 @@ final class MediaLifecycleCoordinator
     ) {}
 
     /**
-     * Reemplaza el media, registra conversions y entrega el snapshot tipado.
+     * Reemplaza el medio actual del propietario, aplica conversiones y devuelve un resultado tipado.
      *
-     * @param MediaOwner $owner El modelo que posee el medio (por ejemplo, un usuario).
-     * @param UploadedFile $file El archivo subido por el usuario.
+     * Este método inicia el proceso de reemplazo de un medio (por ejemplo, una imagen de perfil),
+     * delegando la lógica de procesamiento, validación y conversión al servicio de reemplazo.
+     *
+     * @param MediaOwner   $owner   El modelo que posee el medio (por ejemplo, un usuario).
+     * @param UploadedFile $file    El archivo subido por el usuario.
      * @param ImageProfile $profile Perfil de imagen que define las conversiones a aplicar.
-     * @return ReplacementResult Resultado del reemplazo, incluyendo el nuevo medio y la instantánea de artefactos anteriores.
+     *
+     * @return ReplacementResult Resultado del reemplazo, incluyendo el nuevo medio y una instantánea de los artefactos anteriores.
      */
     public function replace(MediaOwner $owner, UploadedFile $file, ImageProfile $profile): ReplacementResult
     {
@@ -49,9 +57,14 @@ final class MediaLifecycleCoordinator
     }
 
     /**
-     * Permite ejecutar cleanup manualmente cuando el coordinador no recibe eventos.
+     * Ejecuta manualmente la limpieza de archivos huérfanos asociados a un medio específico.
+     *
+     * Este método es útil en situaciones donde el coordinador no recibe eventos automáticos
+     * de limpieza o se requiere forzar la eliminación de archivos antiguos.
      *
      * @param string $mediaId El ID del medio cuyos artefactos antiguos se deben limpiar.
+     *
+     * @return void
      */
     public function flushPendingCleanup(string $mediaId): void
     {
@@ -68,9 +81,13 @@ final class MediaLifecycleCoordinator
     }
 
     /**
-     * Crea un payload de cleanup para programar la limpieza diferida.
+     * Crea un DTO de limpieza a partir de un resultado de reemplazo para programar la limpieza diferida.
+     *
+     * Este método construye un `CleanupPayload` que puede ser utilizado por el planificador
+     * de limpieza para eliminar archivos huérfanos en el futuro.
      *
      * @param ReplacementResult $result El resultado del reemplazo que contiene la instantánea y expectativas.
+     *
      * @return CleanupPayload DTO listo para programar la limpieza de artefactos antiguos.
      */
     public function buildCleanupPayload(ReplacementResult $result): CleanupPayload

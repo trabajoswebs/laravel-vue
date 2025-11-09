@@ -152,6 +152,16 @@ final class ClamAvScanner extends AbstractScanner
         array $scanConfig,
         array $scannerConfig,
     ): ?array {
+        if (! isset($target['handle']) || ! is_resource($target['handle'])) {
+            Log::error('image_scan.clamav_invalid_target_handle', ['target' => array_keys($target)]);
+            return null;
+        }
+
+        if (! isset($target['display_name']) || ! is_string($target['display_name'])) {
+            Log::error('image_scan.clamav_invalid_target_display_name');
+            return null;
+        }
+
         $maxFileBytes = $this->resolveMaxFileBytes($scanConfig, $scannerConfig);
         [$finalArguments, $isDaemon] = $this->ensureStreamArguments($arguments, $binary, $maxFileBytes);
 
@@ -165,7 +175,7 @@ final class ClamAvScanner extends AbstractScanner
         }
 
         // Escaneo directo de archivo (clamscan).
-        $copy = $this->createTemporaryCopy($target['handle'], $target['display_name']);
+        $copy = $this->createTemporaryCopy($target['handle'], $target['display_name'], $maxFileBytes);
         if ($copy === null) {
             return null;
         }
@@ -300,62 +310,217 @@ final class ClamAvScanner extends AbstractScanner
      *
      * @param resource $handle Handle del archivo original.
      * @param string $displayName Nombre del archivo para logs.
+     * @param int $maxFileBytes Tamaño máximo permitido para el archivo temporal.
      * @return array{path: string, cleanup: callable}|null Ruta de la copia temporal y función de limpieza,
      *         o `null` si falla.
+     *
+     * Nota: Esta función consume y cierra el handle original del archivo de entrada.
      */
-    private function createTemporaryCopy($handle, string $displayName): ?array
+    private function createTemporaryCopy($handle, string $displayName, int $maxFileBytes): ?array
     {
         if (! is_resource($handle)) {
             return null;
         }
 
-        $temp = tempnam(sys_get_temp_dir(), 'clam_scan_');
-        if ($temp === false) {
-            Log::error('image_scan.clamav_temp_create_failed', ['file' => $displayName]);
+        $sizeLimit = $maxFileBytes > 0 ? $maxFileBytes : null;
+        $fstatError = null;
+        set_error_handler(static function (int $severity, string $message) use (&$fstatError): bool {
+            $fstatError = $message;
+            return true;
+        });
+        $stats = fstat($handle);
+        restore_error_handler();
+        if ($stats === false) {
+            Log::warning('image_scan.clamav_temp_stat_failed', [
+                'file' => $displayName,
+                'error' => $fstatError,
+            ]);
+            $stats = null;
+        }
+
+        if (
+            $sizeLimit !== null
+            && is_array($stats)
+            && isset($stats['size'])
+            && $stats['size'] > $sizeLimit
+        ) {
+            Log::warning('image_scan.clamav_temp_size_exceeded', [
+                'file' => $displayName,
+                'size' => $stats['size'],
+                'limit' => $sizeLimit,
+            ]);
             return null;
         }
 
-        if (! unlink($temp)) {
-            Log::error('image_scan.clamav_temp_unlink_failed', ['file' => $displayName, 'path' => $temp]);
+        $tempFile = $this->createExclusiveTempFile($displayName);
+        if ($tempFile === null) {
             return null;
         }
 
-        $out = fopen($temp, 'xb'); // 'x' crea el archivo exclusivamente, 'b' lo abre en modo binario.
-        if ($out === false) {
-            Log::error('image_scan.clamav_temp_open_failed', ['file' => $displayName]);
-            return null;
-        }
+        $tempPath = $tempFile['path'];
+        $out = $tempFile['handle'];
 
         rewind($handle);
-        if (stream_copy_to_stream($handle, $out) === false) {
-            fclose($out);
-            unlink($temp);
-            Log::error('image_scan.clamav_temp_write_failed', ['file' => $displayName]);
+        $copySucceeded = false;
+
+        try {
+            $copySucceeded = $this->copyStreamWithLimit($handle, $out, $sizeLimit, $displayName);
+        } finally {
+            if (fclose($out) === false) {
+                Log::error('image_scan.clamav_temp_close_failed', ['file' => $displayName]);
+                $copySucceeded = false;
+            }
+
+            if (! $copySucceeded) {
+                if (file_exists($tempPath) && ! unlink($tempPath)) {
+                    Log::warning('image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
+                }
+            }
+        }
+
+        if (! $copySucceeded) {
             return null;
         }
 
-        if (fclose($out) === false) {
-            unlink($temp);
-            Log::error('image_scan.clamav_temp_close_failed', ['file' => $displayName]);
-            return null;
-        }
-
-        if (! chmod($temp, 0600)) { // Solo lectura/escritura para el propietario.
-            unlink($temp);
+        if (! chmod($tempPath, 0600)) { // Solo lectura/escritura para el propietario.
+            if (file_exists($tempPath) && ! unlink($tempPath)) {
+                Log::warning('image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
+            }
             Log::error('image_scan.clamav_temp_chmod_failed', ['file' => $displayName]);
             return null;
         }
 
         // Cierra el handle original después de la copia
-        fclose($handle);
+        if (fclose($handle) === false) {
+            Log::warning('image_scan.clamav_source_close_failed', ['file' => $displayName]);
+        }
 
         return [
-            'path' => $temp,
-            'cleanup' => static function () use ($temp): void {
-                if (file_exists($temp)) {
-                    unlink($temp);
+            'path' => $tempPath,
+            'cleanup' => static function () use ($tempPath): void {
+                if (file_exists($tempPath) && ! unlink($tempPath)) {
+                    Log::warning('image_scan.clamav_temp_cleanup_failed', ['path' => $tempPath]);
                 }
             },
         ];
+    }
+
+    /**
+     * Crea un archivo temporal con nombre impredecible usando creación exclusiva.
+     *
+     * @param string $displayName Nombre del archivo para logs.
+     * @return array{path: string, handle: resource}|null Ruta y handle del archivo temporal.
+     */
+    private function createExclusiveTempFile(string $displayName): ?array
+    {
+        $directory = rtrim((string) sys_get_temp_dir(), DIRECTORY_SEPARATOR);
+        if ($directory === '') {
+            Log::error('image_scan.clamav_temp_dir_invalid', ['file' => $displayName]);
+            return null;
+        }
+
+        $lastOpenError = null;
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            try {
+                $name = 'clam_scan_' . bin2hex(random_bytes(16));
+            } catch (\Throwable $exception) {
+                Log::error('image_scan.clamav_temp_random_failed', [
+                    'file' => $displayName,
+                    'message' => $exception->getMessage(),
+                ]);
+                return null;
+            }
+
+            $path = $directory . DIRECTORY_SEPARATOR . $name;
+            $openError = null;
+            set_error_handler(static function (int $severity, string $message) use (&$openError): bool {
+                $openError = $message;
+                return true;
+            });
+            $handle = fopen($path, 'xb'); // 'x' asegura creación exclusiva en un solo paso.
+            restore_error_handler();
+
+            if ($handle !== false) {
+                return [
+                    'path' => $path,
+                    'handle' => $handle,
+                ];
+            }
+
+            $lastOpenError = $openError;
+        }
+
+        Log::error('image_scan.clamav_temp_open_failed', [
+            'file' => $displayName,
+            'error' => $lastOpenError,
+        ]);
+        return null;
+    }
+
+    /**
+     * Copia un stream en otro aplicando un límite opcional de bytes.
+     *
+     * @param resource $source Stream de origen.
+     * @param resource $destination Stream de destino.
+     * @param int|null $maxBytes Límite máximo permitido o `null` si no aplica.
+     * @param string $displayName Nombre del archivo para logs.
+     * @return bool `true` si la copia tuvo éxito y respetó el límite.
+     */
+    private function copyStreamWithLimit($source, $destination, ?int $maxBytes, string $displayName): bool
+    {
+        $bytesCopied = 0;
+        $chunkSize = 1048576; // 1MB
+        $emptyReads = 0;
+        $maxEmptyReads = 1024;
+
+        while (! feof($source)) {
+            $chunk = fread($source, $chunkSize);
+            if ($chunk === false) {
+                Log::error('image_scan.clamav_temp_read_failed', ['file' => $displayName]);
+                return false;
+            }
+
+            if ($chunk === '') {
+                $emptyReads++;
+                $meta = stream_get_meta_data($source);
+                if (is_array($meta) && ! empty($meta['timed_out'])) {
+                    Log::warning('image_scan.clamav_temp_source_timeout', ['file' => $displayName]);
+                    return false;
+                }
+
+                if ($emptyReads >= $maxEmptyReads) {
+                    Log::warning('image_scan.clamav_temp_empty_reads_limit', [
+                        'file' => $displayName,
+                        'attempts' => $emptyReads,
+                    ]);
+                    return false;
+                }
+
+                usleep(10000); // Cede CPU antes de reintentar.
+                continue;
+            }
+
+            $emptyReads = 0;
+            $chunkLength = strlen($chunk);
+            if ($maxBytes !== null && ($bytesCopied + $chunkLength) > $maxBytes) {
+                Log::warning('image_scan.clamav_temp_size_exceeded', [
+                    'file' => $displayName,
+                    'limit' => $maxBytes,
+                    'copied_bytes' => $bytesCopied,
+                ]);
+                return false;
+            }
+
+            $written = fwrite($destination, $chunk);
+            if ($written === false || $written !== $chunkLength) {
+                Log::error('image_scan.clamav_temp_write_failed', ['file' => $displayName]);
+                return false;
+            }
+
+            $bytesCopied += $written;
+        }
+
+        return true;
     }
 }

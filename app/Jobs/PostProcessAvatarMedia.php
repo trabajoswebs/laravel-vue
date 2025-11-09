@@ -207,11 +207,16 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
                 throw $e;
             }
 
-            Log::error('ppam_permanent_error', $this->context([
+            $context = $this->context([
                 'error' => $e->getMessage(),
                 'class' => get_class($e),
-                'trace' => substr($e->getTraceAsString(), 0, 2000),
-            ]));
+            ]);
+
+            if (config('app.debug', false)) {
+                $context['trace'] = substr($e->getTraceAsString(), 0, 2000);
+            }
+
+            Log::error('ppam_permanent_error', $context);
         } finally {
             $this->resetReleaseCount();
         }
