@@ -1,24 +1,22 @@
 <script setup lang="ts">
+// Importaciones de Vue y bibliotecas externas
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { toast } from 'vue-sonner';
-import { Loader2, Trash2, Upload } from 'lucide-vue-next';
+import { Camera, ImagePlus, Loader2, Upload, X } from 'lucide-vue-next';
 
+// Importaciones de componentes UI
 import InputError from '@/components/InputError.vue';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+
+// Importaciones de composables personalizados
 import { useAvatarUpload } from '@/composables/useAvatarUpload';
 import { useInitials } from '@/composables/useInitials';
 import { useLanguage } from '@/composables/useLanguage';
 import type { User } from '@/types';
 
+// Definición de props del componente
 interface Props {
-    /**
-     * Usuario a mostrar. Si no se provee, se usará el autenticado desde Inertia.
-     */
     user?: User | null;
-    /**
-     * Texto de ayuda opcional; si no se entrega, se usará la traducción por defecto.
-     */
     helperText?: string;
 }
 
@@ -27,16 +25,19 @@ const props = withDefaults(defineProps<Props>(), {
     helperText: '',
 });
 
-const fileInput = ref<HTMLInputElement | null>(null);
-const baseId = useId() ?? `avatar-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const uploadInputId = `${baseId}-input`;
-const helperId = `${baseId}-helper`;
-const errorId = `${baseId}-error`;
-const progressId = `${baseId}-progress`;
+// Referencias y IDs
+const fileInput = ref<HTMLInputElement | null>(null); // Referencia al input de archivo
+const baseId = useId() ?? `avatar-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; // ID único para el componente
+const uploadInputId = `${baseId}-input`; // ID para el input de archivo
+const helperId = `${baseId}-helper`; // ID para el texto de ayuda
+const errorId = `${baseId}-error`; // ID para mensajes de error
+const progressId = `${baseId}-progress`; // ID para la barra de progreso
 
-const { t } = useLanguage();
-const { getInitials } = useInitials();
+// Instancias de composables
+const { t } = useLanguage(); // Función para traducir textos
+const { getInitials } = useInitials(); // Función para obtener iniciales del nombre
 
+// Estado y funciones para la subida de avatar
 const {
     authUser,
     hasAvatar,
@@ -55,43 +56,39 @@ const {
     acceptMimeTypes,
 } = useAvatarUpload();
 
-const targetUser = computed<User | null>(() => props.user ?? authUser.value ?? null);
-const avatarUrl = computed<string | null>(() => resolveAvatarUrl(targetUser.value));
-const displayName = computed<string>(() => targetUser.value?.name ?? '');
+// Computadas
+const targetUser = computed<User | null>(() => props.user ?? authUser.value ?? null); // Usuario objetivo para el avatar
+const avatarUrl = computed<string | null>(() => resolveAvatarUrl(targetUser.value)); // URL del avatar actual
+const displayName = computed<string>(() => targetUser.value?.name ?? ''); // Nombre del usuario
+
 const avatarImageAlt = computed<string>(() => {
     if (displayName.value) {
         return t('profile.avatar_image_alt_named', { name: displayName.value });
     }
-
     return t('profile.avatar_image_alt_generic');
 });
-const uploadPercentage = computed<number>(() => {
-    if (uploadProgress.value === null) {
-        return 0;
-    }
 
+const uploadPercentage = computed<number>(() => {
+    if (uploadProgress.value === null) return 0;
     return Math.round(uploadProgress.value);
 });
+
 const visualProgress = computed<number>(() => {
-    if (uploadProgress.value === null) {
-        return 0;
-    }
-
+    if (uploadProgress.value === null) return 0;
     const value = uploadProgress.value;
-    if (value > 0 && value < 6) {
-        return 6;
-    }
-
+    if (value > 0 && value < 6) return 6; // Mínimo 6% para visibilidad
     return value;
 });
-const previewUrl = ref<string | null>(null);
-const renderedAvatarUrl = computed<string | null>(() => previewUrl.value ?? avatarUrl.value);
 
+// Vista previa
+const previewUrl = ref<string | null>(null); // URL de vista previa del archivo
+const renderedAvatarUrl = computed<string | null>(() => previewUrl.value ?? avatarUrl.value); // URL a mostrar (vista previa o avatar actual)
+
+// Mensajes
 const helperMessage = computed<string>(() => {
     if (props.helperText && props.helperText.trim() !== '') {
         return props.helperText;
     }
-
     return t('profile.avatar_helper_dynamic', {
         types: allowedMimeSummary,
         max: formatBytesLabel(constraints.maxBytes),
@@ -104,96 +101,130 @@ const avatarErrorMessage = computed<string>(() => {
     if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
         return fieldErrors[0];
     }
-
     return generalError.value ?? '';
 });
 
-const isBusy = computed<boolean>(() => isUploading.value || isDeleting.value);
-const isUploadCancellable = computed<boolean>(() => isUploading.value);
-const acceptAttribute = computed<string>(() => acceptMimeTypes);
-const isDragActive = ref(false);
+// Estados
+const isBusy = computed<boolean>(() => isUploading.value || isDeleting.value); // Indica si hay operación en curso
+const isUploadCancellable = computed<boolean>(() => isUploading.value); // Indica si la subida se puede cancelar
+const acceptAttribute = computed<string>(() => acceptMimeTypes); // Tipos MIME permitidos
+const isDragActive = ref(false); // Indica si hay arrastre activo
+
+const setDragState = (active: boolean) => {
+    if (active && isBusy.value) return;
+    isDragActive.value = active;
+};
+
 const dropHint = computed<string>(() =>
     isDragActive.value
         ? t('profile.avatar_drop_hint_active')
         : t('profile.avatar_drop_hint')
 );
-const activeUploadToken = ref<symbol | null>(null);
+
+const formatLocaleKeys = [
+    'profile.avatar_format_jpg',
+    'profile.avatar_format_jpeg',
+    'profile.avatar_format_png',
+    'profile.avatar_format_webp',
+    'profile.avatar_format_avif',
+    'profile.avatar_format_gif',
+] as const;
+
+const localizedFormats = computed<string[]>(() => formatLocaleKeys.map((key) => t(key)));
+
+const hasImage = computed<boolean>(() => Boolean(renderedAvatarUrl.value));
+
+const activeUploadToken = ref<symbol | null>(null); // Token para identificar la subida activa
+const isImageLoading = ref(false); // Indica si la imagen está cargando
+
+type AvatarUploadResult = Awaited<ReturnType<typeof uploadAvatar>>;
+
 const clearPreview = () => {
     if (previewUrl.value) {
-        URL.revokeObjectURL(previewUrl.value);
+        URL.revokeObjectURL(previewUrl.value); // Libera la URL de objeto
         previewUrl.value = null;
     }
+    isImageLoading.value = false;
 };
 
 onBeforeUnmount(() => {
-    clearPreview();
+    clearPreview(); // Limpia la vista previa al desmontar
 });
 
 watch([avatarUrl, isUploading], ([next, uploading]) => {
     if (!uploading && next) {
-        clearPreview();
+        clearPreview(); // Limpia la vista previa cuando se completa la subida
     }
 });
 
+watch(
+    renderedAvatarUrl,
+    (nextUrl) => {
+        isImageLoading.value = Boolean(nextUrl); // Actualiza estado de carga
+    },
+    { immediate: true }
+);
+
 const triggerFileDialog = () => {
-    if (isBusy.value) {
-        return;
-    }
-    fileInput.value?.click();
+    if (isBusy.value) return;
+    fileInput.value?.click(); // Abre el diálogo de selección de archivo
 };
 
 const resetInput = () => {
     if (fileInput.value) {
-        fileInput.value.value = '';
+        fileInput.value.value = ''; // Resetea el input de archivo
     }
 };
 
 const applyPreview = (file: File | null) => {
     clearPreview();
     if (file) {
-        previewUrl.value = URL.createObjectURL(file);
+        previewUrl.value = URL.createObjectURL(file); // Crea URL de objeto para vista previa
     }
 };
 
+const buildErrorDescription = (error: unknown) =>
+    (error instanceof Error ? error.message : generalError.value) ?? t('profile.avatar_error_generic');
+
+const notifyFailure = (titleKey: string, error: unknown, logContext: string) => {
+    toast.error(t(titleKey), {
+        description: buildErrorDescription(error),
+    });
+
+    if (import.meta.env.DEV) {
+        console.warn(logContext, error);
+    }
+};
+
+const showUploadSuccessToast = (result: AvatarUploadResult) => {
+    toast.success(t('profile.avatar_upload_success_toast'), {
+        description: t('profile.avatar_upload_success_details', {
+            filename: result.filename,
+            width: result.width,
+            height: result.height,
+        }),
+    });
+};
+
 const processFile = async (file: File | null) => {
-    const token = Symbol('avatar-upload');
+    const token = Symbol('avatar-upload'); // Token único para esta subida
     activeUploadToken.value = token;
     applyPreview(file);
 
     try {
         const result = await uploadAvatar(file ?? undefined);
         if (activeUploadToken.value === token) {
-            toast.success(t('profile.avatar_upload_success_toast'), {
-                description: t('profile.avatar_upload_success_details', {
-                    filename: result.filename,
-                    width: result.width,
-                    height: result.height,
-                }),
-            });
+            showUploadSuccessToast(result);
         }
     } catch (error) {
-        if (activeUploadToken.value !== token) {
-            return;
-        }
-
+        if (activeUploadToken.value !== token) return;
         clearPreview();
-
-        const description =
-            (error instanceof Error ? error.message : generalError.value) ??
-            t('profile.avatar_error_generic');
-
-        toast.error(t('profile.avatar_upload_failed_toast'), {
-            description,
-        });
-
-        if (import.meta.env.DEV) {
-            console.warn('Avatar upload failed:', error);
-        }
+        notifyFailure('profile.avatar_upload_failed_toast', error, 'Avatar upload failed:');
     } finally {
         if (activeUploadToken.value === token) {
             resetInput();
             activeUploadToken.value = null;
-            isDragActive.value = false;
+            setDragState(false);
         }
     }
 };
@@ -209,17 +240,7 @@ const handleRemove = async () => {
         await removeAvatar();
         toast.success(t('profile.avatar_remove_success_toast'));
     } catch (error) {
-        const description =
-            (error instanceof Error ? error.message : generalError.value) ??
-            t('profile.avatar_error_generic');
-
-        toast.error(t('profile.avatar_remove_failed_toast'), {
-            description,
-        });
-
-        if (import.meta.env.DEV) {
-            console.warn('Avatar removal failed:', error);
-        }
+        notifyFailure('profile.avatar_remove_failed_toast', error, 'Avatar removal failed:');
     }
 };
 
@@ -228,125 +249,393 @@ const handleCancelUpload = () => {
     resetInput();
     activeUploadToken.value = null;
     clearPreview();
-    isDragActive.value = false;
+    setDragState(false);
     toast.warning(t('profile.avatar_upload_cancelled_toast'));
 };
 
 const handleDragEnter = (event: DragEvent) => {
     event.preventDefault();
-    if (isBusy.value) {
-        return;
-    }
-    isDragActive.value = true;
+    setDragState(true);
 };
 
 const handleDragOver = (event: DragEvent) => {
     event.preventDefault();
-    if (!isBusy.value) {
-        isDragActive.value = true;
-    }
+    setDragState(true);
 };
 
 const handleDragLeave = (event: DragEvent) => {
     event.preventDefault();
     if (event.currentTarget === event.target) {
-        isDragActive.value = false;
+        setDragState(false);
     }
 };
 
 const handleDrop = async (event: DragEvent) => {
     event.preventDefault();
-    if (isBusy.value) {
-        return;
-    }
-
+    setDragState(false);
+    if (isBusy.value) return;
     const file = event.dataTransfer?.files?.[0] ?? null;
-    isDragActive.value = false;
     await processFile(file);
+};
+
+const handleImageLoad = () => {
+    isImageLoading.value = false; // Marca la imagen como cargada
+};
+
+const handleImageError = () => {
+    isImageLoading.value = false; // Marca la imagen como fallida
 };
 </script>
 
 <template>
-    <section class="rounded-2xl border border-border bg-card p-6 shadow-sm transition-colors"
-        :class="{ 'ring-2 ring-primary/60': isDragActive }" @dragenter.prevent="handleDragEnter"
-        @dragover.prevent="handleDragOver" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop">
-        <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-8">
-            <div class="flex flex-col items-center gap-3 sm:items-start">
-                <Avatar
-                    class="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-border shadow-inner">
-                    <AvatarImage v-if="renderedAvatarUrl" :src="renderedAvatarUrl" :alt="avatarImageAlt" />
-                    <AvatarFallback
-                        class="flex items-center justify-center rounded-xl bg-muted text-lg font-medium text-foreground"
-                        aria-hidden="true">
-                        <div v-if="!renderedAvatarUrl && isUploading"
-                            class="h-full w-full animate-pulse rounded-xl bg-muted-foreground/10" />
-                        <span v-else>
-                            {{ displayName ? getInitials(displayName) : '??' }}
-                        </span>
-                    </AvatarFallback>
-                    <div v-if="isDragActive"
-                        class="absolute inset-0 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/60 bg-primary/10"
-                        aria-hidden="true" />
-                </Avatar>
-
-                <p :id="helperId" class="max-w-xs text-center text-xs text-muted-foreground sm:text-left">
-                    {{ helperMessage }}
-                </p>
-                <p
-                    class="text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-left">
-                    {{ dropHint }}
-                </p>
+    <section class="relative" :class="{
+        'border-primary bg-primary/5 shadow-primary/20': isDragActive,
+        'border-border hover:border-border/60': !isDragActive
+    }" @dragenter.prevent="handleDragEnter" @dragover.prevent="handleDragOver" @dragleave.prevent="handleDragLeave"
+        @drop.prevent="handleDrop" role="region" aria-label="Profile avatar uploader">
+        <!-- Overlay drag & drop -->
+        <div v-if="isDragActive"
+            class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-xl bg-primary/10 backdrop-blur-sm pointer-events-none">
+            <div class="relative">
+                <div class="absolute inset-0 animate-ping rounded-full bg-primary/30"></div>
+                <Upload class="relative h-16 w-16 text-primary" />
             </div>
-
-            <div class="flex flex-1 flex-col gap-4">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <Button type="button" :disabled="isBusy" :aria-label="t('profile.avatar_upload_button')"
-                        @click="triggerFileDialog"
-                        class="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-sm transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-70">
-                        <Loader2 v-if="isUploading" class="h-4 w-4 animate-spin" />
-                        <Upload v-else class="h-4 w-4" />
-                        <span>
-                            {{ isUploading ? t('profile.avatar_uploading_short') : t('profile.avatar_upload_button') }}
-                        </span>
-                    </Button>
-
-                    <Button type="button" variant="outline" :disabled="isBusy || !hasAvatar"
-                        :aria-label="t('profile.avatar_remove_button')" @click="handleRemove"
-                        class="inline-flex items-center gap-2 rounded-full border border-destructive/60 px-4 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50">
-                        <Loader2 v-if="isDeleting" class="h-4 w-4 animate-spin" />
-                        <Trash2 v-else class="h-4 w-4" />
-                        <span>
-                            {{ isDeleting ? t('profile.avatar_deleting_short') : t('profile.avatar_remove_button') }}
-                        </span>
-                    </Button>
-                </div>
-
-                <div v-if="isUploading && uploadProgress !== null" class="space-y-2">
-                    <div class="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar"
-                        :aria-valuenow="visualProgress" aria-valuemin="0" aria-valuemax="100"
-                        :aria-describedby="progressId">
-                        <div class="h-full rounded-full bg-foreground/80 transition-all duration-300"
-                            :style="{ width: `${visualProgress}%` }"></div>
-                    </div>
-                    <p :id="progressId" class="text-xs text-muted-foreground" aria-live="polite">
-                        {{ t('profile.avatar_uploading_progress', { progress: uploadPercentage }) }}
-                    </p>
-                    <Button v-if="isUploadCancellable" type="button" size="sm" variant="ghost"
-                        class="rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground transition hover:bg-muted"
-                        @click="handleCancelUpload">
-                        {{ t('profile.avatar_cancel_upload') }}
-                    </Button>
-                </div>
-
-                <p v-else-if="isDeleting" class="text-xs text-muted-foreground" aria-live="polite">
-                    {{ t('profile.avatar_deleting_status') }}
-                </p>
-
-                <InputError class="mt-1" :id="errorId" :message="avatarErrorMessage" />
-            </div>
+            <p class="text-lg font-semibold text-primary">
+                {{ dropHint }}
+            </p>
         </div>
 
+        <!-- LAYOUT PRINCIPAL -->
+        <div class="flex flex-col gap-6">
+            <!-- FILA 1: PREVIEW + INFO + CTA -->
+            <div class="flex flex-col gap-5 lg:flex-row lg:items-start">
+                <!-- Columna izquierda: Avatar -->
+                <div class="flex flex-col items-center gap-3 lg:items-start">
+                    <div class="relative">
+                        <div class="group relative h-32 w-32 lg:h-36 lg:w-36 rounded-2xl border-4 border-border/50 bg-gradient-to-br from-muted to-muted/50 shadow-xl transition-all duration-300 group-hover:shadow-2xl cursor-pointer focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/70"
+                            :class="{ 'ring-4 ring-primary/30': isDragActive }" :aria-label="avatarImageAlt"
+                            role="button" tabindex="0" @click="!isUploading && triggerFileDialog"
+                            @keydown.enter.prevent="!isUploading && triggerFileDialog"
+                            @keydown.space.prevent="!isUploading && triggerFileDialog">
+                            <div class="relative h-full w-full rounded-2xl overflow-hidden">
+                                <!-- Subida en curso -->
+                                <div v-if="isUploading"
+                                    class="h-full w-full flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-primary/5 to-primary/10">
+                                    <Loader2 class="h-8 w-8 animate-spin text-primary" />
+                                    <div class="text-center">
+                                        <p class="text-xs font-semibold text-foreground">
+                                            {{ t('profile.avatar_uploading_short') }}
+                                        </p>
+                                        <p class="text-[10px] text-muted-foreground">
+                                            {{ uploadPercentage }}%
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Imagen (ya subida) -->
+                                <template v-else-if="renderedAvatarUrl">
+                                    <img :src="renderedAvatarUrl" :alt="avatarImageAlt"
+                                        class="h-full w-full object-cover transition-opacity duration-200"
+                                        :class="isImageLoading ? 'opacity-0' : 'opacity-100'" @load="handleImageLoad"
+                                        @error="handleImageError" @click.stop="!isUploading && triggerFileDialog()" />
+                                    <div v-if="isImageLoading"
+                                        class="absolute inset-0 flex items-center justify-center p-5">
+                                        <div class="avatar-skeleton">
+                                            <div class="avatar-skeleton__frame shimmer">
+                                                <span class="avatar-skeleton__sun"></span>
+                                                <span
+                                                    class="avatar-skeleton__mountain avatar-skeleton__mountain--left"></span>
+                                                <span
+                                                    class="avatar-skeleton__mountain avatar-skeleton__mountain--right"></span>
+                                                <span class="avatar-skeleton__baseline"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div v-if="!isImageLoading && !isUploading"
+                                        class="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors duration-200 pointer-events-none">
+                                        <Camera
+                                            class="h-10 w-10 text-white/0 drop-shadow-md transition-all duration-200 group-hover:text-white/80" />
+                                    </div>
+                                </template>
+
+                                <!-- Iniciales -->
+                                <div v-else
+                                    class="h-full w-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 cursor-pointer"
+                                    role="button" tabindex="-1" @click.stop="!isUploading && triggerFileDialog()">
+                                    <span class="text-3xl font-bold text-primary/60">
+                                        {{ displayName ? getInitials(displayName) : '?' }}
+                                    </span>
+                                </div>
+
+                                <!-- Indicador hover "subir" cuando no hay avatar -->
+                                <div v-if="!renderedAvatarUrl && !isUploading"
+                                    class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/85 group-hover:opacity-100">
+                                    <ImagePlus
+                                        class="h-10 w-10 text-transparent transition-all duration-200 group-hover:text-white" />
+                                </div>
+                            </div>
+                        </div>
+                        <!-- ÚNICO control eliminar -->
+                        <Button v-if="hasAvatar && !isUploading" type="button" variant="destructive" size="icon"
+                            @click.stop="handleRemove" :disabled="isBusy"
+                            class="absolute -top-2 -right-2 h-8 w-8 rounded-full shadow-lg cursor-pointer transition-all duration-200 hover:scale-110 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                            :aria-label="t('profile.avatar_remove_button')" :title="t('profile.avatar_remove_button')">
+                            <img src="/icons/trash.svg" alt="" aria-hidden="true" class="h-4 w-4" />
+                        </Button>
+
+                        <!-- Progreso bajo avatar -->
+                        <div v-if="isUploading && uploadProgress !== null"
+                            class="mt-2 w-32 lg:w-36 h-2 bg-muted/50 rounded-full overflow-hidden shadow-inner"
+                            role="progressbar" :aria-valuenow="visualProgress" aria-valuemin="0" aria-valuemax="100"
+                            :aria-describedby="progressId">
+                            <div class="h-full bg-gradient-to-r from-primary to-primary/80 transition-all duration-300 shadow-sm"
+                                :style="{ width: `${visualProgress}%` }" />
+                        </div>
+                    </div>
+
+                    <!-- Cancelar subida -->
+                    <Button v-if="isUploadCancellable" type="button" size="xs" @click="handleCancelUpload"
+                        class="warning-button cursor-pointer gap-1.5 rounded-md border border-transparent px-3 py-1.5 text-[12px] font-semibold shadow-sm hover:brightness-110 hover:scale-105 disabled:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-card">
+                        <X class="h-4 w-4" />
+                        <span>{{ t('profile.avatar_cancel_upload') }}</span>
+                    </Button>
+                </div>
+
+                <!-- Columna derecha: texto + CTA principal -->
+                <div class="flex-1 flex flex-col gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-foreground mb-1">
+                            {{ t('profile.avatar_title') }}
+                        </h3>
+                        <p class="text-sm leading-relaxed text-foreground/70">
+                            {{ t('profile.avatar_description') }}
+                        </p>
+                    </div>
+
+                    <!-- Acción principal + hint compacto (solo formatos + tamaño) -->
+                    <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                        <Button type="button" :disabled="isBusy" @click="triggerFileDialog"
+                            :aria-label="hasAvatar ? t('profile.avatar_change_button') : t('profile.avatar_upload_button')"
+                            class="cursor-pointer gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-card">
+                            <Upload class="h-4 w-4" />
+                            <span v-if="hasAvatar">
+                                {{ t('profile.avatar_change_button') }}
+                            </span>
+                            <span v-else>
+                                {{ t('profile.avatar_upload_button') }}
+                            </span>
+                        </Button>
+
+                        <p class="text-xs text-foreground/70">
+                            {{ localizedFormats.join(', ') }} · {{ t('profile.avatar_max_size_value') }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILA 2: Especificaciones + Consejo -->
+            <div class="grid gap-4 lg:grid-cols-[2fr,1.4fr]">
+                <!-- Especificaciones técnicas -->
+                <div class="p-4 rounded-lg bg-muted/40 border border-border/50 space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <h4 class="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
+                                {{ t('profile.avatar_formats_title') }}
+                            </h4>
+                            <div class="flex flex-wrap gap-2">
+                                <span v-for="format in localizedFormats" :key="format"
+                                    class="inline-flex items-center px-2.5 py-1 rounded-md bg-primary/10 text-primary text-[10px] font-medium">
+                                    {{ format }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <h4 class="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
+                                {{ t('profile.avatar_max_size_title') }}
+                            </h4>
+                            <p class="text-sm font-semibold text-foreground">
+                                {{ t('profile.avatar_max_size_value') }}
+                            </p>
+                            <p class="text-xs leading-relaxed text-foreground/70">
+                                {{ t('profile.avatar_recommended_dimensions') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Consejo: arrastrar y soltar (único lugar donde se menciona) -->
+                <div class="flex flex-col gap-2 p-4 rounded-lg bg-primary/5 border border-dashed border-primary/30">
+                    <div class="flex items-start gap-2.5">
+                        <Upload class="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                        <p class="text-xs leading-relaxed text-foreground/70">
+                            {{ t('profile.avatar_drag_tip') }}
+                        </p>
+                    </div>
+                    <slot name="extra-tips"></slot>
+                </div>
+            </div>
+
+            <!-- Errores -->
+            <InputError v-if="avatarErrorMessage" :id="errorId" :message="avatarErrorMessage"
+                class="animate-in fade-in slide-in-from-top-2 duration-200" />
+        </div>
+
+        <p :id="helperId" class="sr-only">
+            {{ helperMessage }}
+        </p>
+
+        <!-- Input real -->
+        <label class="sr-only" :for="uploadInputId">
+            {{ t('profile.avatar_upload_button') }}
+        </label>
         <input :id="uploadInputId" ref="fileInput" class="hidden" type="file" :accept="acceptAttribute"
-            :disabled="isBusy" :aria-describedby="`${helperId} ${errorId}`" @change="handleFileChange">
+            :disabled="isBusy" :aria-describedby="`${helperId} ${errorId}`" @change="handleFileChange" />
     </section>
 </template>
+
+<style scoped>
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slide-in-from-top-2 {
+    from {
+        transform: translateY(-0.5rem);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+.animate-in {
+    animation: fade-in 0.2s ease-out, slide-in-from-top-2 0.2s ease-out;
+}
+
+.shadow-lg {
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-xl {
+    box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.15), 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-2xl {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.avatar-skeleton {
+    width: 100%;
+    height: 100%;
+}
+
+.avatar-skeleton__frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.avatar-skeleton__sun {
+    position: absolute;
+    top: 18%;
+    right: 18%;
+    width: 2.8rem;
+    height: 2.8rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.45);
+}
+
+.avatar-skeleton__mountain {
+    position: absolute;
+    bottom: 18%;
+    width: 60%;
+    height: 55%;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.65));
+    clip-path: polygon(0 100%, 50% 0, 100% 100%);
+    opacity: 0.85;
+}
+
+.avatar-skeleton__mountain--left {
+    left: -5%;
+}
+
+.avatar-skeleton__mountain--right {
+    right: -5%;
+    width: 50%;
+    height: 45%;
+    opacity: 0.6;
+}
+
+.avatar-skeleton__baseline {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 22%;
+    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.9));
+}
+
+.shimmer {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    transform: translateX(-100%);
+    animation: avatar-shimmer 1.8s ease-in-out infinite;
+    z-index: 1;
+}
+
+@keyframes avatar-shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.bg-primary {
+    background-color: #18b463;
+}
+
+.text-primary {
+    color: #18b463;
+}
+
+.border-primary {
+    border-color: #18b463;
+}
+
+button {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:focus-visible {
+    outline: none;
+}
+
+.bg-gradient-to-br {
+    background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+}
+
+.warning-button {
+    background-color: var(--toast-warning-accent);
+    color: var(--primary-foreground);
+}
+</style>
