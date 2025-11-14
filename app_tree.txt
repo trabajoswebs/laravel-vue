@@ -10,6 +10,7 @@ Events/
     AvatarDeleted.php - Evento de dominio emitido al borrar un avatar.
     AvatarUpdated.php - Evento emitido tras actualizar el avatar con metadata previa.
 Helpers/
+  AvatarHeaderInspector.php - Valida cabeceras ACL/ContentType al entregar avatares (S3/discos locales).
   SecurityHelper.php - Utilidades de sanitizacion y validacion segura para entradas y logs.
 Http/
   Controllers/
@@ -42,6 +43,8 @@ Http/
   Requests/
     Auth/
       LoginRequest.php - Valida credenciales y aplica rate limit en login.
+    Concerns/
+      SanitizesInputs.php - Trait reutilizable para sanitizar payloads anidados con SecurityHelper.
     Settings/
       DeleteAvatarRequest.php - Autoriza y valida peticion de borrado de avatar.
       ProfileUpdateRequest.php - Valida actualizacion de datos del perfil.

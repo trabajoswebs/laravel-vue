@@ -144,6 +144,12 @@ final class QueueAvatarPostProcessing
                     'ttl_seconds'      => 30,
                     'conversion_fired' => $conversionName,
                 ]);
+                Log::info('ppam_listener_debounced_metric', [
+                    'media_id'         => $media->id,
+                    'key'              => $key,
+                    'ttl_seconds'      => 30,
+                    'metric'           => 'ppam.dispatch.debounced',
+                ]);
                 return;
             }
         } catch (\Throwable $e) {
@@ -153,6 +159,11 @@ final class QueueAvatarPostProcessing
                 'error'            => $e->getMessage(),
                 'degraded'         => true,
                 'conversion_fired' => $conversionName,
+            ]);
+            Log::warning('ppam_listener_cache_unavailable_metric', [
+                'media_id'         => $media->id,
+                'error'            => $e->getMessage(),
+                'metric'           => 'ppam.cache.unavailable',
             ]);
         }
 

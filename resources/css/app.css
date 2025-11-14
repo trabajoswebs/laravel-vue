@@ -25,7 +25,8 @@
  */
 @theme inline {
     /* Familias tipográficas por defecto (se usa en font-sans). */
-    --font-sans: 'Inter', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans:
+        'Inter', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     /* Radios de borde derivados de --radius para mantener consistencia visual. */
     --radius-lg: var(--radius);
@@ -91,7 +92,8 @@
     body,
     html {
         --font-sans:
-            'Inter', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+            'Inter', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+            'Noto Color Emoji';
     }
 }
 
@@ -100,26 +102,26 @@
  * ------------------------------------------------------------------ */
 :root {
     /* Superficies y tipografía base en modo claro. */
-    --background: hsl(0 0% 100%);            /* Fondo general */
-    --foreground: hsl(0 0% 3.9%);            /* Texto principal */
-    --card: hsl(0 0% 100%);                  /* Fondo de tarjetas */
-    --card-foreground: hsl(0 0% 3.9%);       /* Texto en tarjetas */
-    --popover: hsl(0 0% 100%);               /* Fondo de popovers/menus */
-    --popover-foreground: hsl(0 0% 3.9%);    /* Texto en popovers */
-    --primary: hsl(0 0% 9%);                 /* Color principal (botones primarios) */
-    --primary-foreground: hsl(0 0% 98%);     /* Texto/íconos sobre primario */
+    --background: hsl(0 0% 100%); /* Fondo general */
+    --foreground: hsl(0 0% 3.9%); /* Texto principal */
+    --card: hsl(0 0% 100%); /* Fondo de tarjetas */
+    --card-foreground: hsl(0 0% 3.9%); /* Texto en tarjetas */
+    --popover: hsl(0 0% 100%); /* Fondo de popovers/menus */
+    --popover-foreground: hsl(0 0% 3.9%); /* Texto en popovers */
+    --primary: hsl(0 0% 9%); /* Color principal (botones primarios) */
+    --primary-foreground: hsl(0 0% 98%); /* Texto/íconos sobre primario */
     --secondary: hsl(0 0% 92.1%);
     --secondary-foreground: hsl(0 0% 9%);
-    --muted: hsl(0 0% 96.1%);                /* Fondos suaves (chips, bloques) */
-    --muted-foreground: hsl(0 0% 45.1%);     /* Texto secundario/silenciado */
-    --accent: hsl(0 0% 96.1%);               /* Estado hover/realce sutil */
+    --muted: hsl(0 0% 96.1%); /* Fondos suaves (chips, bloques) */
+    --muted-foreground: hsl(0 0% 45.1%); /* Texto secundario/silenciado */
+    --accent: hsl(0 0% 96.1%); /* Estado hover/realce sutil */
     --accent-foreground: hsl(0 0% 9%);
-    --destructive: hsl(0 84.2% 60.2%);       /* Acciones peligrosas (errores) */
+    --destructive: hsl(0 84.2% 60.2%); /* Acciones peligrosas (errores) */
     --destructive-foreground: hsl(0 0% 98%);
-    --border: hsl(0 0% 92.8%);               /* Color de bordes general */
-    --input: hsl(0 0% 89.8%);                /* Bordes de inputs */
-    --ring: hsl(0 0% 3.9%);                  /* Aros de enfoque (focus) */
-    --radius: 0.5rem;                        /* Radio base (8px) */
+    --border: hsl(0 0% 92.8%); /* Color de bordes general */
+    --input: hsl(0 0% 89.8%); /* Bordes de inputs */
+    --ring: hsl(0 0% 3.9%); /* Aros de enfoque (focus) */
+    --radius: 0.5rem; /* Radio base (8px) */
 
     /* Paletas adicionales (charts y UI auxiliares). */
     --chart-1: hsl(12 76% 61%);
@@ -249,7 +251,7 @@
     --info-border: hsl(221 78% 34%);
     --info-text: hsl(221 80% 78%);
 
-    --event-bg: #ffffff;                     /* Eventos con fondo claro para resaltar en oscuro. */
+    --event-bg: #ffffff; /* Eventos con fondo claro para resaltar en oscuro. */
     --event-border: hsl(0 0% 25%);
     --event-text: #111111;
 
@@ -277,8 +279,8 @@
     /* Acentos de icono para toasts en oscuro (alto contraste). */
     --toast-success-accent: #22c55e; /* verde-500 */
     --toast-warning-accent: #fb923c; /* orange-400 */
-    --toast-error-accent: #f87171;   /* red-400 */
-    --toast-info-accent: #60a5fa;    /* blue-400 */
+    --toast-error-accent: #f87171; /* red-400 */
+    --toast-info-accent: #60a5fa; /* blue-400 */
 }
 
 /* ------------------------------------------------------------------
@@ -307,7 +309,7 @@
 
     /* Efecto sutil de escala al pasar el ratón por encima. */
     .sidebar-item:hover {
-        @apply transform scale-[1.02];
+        @apply scale-[1.02] transform;
     }
 }
 

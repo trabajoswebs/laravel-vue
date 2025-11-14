@@ -37,7 +37,7 @@ Este proyecto implementa un sistema de traducciones híbrido que combina:
 ✅ **Fallback inteligente** a traducciones del cliente  
 ✅ **Persistencia** en sesión, cookies y base de datos  
 ✅ **Cambio dinámico** sin recargar la página  
-✅ **Soporte para parámetros** en traducciones  
+✅ **Soporte para parámetros** en traducciones
 
 ### Idiomas Soportados
 
@@ -55,7 +55,7 @@ Sistema avanzado de pre-procesamiento de imágenes que incluye:
 ✅ **Redimensionado inteligente** - Mantiene proporciones hasta límites configurables  
 ✅ **Re-codificación** - Soporte para JPEG, WebP, PNG, GIF con parámetros ajustables  
 ✅ **GIF animados** - Conserva animaciones o toma primer frame (configurable)  
-✅ **Gestión de memoria** - Cleanup automático y Value Objects seguros  
+✅ **Gestión de memoria** - Cleanup automático y Value Objects seguros
 
 ### OptimizerService
 
@@ -97,14 +97,14 @@ Variables de entorno clave:
 Este proyecto implementa una arquitectura de subida de imágenes reutilizable basada en perfiles:
 
 - `app/Services/ImageUploadService::upload(HasMedia $owner, UploadedFile $file, ImageProfile $profile)`
-  - Centraliza el adjuntado a Spatie Media Library tras normalizar con `ImagePipeline`.
-  - Nombra los archivos como `{collection}-{sha1}.{ext}` y guarda props (`version`, `mime`, `width`, `height`).
+    - Centraliza el adjuntado a Spatie Media Library tras normalizar con `ImagePipeline`.
+    - Nombra los archivos como `{collection}-{sha1}.{ext}` y guarda props (`version`, `mime`, `width`, `height`).
 - Perfiles (`app/Support/Media`):
-  - `ImageProfile` (contrato): define `collection()`, `disk()`, `conversions()`, `fieldName()`, `requiresSquare()` y `applyConversions()`.
-  - `Profiles/AvatarProfile`: usa `avatar_collection`/`avatar_disk` y delega conversions a `AvatarConversionProfile`.
-  - `Profiles/GalleryProfile`: define conversions típicas de galería con tamaños configurables.
+    - `ImageProfile` (contrato): define `collection()`, `disk()`, `conversions()`, `fieldName()`, `requiresSquare()` y `applyConversions()`.
+    - `Profiles/AvatarProfile`: usa `avatar_collection`/`avatar_disk` y delega conversions a `AvatarConversionProfile`.
+    - `Profiles/GalleryProfile`: define conversions típicas de galería con tamaños configurables.
 - Listener multi-colecta:
-  - `QueueAvatarPostProcessing` ahora soporta múltiples colecciones configurables en `image-pipeline.postprocess_collections` (por defecto `avatar,gallery`).
+    - `QueueAvatarPostProcessing` ahora soporta múltiples colecciones configurables en `image-pipeline.postprocess_collections` (por defecto `avatar,gallery`).
 
 ### Limpieza y lifecycle de medios
 
@@ -117,7 +117,7 @@ Este proyecto implementa una arquitectura de subida de imágenes reutilizable ba
 
 Uso rápido para otra colección (ej. galería):
 
-1) En el modelo que almacena imágenes de galería (p. ej., `PortfolioItem`):
+1. En el modelo que almacena imágenes de galería (p. ej., `PortfolioItem`):
 
 ```php
 public function registerMediaCollections(): void
@@ -132,14 +132,14 @@ public function registerMediaConversions(?\Spatie\MediaLibrary\MediaCollections\
 }
 ```
 
-2) En tu controlador/action para galería:
+2. En tu controlador/action para galería:
 
 ```php
 $media = app(\App\Services\ImageUploadService::class)
     ->upload($model, $request->file('image'), new \App\Support\Media\Profiles\GalleryProfile());
 ```
 
-3) Configura opcionalmente en `.env`:
+3. Configura opcionalmente en `.env`:
 
 ```env
 GALLERY_DISK=s3
@@ -152,17 +152,17 @@ IMG_POSTPROCESS_COLLECTIONS="avatar,gallery"
 Este proyecto incluye un pipeline endurecido para subir el avatar del usuario (Laravel + Inertia/Vue) con validación por magic bytes, eliminación de EXIF/ICC, límites de megapíxeles y optimización del original y sus conversiones.
 
 - Endpoints de avatar (rutas protegidas por `auth`):
-  - `PATCH /settings/avatar` → actualiza el avatar (usa `UpdateAvatarRequest` + `ImagePipeline`)
-  - `DELETE /settings/avatar` → elimina el avatar actual
+    - `PATCH /settings/avatar` → actualiza el avatar (usa `UpdateAvatarRequest` + `ImagePipeline`)
+    - `DELETE /settings/avatar` → elimina el avatar actual
 - Concurrencia y postproceso:
-  - Listener a conversions que encola `PostProcessAvatarMedia` con `WithoutOverlapping` por `mediaId` y `ShouldBeUnique`.
-  - `OptimizerService` optimiza original y conversions (local y S3 por streaming).
+    - Listener a conversions que encola `PostProcessAvatarMedia` con `WithoutOverlapping` por `mediaId` y `ShouldBeUnique`.
+    - `OptimizerService` optimiza original y conversions (local y S3 por streaming).
 - Validación fuerte en request y regla custom:
-  - `File::image() + mimetypes + dimensions` y `SecureImageValidation` (finfo/exif, image-bomb ratio, scan heurístico).
+    - `File::image() + mimetypes + dimensions` y `SecureImageValidation` (finfo/exif, image-bomb ratio, scan heurístico).
 
 Configuración requerida (producción):
 
-1) Límite de tamaño a 10 MB (alineado en todas las capas)
+1. Límite de tamaño a 10 MB (alineado en todas las capas)
 
 ```env
 # .env
@@ -174,7 +174,7 @@ IMG_MAX_BYTES=10485760
 'max_file_size' => (int) env('IMG_MAX_BYTES', 10 * 1024 * 1024),
 ```
 
-2) Driver de imágenes
+2. Driver de imágenes
 
 ```env
 # .env
@@ -182,10 +182,11 @@ IMAGE_DRIVER=imagick
 ```
 
 Instala la extensión en el runtime (según distribución):
+
 - Debian/Ubuntu: `apt-get install -y php-imagick && service php-fpm restart`
 - Alpine (Docker): `apk add --no-cache php81-pecl-imagick`
 
-3) CSP para entrega desde S3/CloudFront
+3. CSP para entrega desde S3/CloudFront
 
 ```env
 # .env
@@ -194,7 +195,7 @@ CSP_IMG_HOSTS=dxxxxx.cloudfront.net *.s3.amazonaws.com
 
 El middleware `App\\Http\\Middleware\\SecurityHeaders` genera la CSP; `config/security.php` lee los hosts desde env.
 
-4) Rutas de avatar (ya incluidas)
+4. Rutas de avatar (ya incluidas)
 
 ```php
 // routes/settings.php
@@ -204,13 +205,45 @@ Route::delete('settings/avatar', [\\App\\Http\\Controllers\\Settings\\ProfileAva
     ->name('settings.avatar.destroy');
 ```
 
-5) Límites del servidor para subidas (asegura que no bloqueen 10 MB)
+### Entrega segura de avatares firmados
 
-- PHP: `upload_max_filesize=10M`, `post_max_size=10M` (php.ini)
-- Nginx: `client_max_body_size 10M;`
+La ruta pública `GET /media/avatar/{media}` (`media.avatar.show`)
+sirve conversions firmadas y expira automáticamente. El controlador
+`App\Http\Controllers\Media\ShowAvatar` aplica:
+
+- Middleware `signed` + `throttle:60,1` para evitar hotlinking y abusos.
+- Validación estricta del parámetro `c` (`thumb`, `medium`, `large`) y del
+  `Media` asociado a la colección de avatar.
+- Sanitización de rutas, protección contra directory traversal y chequeo de
+  firmas antes de servir el archivo.
+- Generación de URLs seguras para S3 (`temporaryUrl`) o file serving local con
+  cabeceras `nosniff` y `immutable`.
+
+Para habilitar el endpoint necesitas `media.signed_serve.enabled=true`
+en `config/media.php` o `config/media-signed.php` (según tu setup). Cuando está
+en `false`, `ShowAvatar` responde un `NotFoundHttpException` para que Ni siquiera
+se exponga la ruta. Se recomienda construir las URLs desde el backend usando:
+
+```php
+URL::signedRoute('media.avatar.show', ['media' => $media->id, 'c' => 'thumb']);
+```
+
+Documenta este flujo con tu equipo de CDN/proxy para mantener los tokens de firma
+actualizados cada vez que se recargue el avatar del usuario.
+
+Para evitar alertas de infraestructura, asegúrate de que los discos que escriben avatars
+envíen las cabeceras `ACL=private` y `ContentType` (p. ej. `image/webp` o `image/png`).
+Si el ACL no es privado o falta el ContentType, el helper `AvatarHeaderInspector`
+lanza advertencias (`avatar.headers.acl_unexpected` / `avatar.headers.content_type_missing`)
+para que el equipo detecte uploads mal configurados antes de exponerlos al público.
+
+5. Límites del servidor para subidas (asegura que no bloqueen 20 MB)
+
+- PHP: `upload_max_filesize=20M`, `post_max_size=20M` (php.ini)
+- Nginx: `client_max_body_size 20M;`
 - Workers de cola: cola `image-optimization` activa (Horizon/Supervisor)
 
-6) Buenas prácticas de frontend
+6. Buenas prácticas de frontend
 
 - Consumir `avatarUrl` y `avatarThumbUrl` del modelo `User` (incluyen cache busting `?v=`)
 - Enviar el archivo como `FormData` en el campo `avatar`
@@ -220,6 +253,7 @@ Route::delete('settings/avatar', [\\App\\Http\\Controllers\\Settings\\ProfileAva
 ### Opción A: Con Docker (Recomendado)
 
 #### Requisitos
+
 - Docker y Docker Compose
 - Node.js 18+ (solo para el frontend)
 
@@ -349,10 +383,12 @@ php artisan serve
 │   │   │   └── UserAudit.php
 │   │   └── Requests/
 │   │       ├── UploadImageRequest.php     # Request genérico (SecureImageValidation)
+│   │       ├── Concerns/
+│   │       │   └── SanitizesInputs.php    # Trait reutilizable para sanitizar payloads delicados
 │   │       └── Settings/
-│   │           ├── UpdateAvatarRequest.php
-│   │           ├── DeleteAvatarRequest.php
-│   │           └── ProfileUpdateRequest.php
+       │   │           ├── UpdateAvatarRequest.php
+       │   │           ├── DeleteAvatarRequest.php
+       │   │           └── ProfileUpdateRequest.php
 │   ├── Jobs/
 │   │   ├── CleanupMediaArtifactsJob.php   # Limpia artefactos residuales multi-disco
 │   │   └── PostProcessAvatarMedia.php     # Optimización original + conversions
@@ -419,7 +455,8 @@ php artisan serve
 │   │           ├── ReplacementSnapshot.php
 │   │           └── ReplacementSnapshotItem.php
 │   └── Helpers/
-│       └── SecurityHelper.php
+│       ├── AvatarHeaderInspector.php       # Valida cabeceras de entrega del avatar (ACL + ContentType)
+│       └── SecurityHelper.php              # Utilidades de sanitización y logging seguro
 ├── bootstrap/
 │   └── app.php                             # Registra SecurityHeaders y routing
 ├── config/
@@ -464,17 +501,17 @@ php artisan serve
 
 ```vue
 <template>
-  <div>
-    <h1>{{ t('welcome.title') }}</h1>
-    <p>{{ t('welcome.message') }}</p>
-    <button>{{ t('common.save') }}</button>
-  </div>
+    <div>
+        <h1>{{ t('welcome.title') }}</h1>
+        <p>{{ t('welcome.message') }}</p>
+        <button>{{ t('common.save') }}</button>
+    </div>
 </template>
 
 <script setup lang="ts">
-import { useLanguage } from '@/composables/useLanguage'
+import { useLanguage } from '@/composables/useLanguage';
 
-const { t, changeLanguage, currentLanguage } = useLanguage()
+const { t, changeLanguage, currentLanguage } = useLanguage();
 </script>
 ```
 
@@ -482,21 +519,21 @@ const { t, changeLanguage, currentLanguage } = useLanguage()
 
 ```typescript
 // Cambiar a español
-await changeLanguage('es')
+await changeLanguage('es');
 
 // Cambiar a inglés
-await changeLanguage('en')
+await changeLanguage('en');
 
 // Alternar idioma
-await toggleLanguage()
+await toggleLanguage();
 ```
 
 ### Traducciones con Parámetros
 
 ```vue
 <template>
-  <p>{{ t('messages.welcome_user', user.name, appName) }}</p>
-  <p>{{ t('messages.items_count', items.length) }}</p>
+    <p>{{ t('messages.welcome_user', user.name, appName) }}</p>
+    <p>{{ t('messages.items_count', items.length) }}</p>
 </template>
 ```
 

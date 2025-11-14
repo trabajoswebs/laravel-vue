@@ -2,9 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Helpers\SecurityHelper;
+use App\Http\Requests\Concerns\SanitizesInputs;
 use Closure;
 use Illuminate\Http\Request;
-use App\Helpers\SecurityHelper;
+use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -23,25 +25,16 @@ use Illuminate\Support\Facades\Log;
  */
 class SanitizeInput
 {
-    /**
-     * Lista blanca de métodos permitidos de SecurityHelper para invocación dinámica.
-     *
-     * @var array<int,string>
-     */
-    private const ALLOWED_METHODS = [
-        'sanitizeUserName',
-        'sanitizeUserInput',
-        'sanitizeHtml',
-        'sanitizeEmail',
-        'sanitizeLocale',
-        'sanitizePlainText',
-    ];
+    use SanitizesInputs;
+
+    private ?array $cachedFieldMap = null;
+    private ?array $cachedRouteParamMap = null;
 
     /**
-     * Mapeo campo→método de sanitización a aplicar sobre el payload de la request.
-     *
-     * @var array<string,string>
+     * Valor centinela aplicado cuando la sanitización de email falla para que la validación posterior lo rechace explícitamente.
      */
+    private const INVALID_EMAIL_PLACEHOLDER = '__invalid_email__';
+
     private const FIELD_SANITIZATION_MAP = [
         'name' => 'sanitizeUserName',
         'description' => 'sanitizePlainText',
@@ -50,6 +43,18 @@ class SanitizeInput
         'comment' => 'sanitizePlainText',
         'title' => 'sanitizePlainText',
         'bio' => 'sanitizePlainText',
+    ];
+
+    private const CONFIG_KEY_FIELDS = 'security.sanitize.fields';
+    private const CONFIG_KEY_ROUTE_PARAMS = 'security.sanitize.route_params';
+    private const PROTECTED_FIELDS = ['email', 'password'];
+
+    /**
+     * Mapeo de parámetros de ruta y su sanitización.
+     */
+    private const ROUTE_PARAM_SANITIZATION_MAP = [
+        'slug' => 'sanitizePlainText',
+        'token' => 'sanitizeToken',
     ];
 
     /**
@@ -71,12 +76,16 @@ class SanitizeInput
      * Sanitiza campos críticos del body/query de la request según FIELD_SANITIZATION_MAP
      * y aplica tratamientos específicos para `email` y `locale`.
      *
+     * Nota: cuando la sanitización de email falla, se inserta un valor centinela
+     * (`__invalid_email__`) para que las reglas de validación subsecuentes lo identifiquen
+     * y puedan devolver un error coherente.
+     *
      * @param Request $request
      * @return void
      */
     private function sanitizeRequestFields(Request $request): void
     {
-        foreach (self::FIELD_SANITIZATION_MAP as $field => $method) {
+        foreach ($this->getFieldSanitizationMap() as $field => $method) {
             if ($request->has($field)) {
                 $this->sanitizeField($request, $field, $method);
             }
@@ -88,8 +97,7 @@ class SanitizeInput
     }
 
     /**
-     * Sanitiza un campo concreto usando un método permitido de SecurityHelper.
-     * En caso de error, registra log y aplica un fallback seguro.
+     * Sanitiza un campo concreto usando un método reutilizable (trait).
      *
      * @param Request $request
      * @param string  $field   Nombre del campo a sanitizar.
@@ -101,7 +109,7 @@ class SanitizeInput
         $original = $request->input($field);
 
         try {
-            $sanitizedValue = $this->applySanitization($original, $method);
+            $sanitizedValue = $this->sanitizeFieldValue($original, $method, $field);
             $request->merge([$field => $sanitizedValue]);
         } catch (\Throwable $e) {
             Log::warning('Field sanitization failed', [
@@ -112,71 +120,13 @@ class SanitizeInput
                 'error' => $e->getMessage(),
             ]);
 
-            // Fallback seguro (texto plano higienizado)
-            $this->applyFallbackSanitization($request, $field, $original);
+            $fallback = is_scalar($original) ? (string) $original : '';
+            $request->merge([$field => $this->sanitizeFallback($fallback)]);
         }
     }
 
     /**
-     * Aplica la sanitización delegando en SecurityHelper.
-     * Acepta arrays (aplicación recursiva) o escalares.
-     *
-     * @param mixed  $value  Valor original (string|array|scalar).
-     * @param string $method Nombre del método de SecurityHelper a invocar.
-     * @return mixed         Valor sanitizado (misma estructura que el original).
-     *
-     * @throws \InvalidArgumentException si el método no está permitido.
-     * @throws \RuntimeException         si el método no existe en SecurityHelper.
-     */
-    private function applySanitization($value, string $method)
-    {
-        // Verificación de seguridad: método debe estar en whitelist
-        if (!in_array($method, self::ALLOWED_METHODS, true)) {
-            throw new \InvalidArgumentException("Sanitization method '{$method}' not allowed");
-        }
-
-        if (!method_exists(SecurityHelper::class, $method)) {
-            throw new \RuntimeException("Sanitization method '{$method}' not found");
-        }
-
-        if (is_array($value)) {
-            return array_map(fn($item) => $this->applySanitization($item, $method), $value);
-        }
-
-        // Llamada segura al método estático
-        return call_user_func([SecurityHelper::class, $method], $value);
-    }
-
-    /**
-     * Fallback de sanitización: convierte a string (si es escalar) y aplica sanitizePlainText.
-     * Registra error si también falla el fallback y mantiene el valor original.
-     *
-     * @param Request $request
-     * @param string  $field    Nombre del campo que se está sanitizando.
-     * @param mixed   $original Valor original del campo.
-     * @return void
-     */
-    private function applyFallbackSanitization(Request $request, string $field, $original): void
-    {
-        try {
-            $scalarOriginal = is_scalar($original) ? (string) $original : '';
-            $fallbackValue = SecurityHelper::sanitizePlainText($scalarOriginal);
-            $request->merge([$field => $fallbackValue]);
-        } catch (\Throwable $e) {
-            // Si incluso el fallback falla, log y continúa con valor original
-            Log::error('Fallback sanitization failed', [
-                'field' => $field,
-                'error' => $e->getMessage()
-            ]);
-        }
-    }
-
-    /**
-     * Sanitiza el campo `email` si está presente. No fuerza formato válido;
-     * si es inválido, se delega a la validación posterior.
-     *
-     * @param Request $request
-     * @return void
+     * Sanitiza el campo `email` si está presente.
      */
     private function sanitizeEmailField(Request $request): void
     {
@@ -184,18 +134,15 @@ class SanitizeInput
             return;
         }
 
-        try {
-            $sanitizedEmail = SecurityHelper::sanitizeEmail($request->input('email'));
-            $request->merge(['email' => $sanitizedEmail]);
-        } catch (\InvalidArgumentException $e) {
-            Log::warning('Invalid email format detected', [
-                'user_id' => $request->user()?->id,
-                'ip_hash' => substr(hash('sha256', $request->ip()), 0, 8),
-            ]);
-            // Dejar que la validación posterior maneje el email inválido
-        } catch (\Throwable $e) {
-            Log::warning('Email sanitization error', ['error' => $e->getMessage()]);
+        $email = $request->input('email');
+        $sanitized = $this->sanitizeValueSilently('sanitizeEmail', $email, 'email', $request);
+        if ($sanitized !== null) {
+            $request->merge(['email' => $sanitized]);
+            return;
         }
+
+        // Introducir valor centinela para que la validación posterior informe el error.
+        $request->merge(['email' => self::INVALID_EMAIL_PLACEHOLDER]);
     }
 
     /**
@@ -211,12 +158,10 @@ class SanitizeInput
             return;
         }
 
-        try {
-            $sanitizedLocale = SecurityHelper::sanitizeLocale($request->input('locale'));
-            $request->merge(['locale' => $sanitizedLocale]);
-        } catch (\Throwable $e) {
-            Log::debug('Locale sanitization failed', ['error' => $e->getMessage()]);
-            // Permitir que la validación posterior maneje locales inválidos
+        $locale = $request->input('locale');
+        $sanitized = $this->sanitizeValueSilently('sanitizeLocale', $locale, 'locale', $request, logLevel: 'debug');
+        if ($sanitized !== null) {
+            $request->merge(['locale' => $sanitized]);
         }
     }
 
@@ -230,7 +175,7 @@ class SanitizeInput
     private function sanitizeRouteParameters(Request $request): void
     {
         $route = $request->route();
-        if (!$route) {
+        if (!$route instanceof Route) {
             return;
         }
 
@@ -246,40 +191,211 @@ class SanitizeInput
             }
         }
 
-        // Sanitizar otros parámetros críticos
         $this->sanitizeSpecificParameters($route, $parameters);
     }
 
     /**
      * Sanitiza parámetros específicos de la ruta: `slug`, `token` y `id` (numérica).
      *
-     * @param mixed $route      Instancia de Route (tipo laxo para evitar dependencia fuerte en firma).
+     * @param Route $route      Instancia de Route.
      * @param array $parameters Parámetros actuales de la ruta.
      * @return void
      */
-    private function sanitizeSpecificParameters($route, array $parameters): void
+    private function sanitizeSpecificParameters(Route $route, array $parameters): void
     {
-        $parametersToSanitize = ['slug', 'token'];
+        foreach ($this->getRouteParamSanitizationMap() as $param => $method) {
+            if (!array_key_exists($param, $parameters)) {
+                continue;
+            }
 
-        foreach ($parametersToSanitize as $param) {
-            if (isset($parameters[$param])) {
-                try {
-                    $value = $parameters[$param];
-                    $sanitizedValue = $param === 'token'
-                        ? SecurityHelper::sanitizeToken((string) $value)
-                        : SecurityHelper::sanitizePlainText((string) $value);
-                    $route->setParameter($param, $sanitizedValue);
-                } catch (\Throwable $e) {
-                    Log::debug("Route parameter '{$param}' sanitization failed", [
-                        'error' => $e->getMessage()
-                    ]);
-                }
+            $value = $parameters[$param];
+            $sanitized = $this->sanitizeRouteValue($method, $value, "route.{$param}");
+            if ($sanitized !== null) {
+                $route->setParameter($param, $sanitized);
             }
         }
 
         // ID: validar que sea numérico antes de sanitizar
-        if (isset($parameters['id']) && is_numeric($parameters['id'])) {
-            $route->setParameter('id', (int) $parameters['id']);
+        if (array_key_exists('id', $parameters)) {
+            $rawId = $parameters['id'];
+            $intValue = $this->normalizeRouteId($rawId);
+
+            if ($intValue !== null) {
+                $route->setParameter('id', $intValue);
+            } else {
+                Log::debug('Route parameter id rejected', [
+                    'value' => $rawId,
+                ]);
+            }
         }
+    }
+
+    /**
+     * Sanitiza valores sin propagar excepciones y opcionalmente registra logs.
+     */
+    private function sanitizeValueSilently(
+        string $method,
+        mixed $value,
+        string $context,
+        Request $request,
+        string $logLevel = 'warning'
+    ): ?string {
+        try {
+            return $this->sanitizeFieldValue($value, $method, $context);
+        } catch (\Throwable $e) {
+            Log::log($logLevel, "{$context}_sanitization_failed", [
+                'error' => $e->getMessage(),
+                'user_id' => $request->user()?->id,
+                'ip_hash' => substr(hash('sha256', (string) $request->ip()), 0, 8),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Sanitiza parámetros de ruta usando SecurityHelper con manejo seguro.
+     */
+    private function sanitizeRouteValue(string $method, mixed $value, string $context): ?string
+    {
+        $normalizedMethod = $this->normalizeSanitizationMethod($method);
+        if ($normalizedMethod === null) {
+            Log::error('Route sanitization method not allowed', [
+                'method' => $method,
+                'context' => $context,
+            ]);
+            return null;
+        }
+
+        if (!is_string($value) && !is_numeric($value) && !is_bool($value)) {
+            Log::debug('Route parameter has unsupported type', [
+                'context' => $context,
+                'type' => get_debug_type($value),
+            ]);
+            return null;
+        }
+
+        try {
+            return call_user_func([SecurityHelper::class, $normalizedMethod], (string) $value);
+        } catch (\Throwable $e) {
+            Log::debug("Route parameter sanitization failed", [
+                'context' => $context,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Filtra/valida configuraciones dinámicas de sanitización contra la whitelist.
+     *
+     * @param array  $map
+     * @param string $configKey
+     * @param bool   $allowProtected
+     * @return array
+     */
+    private function filterSanitizationMap(array $map, string $configKey, bool $allowProtected = true): array
+    {
+        $validated = [];
+
+        foreach ($map as $field => $method) {
+            if (!\is_string($field) || $field === '') {
+                Log::warning('Sanitization map key must be a non-empty string', [
+                    'config_key' => $configKey,
+                    'provided_key' => $field,
+                ]);
+                continue;
+            }
+
+            if (!$allowProtected && \in_array($field, self::PROTECTED_FIELDS, true)) {
+                Log::warning('Attempt to override protected field sanitization', [
+                    'field' => $field,
+                    'config_key' => $configKey,
+                ]);
+                continue;
+            }
+
+            if (!\is_string($method) || $method === '') {
+                Log::warning('Sanitization method must be string', [
+                    'field' => $field,
+                    'config_key' => $configKey,
+                ]);
+                continue;
+            }
+
+            if (!$this->isSanitizationMethodAllowed($method)) {
+                Log::error('Sanitization method rejected', [
+                    'field' => $field,
+                    'method' => $method,
+                    'config_key' => $configKey,
+                ]);
+                continue;
+            }
+
+            $validated[$field] = $method;
+        }
+
+        return $validated;
+    }
+
+    /**
+     * Devuelve el mapa de sanitización para campos del request (incluyendo config validada).
+     */
+    private function getFieldSanitizationMap(): array
+    {
+        if ($this->cachedFieldMap !== null) {
+            return $this->cachedFieldMap;
+        }
+
+        $customFields = $this->filterSanitizationMap(
+            (array) config(self::CONFIG_KEY_FIELDS, []),
+            self::CONFIG_KEY_FIELDS,
+            false
+        );
+
+        return $this->cachedFieldMap = array_merge(self::FIELD_SANITIZATION_MAP, $customFields);
+    }
+
+    /**
+     * Devuelve el mapa de sanitización para parámetros de ruta (incluyendo config validada).
+     */
+    private function getRouteParamSanitizationMap(): array
+    {
+        if ($this->cachedRouteParamMap !== null) {
+            return $this->cachedRouteParamMap;
+        }
+
+        $customParams = $this->filterSanitizationMap(
+            (array) config(self::CONFIG_KEY_ROUTE_PARAMS, []),
+            self::CONFIG_KEY_ROUTE_PARAMS
+        );
+
+        return $this->cachedRouteParamMap = array_merge(self::ROUTE_PARAM_SANITIZATION_MAP, $customParams);
+    }
+
+    /**
+     * Normaliza el parámetro de ruta `id`, rechazando valores no enteros canónicos.
+     */
+    private function normalizeRouteId(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value > 0 ? $value : null;
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if ($trimmed === '') {
+                return null;
+            }
+
+            if (!preg_match('/^[1-9]\d*$/', $trimmed)) {
+                return null;
+            }
+
+            return (int) $trimmed;
+        }
+
+        return null;
     }
 }

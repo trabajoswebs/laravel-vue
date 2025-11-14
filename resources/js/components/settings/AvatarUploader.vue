@@ -165,6 +165,12 @@ watch(
     { immediate: true }
 );
 
+watch(isBusy, (busy) => {
+    if (busy) {
+        setDragState(false); // Evita que el overlay quede activo mientras hay acciones en curso
+    }
+});
+
 const triggerFileDialog = () => {
     if (isBusy.value) return;
     fileInput.value?.click(); // Abre el diálogo de selección de archivo
@@ -253,29 +259,35 @@ const handleCancelUpload = () => {
     toast.warning(t('profile.avatar_upload_cancelled_toast'));
 };
 
-const handleDragEnter = (event: DragEvent) => {
+const handleDragActivate = (event: DragEvent) => {
     event.preventDefault();
-    setDragState(true);
-};
-
-const handleDragOver = (event: DragEvent) => {
-    event.preventDefault();
-    setDragState(true);
+    setDragState(true); // Mantiene el estado de arrastre sincronizado entre dragenter/dragover
 };
 
 const handleDragLeave = (event: DragEvent) => {
     event.preventDefault();
-    if (event.currentTarget === event.target) {
-        setDragState(false);
+    const currentTarget = event.currentTarget as HTMLElement | null;
+    const relatedTarget = event.relatedTarget as Node | null;
+
+    if (currentTarget && relatedTarget && currentTarget.contains(relatedTarget)) {
+        return;
     }
+
+    setDragState(false);
+};
+
+const handleDragEnd = (event: DragEvent) => {
+    event.preventDefault();
+    setDragState(false);
 };
 
 const handleDrop = async (event: DragEvent) => {
     event.preventDefault();
     setDragState(false);
     if (isBusy.value) return;
-    const file = event.dataTransfer?.files?.[0] ?? null;
-    await processFile(file);
+    const droppedFile = event.dataTransfer?.files?.[0] ?? null;
+    if (!droppedFile) return;
+    await processFile(droppedFile);
 };
 
 const handleImageLoad = () => {
@@ -291,8 +303,9 @@ const handleImageError = () => {
     <section class="relative" :class="{
         'border-primary bg-primary/5 shadow-primary/20': isDragActive,
         'border-border hover:border-border/60': !isDragActive
-    }" @dragenter.prevent="handleDragEnter" @dragover.prevent="handleDragOver" @dragleave.prevent="handleDragLeave"
-        @drop.prevent="handleDrop" role="region" aria-label="Profile avatar uploader">
+    }" @dragenter.prevent="handleDragActivate" @dragover.prevent="handleDragActivate"
+        @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @dragend.prevent="handleDragEnd" role="region"
+        aria-label="Profile avatar uploader">
         <!-- Overlay drag & drop -->
         <div v-if="isDragActive"
             class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-xl bg-primary/10 backdrop-blur-sm pointer-events-none">
@@ -314,9 +327,8 @@ const handleImageError = () => {
                     <div class="relative">
                         <div class="group relative h-32 w-32 lg:h-36 lg:w-36 rounded-2xl border-4 border-border/50 bg-gradient-to-br from-muted to-muted/50 shadow-xl transition-all duration-300 group-hover:shadow-2xl cursor-pointer focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/70"
                             :class="{ 'ring-4 ring-primary/30': isDragActive }" :aria-label="avatarImageAlt"
-                            role="button" tabindex="0" @click="!isUploading && triggerFileDialog"
-                            @keydown.enter.prevent="!isUploading && triggerFileDialog"
-                            @keydown.space.prevent="!isUploading && triggerFileDialog">
+                            role="button" tabindex="0" @click="triggerFileDialog"
+                            @keydown.enter.prevent="triggerFileDialog" @keydown.space.prevent="triggerFileDialog">
                             <div class="relative h-full w-full rounded-2xl overflow-hidden">
                                 <!-- Subida en curso -->
                                 <div v-if="isUploading"
@@ -337,7 +349,7 @@ const handleImageError = () => {
                                     <img :src="renderedAvatarUrl" :alt="avatarImageAlt"
                                         class="h-full w-full object-cover transition-opacity duration-200"
                                         :class="isImageLoading ? 'opacity-0' : 'opacity-100'" @load="handleImageLoad"
-                                        @error="handleImageError" @click.stop="!isUploading && triggerFileDialog()" />
+                                        @error="handleImageError" @click.stop="triggerFileDialog" />
                                     <div v-if="isImageLoading"
                                         class="absolute inset-0 flex items-center justify-center p-5">
                                         <div class="avatar-skeleton">
@@ -361,7 +373,7 @@ const handleImageError = () => {
                                 <!-- Iniciales -->
                                 <div v-else
                                     class="h-full w-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 cursor-pointer"
-                                    role="button" tabindex="-1" @click.stop="!isUploading && triggerFileDialog()">
+                                    role="button" tabindex="-1" @click.stop="triggerFileDialog">
                                     <span class="text-3xl font-bold text-primary/60">
                                         {{ displayName ? getInitials(displayName) : '?' }}
                                     </span>
@@ -405,7 +417,7 @@ const handleImageError = () => {
                 <div class="flex-1 flex flex-col gap-4">
                     <div>
                         <h3 class="text-xl font-bold text-foreground mb-1">
-                            {{ t('profile.avatar_title') }}
+                            {{ displayName || t('profile.avatar_title') }}
                         </h3>
                         <p class="text-sm leading-relaxed text-foreground/70">
                             {{ t('profile.avatar_description') }}

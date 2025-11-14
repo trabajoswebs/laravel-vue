@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Support\Media\Profiles\AvatarProfile;
 use App\Support\Media\Services\MediaReplacementService;
 use Illuminate\Http\UploadedFile;
+use App\Helpers\AvatarHeaderInspector;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -85,21 +86,23 @@ final class UpdateAvatar
 
             // Registra un log de la operación de actualización del avatar.
             $headers = (array) $media->getCustomProperty('headers', []);
-            $acl = strtolower((string) ($headers['ACL'] ?? ''));
-            if ($acl !== '' && $acl !== 'private') {
-                Log::warning('avatar.headers.acl_unexpected', [
+            foreach (AvatarHeaderInspector::detectIssues($headers) as $issue) {
+                $context = [
                     'user_id' => $locked->getKey(),
                     'media_id' => $media->id,
-                    'expected' => 'private',
-                    'received' => $headers['ACL'] ?? null,
-                ]);
-            }
+                ];
 
-            if (!isset($headers['ContentType']) || !is_string($headers['ContentType']) || $headers['ContentType'] === '') {
-                Log::warning('avatar.headers.content_type_missing', [
-                    'user_id' => $locked->getKey(),
-                    'media_id' => $media->id,
-                ]);
+                if ($issue['type'] === 'acl_unexpected') {
+                    Log::warning('avatar.headers.acl_unexpected', array_merge($context, [
+                        'expected' => $issue['expected'],
+                        'received' => $issue['received'],
+                    ]));
+                    continue;
+                }
+
+                if ($issue['type'] === 'content_type_missing') {
+                    Log::warning('avatar.headers.content_type_missing', $context);
+                }
             }
 
             Log::info('avatar.updated', [

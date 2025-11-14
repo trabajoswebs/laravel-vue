@@ -116,6 +116,11 @@ return [
         'success' => 'Listo, tus cambios están guardados.'
     ],
 
+    'deleted' => [
+        'failed' => 'No hemos podido eliminar la cuenta. Inténtalo de nuevo en un momento.',
+        'success' => 'Tu cuenta ha sido eliminada correctamente. Esperamos verte de nuevo pronto.',
+    ],
+
     'two_factor' => [
         'title' => 'Autenticación en dos pasos',
         'subtitle' => 'Añade una capa extra de seguridad a tu cuenta.',

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Settings;
 
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -25,7 +26,14 @@ class DeleteAvatarRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        $actor = $this->user();
+        $target = $this->route('user') ?? $actor;
+
+        if (!($actor instanceof User) || !($target instanceof User)) {
+            return false;
+        }
+
+        return $actor->can('deleteAvatar', $target);
     }
 
     /**

@@ -25,13 +25,6 @@ use Symfony\Component\HttpFoundation\Response;
 class PreventBruteForce
 {
     /**
-     * Métodos HTTP idempotentes que no deberían consumir crédito de rate limit.
-     *
-     * @var array<int, string>
-     */
-    private const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
-
-    /**
      * Patrones de rutas de autenticación que ya se protegen con límites específicos.
      *
      * @var array<int, string>
@@ -42,6 +35,21 @@ class PreventBruteForce
         'password/*',
         'forgot-password',
         'reset-password',
+    ];
+
+    private const API_PREFIX = 'api/*';
+    private const REQUIRED_CONFIG_KEYS = [
+        'login_max_attempts',
+        'login_decay_minutes',
+        'api_requests_per_minute',
+        'general_requests_per_minute',
+    ];
+
+    private const DEFAULT_LIMITS = [
+        'login_max_attempts' => 5,
+        'login_decay_minutes' => 15,
+        'api_requests_per_minute' => 60,
+        'general_requests_per_minute' => 100,
     ];
 
     /**
@@ -62,7 +70,14 @@ class PreventBruteForce
      */
     public function __construct()
     {
-        $this->rateLimitConfig = config('security.rate_limiting', []);
+        $config = config('security.rate_limiting', []);
+        if ($config === []) {
+            Log::warning('PreventBruteForce: missing security.rate_limiting config, falling back to defaults');
+        }
+
+        $this->rateLimitConfig = array_merge(self::DEFAULT_LIMITS, $config);
+
+        $this->validateRateLimitConfig();
     }
 
     /**
@@ -75,17 +90,14 @@ class PreventBruteForce
      * 4) Si excede el límite → responde 429 (JSON o redirect con flash).
      * 5) Si procede, consume crédito de rate limit.
      *
-     * @param Request $request Solicitud HTTP entrante.
+     * @param Request $request Solicitud HTTP entrante. Nota: incluso para métodos SAFE se
+     *                        verifica el límite; la diferencia es que no consumen crédito.
      * @param Closure $next    Siguiente manejador del pipeline de middleware.
      * @return Response        Respuesta HTTP (posible 429 si superó el límite).
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Evitar solapamiento: las rutas de auth usan su propio rate limit (LoginRequest)
         $isAuthRoute = $this->isAuthRoute($request);
-        if ($isAuthRoute) {
-            return $next($request);
-        }
 
         $limits = $this->getLimitsForRoute($request, $isAuthRoute);
         $key = $this->resolveRequestSignature($request, $limits['scope']);
@@ -95,9 +107,7 @@ class PreventBruteForce
             return $this->createRateLimitResponse($request, $key);
         }
 
-        if ($this->shouldCountAttempt($request)) {
-            RateLimiter::hit($key, $limits['decay_minutes'] * 60);
-        }
+        RateLimiter::hit($key, $limits['decay_minutes'] * 60);
 
         return $next($request);
     }
@@ -124,7 +134,7 @@ class PreventBruteForce
             ];
         }
 
-        if ($request->is('api/*')) {
+        if ($request->is(self::API_PREFIX)) {
             $perMinute = (int) ($this->rateLimitConfig['api_requests_per_minute'] ?? 60);
             return [
                 'max_attempts' => $perMinute,
@@ -134,13 +144,12 @@ class PreventBruteForce
         }
 
         $generalPerMinute = (int) ($this->rateLimitConfig['general_requests_per_minute'] ?? 100);
-        $path = trim($request->path(), '/');
-        $routeFingerprint = strtolower($request->method()) . ':' . ($path === '' ? 'root' : $path);
+        $routeFingerprint = strtolower($request->method()) . ':' . $this->normalizePathForRateLimit($request);
 
         return [
             'max_attempts' => $generalPerMinute,
             'decay_minutes' => 1,
-            'scope' => 'general:' . hash('sha256', $routeFingerprint),
+            'scope' => 'general:' . $routeFingerprint,
         ];
     }
 
@@ -152,6 +161,16 @@ class PreventBruteForce
      */
     protected function isAuthRoute(Request $request): bool
     {
+        $route = $request->route();
+        if ($route === null) {
+            return false;
+        }
+
+        $name = $route->getName();
+        if (is_string($name) && str_starts_with($name, 'auth.')) {
+            return true;
+        }
+
         foreach (self::AUTH_ROUTE_PATTERNS as $pattern) {
             if ($request->is($pattern)) {
                 return true;
@@ -162,31 +181,21 @@ class PreventBruteForce
     }
 
     /**
-     * Calcula una firma única por alcance (scope) para alimentar al rate limiter.
+     * Calcula una firma única por alcance para alimentar al rate limiter.
      *
-     * Regla general:
-     * - Base: IP del cliente (según TrustProxies).
-     * - Scope `auth`: añade User-Agent y, si es login y viene `email`, lo incorpora para granularidad por cuenta.
-     * - El resultado final se hashea (sha256) para no exponer datos crudos en claves.
-     *
-     * @param Request $request Petición HTTP.
-     * @param string  $scope   Alcance lógico ("auth"|"api"|"general:*").
-     * @return string          Clave estable para RateLimiter::hit/::tooManyAttempts.
+     * Solo usa la IP; incluir emails permitiría enumeración de cuentas.
      */
     protected function resolveRequestSignature(Request $request, string $scope): string
     {
-        $baseSignature = $request->ip();
-
-        if ($scope === 'auth') {
-            $baseSignature .= '|' . $request->userAgent();
-
-            // Si es login y se envía email, se añade para evitar bloquear a toda la IP.
-            if ($request->is('login') && $request->filled('email')) {
-                $baseSignature .= '|' . strtolower($request->input('email'));
-            }
+        $ip = $request->ip();
+        if (app()->environment('production') && $this->isSuspiciousIp($ip)) {
+            Log::critical('Suspicious client IP detected for rate limiter', [
+                'ip' => $ip,
+                'headers' => $request->headers->all(),
+            ]);
         }
 
-        return $scope . ':' . hash('sha256', $baseSignature);
+        return $scope . ':' . hash('sha256', $ip);
     }
 
     /**
@@ -205,7 +214,7 @@ class PreventBruteForce
         Log::warning('Rate limit exceeded - Possible brute force attack', [
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
-            'url' => $request->fullUrl(),
+            'url' => $request->url(),
             'method' => $request->method(),
             'rate_limit_key' => $key,
             'user_id' => $request->user()?->id,
@@ -232,29 +241,18 @@ class PreventBruteForce
         // Traducción en resources/lang: "rate_limit" => "Demasiados intentos. Intenta de nuevo en :seconds segundos."
         $message = __('rate_limit', ['seconds' => $retryAfter]);
 
-        if ($request->expectsJson() || $request->is('api/*')) {
+        if ($request->expectsJson() || $request->is(self::API_PREFIX)) {
             return response()->json([
                 'message' => $message,
                 'retry_after' => $retryAfter,
                 'error_code' => 'RATE_LIMIT_EXCEEDED',
-            ], 429);
+            ], 429)->header('Retry-After', (string) $retryAfter);
         }
 
-        return $this->redirectBackWithError($message);
-    }
+        $response = $this->redirectBackWithError($message, $request);
+        $response->headers->set('Retry-After', (string) $retryAfter);
 
-    /**
-     * Indica si la petición debe consumir crédito de rate limit.
-     *
-     * Por defecto, solo consumen crédito los métodos no idempotentes
-     * (p.ej., POST/PUT/PATCH/DELETE), excluyendo los definidos en SAFE_METHODS.
-     *
-     * @param Request $request Petición HTTP.
-     * @return bool            true si debe contarse, false en caso contrario.
-     */
-    protected function shouldCountAttempt(Request $request): bool
-    {
-        return !in_array($request->method(), self::SAFE_METHODS, true);
+        return $response;
     }
 
     /**
@@ -263,10 +261,128 @@ class PreventBruteForce
      * @param string $message Mensaje para el usuario (flash key `error`).
      * @return Response       RedirectResponse (subtipo de Response) a la URL previa.
      */
-    protected function redirectBackWithError(string $message): Response
+    protected function redirectBackWithError(string $message, Request $request): Response
     {
-        return redirect()->back()
+        $fallback = $this->safePreviousUrl($request);
+
+        return redirect()->back(fallback: $fallback)
             ->with('error', $message)
             ->withInput();
+    }
+
+    /**
+     * Devuelve una URL previa segura (mismo host) o fallback al home.
+     */
+    private function safePreviousUrl(Request $request): string
+    {
+        $previous = url()->previous();
+        $appUrl = config('app.url');
+
+        if (!is_string($previous) || $previous === '' || !is_string($appUrl) || $appUrl === '') {
+            return url('/');
+        }
+
+        $parsedPrevious = parse_url($previous);
+        $parsedApp = parse_url($appUrl);
+        if ($parsedPrevious === false || $parsedApp === false || $parsedPrevious === null || $parsedApp === null) {
+            return url('/');
+        }
+
+        $previousHost = $parsedPrevious['host'] ?? null;
+        $appHost = $parsedApp['host'] ?? null;
+        if ($previousHost === null || $appHost === null || strcasecmp($previousHost, $appHost) !== 0) {
+            return url('/');
+        }
+
+        $previousScheme = $parsedPrevious['scheme'] ?? null;
+        $appScheme = $parsedApp['scheme'] ?? null;
+        if ($previousScheme !== null && $appScheme !== null && strcasecmp($previousScheme, $appScheme) !== 0) {
+            return url('/');
+        }
+
+        $path = $parsedPrevious['path'] ?? '/';
+        if (!is_string($path) || $path === '' || $path[0] !== '/') {
+            return url('/');
+        }
+
+        return $previous;
+    }
+
+    /**
+     * Normaliza un path para rate limiting (IDs -> {id}, caótico -> minúsculas).
+     */
+    private function normalizePathForRateLimit(Request $request): string
+    {
+        $route = $request->route();
+        if ($route && is_string($route->getName()) && $route->getName() !== '') {
+            return strtolower($route->getName());
+        }
+
+        $path = trim($request->path(), '/');
+        if ($path === '') {
+            return 'root';
+        }
+
+        $segments = array_filter(explode('/', $path), static fn ($segment) => $segment !== '');
+        $normalizedSegments = array_map(static function (string $segment): string {
+            if (ctype_digit($segment)) {
+                return '{id}';
+            }
+
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $segment)) {
+                return '{uuid}';
+            }
+
+            if (preg_match('/^[A-Za-z0-9]{20,}$/', $segment)) {
+                return '{hash}';
+            }
+
+            return $segment;
+        }, $segments);
+
+        return strtolower(implode('/', $normalizedSegments));
+    }
+
+    /**
+     * Detecta IPs sospechosas en producción (rangos reservados o loopback).
+     */
+    private function isSuspiciousIp(?string $ip): bool
+    {
+        if (!is_string($ip) || $ip === '') {
+            return true;
+        }
+
+        $isValidPublicIp = filter_var(
+            $ip,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        );
+
+        return $isValidPublicIp === false;
+    }
+
+    /**
+     * Verifica que existan las claves críticas de configuración; emite warning si se usa default.
+     */
+    private function validateRateLimitConfig(): void
+    {
+        foreach (self::REQUIRED_CONFIG_KEYS as $key) {
+            if (!array_key_exists($key, $this->rateLimitConfig)) {
+                Log::warning('PreventBruteForce config key missing, using default', [
+                    'config_key' => $key,
+                ]);
+                $this->rateLimitConfig[$key] = self::DEFAULT_LIMITS[$key];
+                continue;
+            }
+
+            $value = $this->rateLimitConfig[$key];
+            if (!is_int($value) || $value <= 0) {
+                Log::warning('PreventBruteForce config key has invalid value, using default', [
+                    'config_key' => $key,
+                    'value' => $value,
+                ]);
+                $this->rateLimitConfig[$key] = self::DEFAULT_LIMITS[$key];
+            }
+        }
     }
 }

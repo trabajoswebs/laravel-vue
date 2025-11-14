@@ -9,6 +9,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use RuntimeException;
@@ -23,13 +24,21 @@ use RuntimeException;
  */
 final class RemoteDownloader
 {
-    private const HTTP_ALLOWED_MIMES = [
+    /**
+     * Tipos MIME permitidos para descarga.
+     */
+    private const ALLOWED_MIMES = [
         'image/jpeg',
         'image/png',
         'image/webp',
         'image/gif',
     ];
 
+    /**
+     * Límites de descarga HTTP.
+     */
+    private const STREAM_CHUNK_SIZE = 1024 * 1024; // 1MB
+    private const STREAM_COPY_TIMEOUT = 300; // 5 minutos
     private const HTTP_MAX_BYTES = 25 * 1024 * 1024; // 25MB
     private const HTTP_REDIRECT_LIMIT = 3;
     private const HTTP_CHUNK_SIZE = 1024 * 1024; // 1MB
@@ -38,8 +47,16 @@ final class RemoteDownloader
     private const HTTP_CONNECT_TIMEOUT = 5.0;
     private const HTTP_READ_TIMEOUT = 10.0;
     private const HTTP_ALLOWED_PORTS = [80, 443];
+    private const METADATA_IPS = [
+        '169.254.169.254',
+        '::ffff:169.254.169.254',
+        'fd00:ec2::254',
+    ];
+    private const HEAD_MAX_RETRIES = 2;
 
-    /** NOTA: la ruta temporal debe residir en un directorio seguro y no ser reubicable por usuarios no confiables. */
+    /**
+     * NOTA: La ruta temporal debe residir en un directorio seguro y no ser reubicable por usuarios no confiables.
+     */
 
     /**
      * Constructor de la clase.
@@ -48,6 +65,9 @@ final class RemoteDownloader
      */
     public function __construct(
         private readonly FilesystemAdapter $disk,
+        private readonly ?int $maxBytes = null,
+        private readonly ?int $copyTimeout = null,
+        private readonly ?int $redirectLimit = null,
     ) {}
 
     /**
@@ -67,41 +87,57 @@ final class RemoteDownloader
      */
     public function download(string $relativePath, string $tempPath, int $expectedBytes): int
     {
+        // Validar que el tamaño esperado sea válido
         if ($expectedBytes <= 0) {
             throw new RuntimeException('expected_bytes_invalid');
         }
+
+        // Validar que la ruta no esté vacía
         if ($relativePath === '') {
             throw new RuntimeException('relative_path_invalid');
         }
 
+        // Si es una URL HTTP, usar el método específico para descargas HTTP
         if ($this->isHttpUrl($relativePath)) {
             return $this->downloadFromHttp($relativePath, $tempPath, $expectedBytes);
         }
 
+        // Validar que la ruta no sea absoluta ni contenga caracteres peligrosos
         if (str_starts_with($relativePath, '/') || str_contains($relativePath, '..')) {
             throw new RuntimeException('relative_path_invalid');
         }
 
+        // Abrir stream del archivo remoto
         $stream = $this->disk->readStream($relativePath);
         if ($stream === false || !\is_resource($stream)) {
             throw new RuntimeException('stream_read_failed');
         }
 
+        // Abrir archivo local temporal para escritura
         $out = fopen($tempPath, 'wb');
         if ($out === false || !\is_resource($out)) {
             fclose($stream);
             throw new RuntimeException('tmp_open_failed');
         }
+        $this->hardenTempFile($tempPath);
 
+        // Establecer timeout en el stream de lectura
         if (\function_exists('stream_set_timeout')) {
             stream_set_timeout($stream, 30);
         }
 
         $copied = 0;
-        $chunkSize = 1024 * 1024; // 1MB chunks
+        $chunkSize = self::STREAM_CHUNK_SIZE;
+        $copyTimeout = $this->getStreamCopyTimeout();
+        $startedAt = time();
 
         try {
+            // Leer y escribir en bloques
             while (!feof($stream)) {
+                if ((time() - $startedAt) > $copyTimeout) {
+                    throw new RuntimeException('stream_copy_timeout');
+                }
+
                 $buffer = fread($stream, $chunkSize);
                 if ($buffer === false) {
                     throw new RuntimeException('stream_read_chunk_failed');
@@ -126,21 +162,46 @@ final class RemoteDownloader
                 }
             }
         } catch (\Throwable $exception) {
-            @\unlink($tempPath);
+            // Eliminar archivo temporal en caso de error
+            $this->cleanupTempFile($tempPath);
             throw $exception;
         } finally {
+            // Cerrar ambos streams
             fclose($out);
             fclose($stream);
         }
 
+        // Verificar tamaño en disco antes de validar cantidades
+        try {
+            $actualSize = $this->readTempFileSize($tempPath);
+        } catch (\Throwable $e) {
+            $this->cleanupTempFile($tempPath);
+            throw $e;
+        }
+
+        if ($actualSize !== $copied) {
+            $this->cleanupTempFile($tempPath);
+            throw new RuntimeException('stream_copy_size_mismatch');
+        }
+
+        // Validar que se haya copiado algo
         if ($copied === 0) {
-            @\unlink($tempPath);
+            $this->cleanupTempFile($tempPath);
             throw new RuntimeException('stream_copy_empty');
         }
 
+        // Validar que el tamaño coincida
         if ($copied < $expectedBytes) {
-            @\unlink($tempPath);
+            $this->cleanupTempFile($tempPath);
             throw new RuntimeException('stream_copy_incomplete');
+        }
+
+        // Validar el tipo MIME del archivo descargado
+        try {
+            $this->ensureMimeMatchesAllowed($tempPath, null);
+        } catch (\Throwable $exception) {
+            $this->cleanupTempFile($tempPath);
+            throw $exception;
         }
 
         return (int) $copied;
@@ -148,6 +209,9 @@ final class RemoteDownloader
 
     /**
      * Determina si una cadena representa una URL HTTP/HTTPS.
+     *
+     * @param string $value Cadena a evaluar.
+     * @return bool Verdadero si es una URL HTTP o HTTPS.
      */
     private function isHttpUrl(string $value): bool
     {
@@ -162,22 +226,33 @@ final class RemoteDownloader
 
     /**
      * Descarga un archivo remoto usando HTTP(S) con defensas anti-SSRF.
+     *
+     * @param string $url URL remota a descargar.
+     * @param string $tempPath Ruta local temporal donde guardar.
+     * @param int $expectedBytes Tamaño esperado del archivo.
+     * @return int Bytes copiados.
+     * @throws RuntimeException Si ocurre un error en la descarga o validación.
      */
     private function downloadFromHttp(string $url, string $tempPath, int $expectedBytes): int
     {
+        // Resolver la URL objetivo
         $target = $this->resolveHttpTarget($url);
+
+        // Seguir redirecciones HEAD manualmente para aplicar defensas
         [$finalTarget, $head] = $this->followHeadRedirects($target);
 
+        // Extraer y validar el tipo MIME desde la respuesta HEAD
         $mime = $this->extractMime($head);
-        if ($mime === null || !\in_array($mime, self::HTTP_ALLOWED_MIMES, true)) {
+        if ($mime === null || !\in_array($mime, self::ALLOWED_MIMES, true)) {
             throw new RuntimeException('http_head_mime_blocked');
         }
 
+        // Extraer y validar el tamaño del archivo
         $contentLength = $this->extractContentLength($head);
         if ($contentLength <= 0) {
             throw new RuntimeException('http_head_length_invalid');
         }
-        if ($contentLength > self::HTTP_MAX_BYTES) {
+        if ($contentLength > $this->getMaxBytes()) {
             throw new RuntimeException('http_head_length_exceeds_limit');
         }
 
@@ -185,23 +260,35 @@ final class RemoteDownloader
             throw new RuntimeException('expected_bytes_mismatch');
         }
 
+        // Abrir archivo temporal para escritura
         $out = fopen($tempPath, 'wb');
         if ($out === false || !\is_resource($out)) {
             throw new RuntimeException('tmp_open_failed');
         }
+        $this->hardenTempFile($tempPath);
 
         $binding = $finalTarget['binding'];
+
+        // Hacer petición GET al host resuelto para evitar SSRF
         $response = $this->httpClient(true, $binding)->get($finalTarget['url']);
         if ($response->failed()) {
             fclose($out);
+            $this->cleanupTempFile($tempPath);
             throw new RuntimeException('http_get_failed');
         }
 
         $body = $response->toPsrResponse()->getBody();
         $copied = 0;
+        $copyTimeout = $this->getStreamCopyTimeout();
+        $startedAt = time();
 
         try {
+            // Copiar el cuerpo de la respuesta al archivo temporal
             while (!$body->eof()) {
+                if ((time() - $startedAt) > $copyTimeout) {
+                    throw new RuntimeException('http_stream_timeout');
+                }
+
                 $chunk = $body->read(self::HTTP_CHUNK_SIZE);
                 if ($chunk === '') {
                     continue;
@@ -224,16 +311,38 @@ final class RemoteDownloader
         } catch (\Throwable $exception) {
             fclose($out);
             $body->close();
-            @\unlink($tempPath);
+            $this->cleanupTempFile($tempPath);
             throw $exception;
         }
 
         fclose($out);
         $body->close();
 
+        // Verificar nuevamente el tamaño del archivo en disco
+        try {
+            $actualSize = $this->readTempFileSize($tempPath);
+        } catch (\Throwable $e) {
+            $this->cleanupTempFile($tempPath);
+            throw $e;
+        }
+
+        if ($actualSize !== $copied) {
+            $this->cleanupTempFile($tempPath);
+            throw new RuntimeException('http_stream_size_mismatch');
+        }
+
+        // Validar que el tamaño coincida
         if ($copied !== $contentLength) {
-            @\unlink($tempPath);
+            $this->cleanupTempFile($tempPath);
             throw new RuntimeException('http_stream_length_mismatch');
+        }
+
+        // Validar el tipo MIME del archivo descargado
+        try {
+            $this->ensureMimeMatchesAllowed($tempPath, $mime);
+        } catch (\Throwable $exception) {
+            $this->cleanupTempFile($tempPath);
+            throw $exception;
         }
 
         return $copied;
@@ -241,8 +350,13 @@ final class RemoteDownloader
 
     /**
      * Normaliza y valida la URL de entrada.
+     *
+     * @param string $url URL a validar y normalizar.
+     * @param array<string, array<int, string>> $hostIpCache Cache opcional de IPs ya validadas.
+     * @return array Información de la URL resuelta.
+     * @throws RuntimeException Si la URL no es válida o no cumple las restricciones.
      */
-    private function resolveHttpTarget(string $url): array
+    private function resolveHttpTarget(string $url, array $hostIpCache = []): array
     {
         try {
             $uri = new Uri($url);
@@ -253,6 +367,10 @@ final class RemoteDownloader
         $scheme = strtolower($uri->getScheme() ?? '');
         if (!\in_array($scheme, ['http', 'https'], true)) {
             throw new RuntimeException('http_scheme_not_allowed');
+        }
+
+        if ($uri->getFragment() !== '') {
+            throw new RuntimeException('http_url_fragment_not_allowed');
         }
 
         if ($uri->getUserInfo() !== '') {
@@ -273,7 +391,16 @@ final class RemoteDownloader
             throw new RuntimeException('http_port_not_allowed');
         }
 
-        $ips = $this->assertHostAllowed($host);
+        $hostKey = strtolower($host);
+        if (isset($hostIpCache[$hostKey])) {
+            $ips = $hostIpCache[$hostKey];
+        } else {
+            $ips = $this->assertHostAllowed($host);
+        }
+
+        if ($ips === []) {
+            throw new RuntimeException('dns_resolution_failed');
+        }
 
         if ($uri->getPath() === '') {
             $uri = $uri->withPath('/');
@@ -298,11 +425,15 @@ final class RemoteDownloader
      *
      * @param  array{url:string,scheme:string,host:string,port:int,ips:array<int,string>}  $target
      * @return array{0:array{url:string,scheme:string,host:string,port:int,ips:array<int,string>,binding:array{host:string,port:int,ip:string}},1:Response}
+     * @throws RuntimeException Si se excede el límite de redirecciones o falla la petición.
      */
     private function followHeadRedirects(array $target): array
     {
         $current = $target;
         $redirects = 0;
+        $hostIpCache = [
+            strtolower($current['host']) => $current['ips'],
+        ];
 
         while (true) {
             [$response, $binding] = $this->performHeadRequest($current);
@@ -322,41 +453,57 @@ final class RemoteDownloader
                 throw new RuntimeException('http_redirect_location_missing');
             }
 
-            if (++$redirects > self::HTTP_REDIRECT_LIMIT) {
+            if (++$redirects > $this->getRedirectLimit()) {
                 throw new RuntimeException('http_redirect_limit_exceeded');
             }
 
             $nextUrl = $this->resolveRedirectUrl($current['url'], $location);
-            $current = $this->resolveHttpTarget($nextUrl);
+            $current = $this->resolveHttpTarget($nextUrl, $hostIpCache);
+            $hostIpCache[strtolower($current['host'])] = $current['ips'];
         }
     }
 
     /**
+     * Realiza una petición HEAD a la URL objetivo y devuelve la respuesta y el binding.
+     *
      * @param  array{url:string,scheme:string,host:string,port:int,ips:array<int,string>}  $target
      * @return array{0:Response,1:array{host:string,port:int,ip:string}}
+     * @throws RuntimeException Si no se puede conectar a ninguna IP.
      */
     private function performHeadRequest(array $target): array
     {
-        foreach ($target['ips'] as $ip) {
-            $binding = [
-                'host' => $target['host'],
-                'port' => $target['port'],
-                'ip'   => $ip,
-            ];
+        $lastException = null;
 
-            try {
-                $response = $this->httpClient(false, $binding)->head($target['url']);
-                return [$response, $binding];
-            } catch (ConnectionException) {
-                continue;
+        foreach ($target['ips'] as $ip) {
+            for ($attempt = 0; $attempt <= self::HEAD_MAX_RETRIES; $attempt++) {
+                $binding = [
+                    'host' => $target['host'],
+                    'port' => $target['port'],
+                    'ip'   => $ip,
+                ];
+
+                try {
+                    $response = $this->httpClient(false, $binding)->head($target['url']);
+                    return [$response, $binding];
+                } catch (ConnectionException $exception) {
+                    $lastException = $exception;
+
+                    if ($attempt < self::HEAD_MAX_RETRIES) {
+                        usleep(100000 * (2 ** $attempt));
+                        continue;
+                    }
+                }
             }
         }
 
-        throw new RuntimeException('http_head_unreachable');
+        throw new RuntimeException('http_head_unreachable', 0, $lastException);
     }
 
     /**
      * Extrae y normaliza el MIME desde la respuesta HEAD.
+     *
+     * @param Response $response Respuesta HTTP.
+     * @return string|null Tipo MIME o null si no se encuentra.
      */
     private function extractMime(Response $response): ?string
     {
@@ -373,6 +520,10 @@ final class RemoteDownloader
 
     /**
      * Obtiene y valida el Content-Length de la respuesta HEAD.
+     *
+     * @param Response $response Respuesta HTTP.
+     * @return int Tamaño del contenido.
+     * @throws RuntimeException Si el header no es válido.
      */
     private function extractContentLength(Response $response): int
     {
@@ -385,11 +536,28 @@ final class RemoteDownloader
             throw new RuntimeException('http_head_length_invalid');
         }
 
-        return (int) $header;
+        $maxDigits = strlen((string) PHP_INT_MAX);
+        if (strlen($header) > $maxDigits) {
+            throw new RuntimeException('http_head_length_too_large');
+        }
+
+        $length = filter_var($header, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1],
+        ]);
+
+        if ($length === false) {
+            throw new RuntimeException('http_head_length_invalid');
+        }
+
+        return $length;
     }
 
     /**
      * Verifica que el host no resuelva a IPs internas, loopback o link-local.
+     *
+     * @param string $host Nombre de host a resolver.
+     * @return array Lista de IPs resueltas.
+     * @throws RuntimeException Si el host no es válido o resuelve a IPs prohibidas.
      */
     private function assertHostAllowed(string $host): array
     {
@@ -422,7 +590,8 @@ final class RemoteDownloader
     /**
      * Resuelve registros A y AAAA para un host.
      *
-     * @return array<int, string>
+     * @param string $host Nombre de host a resolver.
+     * @return array<int, string> Lista de IPs resueltas.
      */
     private function resolveDns(string $host): array
     {
@@ -450,6 +619,9 @@ final class RemoteDownloader
 
     /**
      * Verifica que una IP no pertenezca a rangos bloqueados.
+     *
+     * @param string $ip Dirección IP a validar.
+     * @throws RuntimeException Si la IP no es válida o está prohibida.
      */
     private function assertIpAllowed(string $ip): void
     {
@@ -461,7 +633,13 @@ final class RemoteDownloader
         if ($packed !== false && strlen($packed) === 16) {
             $mappedPrefix = str_repeat("\x00", 10)."\xff\xff";
             if (strncmp($packed, $mappedPrefix, 12) === 0) {
-                throw new RuntimeException('dns_ip_blocked');
+                $ipv4 = inet_ntop(substr($packed, 12));
+                if ($ipv4 === false) {
+                    throw new RuntimeException('dns_ip_blocked');
+                }
+
+                $this->assertIpAllowed($ipv4);
+                return;
             }
         }
 
@@ -475,22 +653,30 @@ final class RemoteDownloader
             throw new RuntimeException('dns_ip_blocked');
         }
 
-        if ($ip === '169.254.169.254') {
+        if (\in_array($ip, self::METADATA_IPS, true)) {
             throw new RuntimeException('dns_ip_blocked');
         }
     }
 
     /**
      * Determina si una IP es link-local (IPv4 169.254/16 o IPv6 fe80::/10).
+     *
+     * @param string $ip Dirección IP a verificar.
+     * @return bool Verdadero si es link-local.
      */
     private function isLinkLocal(string $ip): bool
     {
         if (str_contains($ip, ':')) {
+            $binary = @inet_pton($ip);
+            if ($binary === false || strlen($binary) !== 16) {
+                return false;
+            }
+
+            $first = ord($binary[0]);
+            $second = ord($binary[1]);
+
             // IPv6 link-local: fe80::/10
-            return str_starts_with(strtolower($ip), 'fe8')
-                || str_starts_with(strtolower($ip), 'fe9')
-                || str_starts_with(strtolower($ip), 'fea')
-                || str_starts_with(strtolower($ip), 'feb');
+            return $first === 0xFE && ($second & 0xC0) === 0x80;
         }
 
         // IPv4 link-local: 169.254.0.0/16
@@ -499,6 +685,9 @@ final class RemoteDownloader
 
     /**
      * Construye las opciones base para peticiones HTTP.
+     *
+     * @param bool $stream Indica si se debe usar streaming.
+     * @return array Opciones de configuración para la petición HTTP.
      */
     private function httpOptions(bool $stream = false): array
     {
@@ -518,7 +707,71 @@ final class RemoteDownloader
     }
 
     /**
+     * Comprueba que el MIME detectado en disco coincide con los permitidos y opcionalmente con el esperado.
+     *
+     * @param string $path Ruta del archivo local.
+     * @param string|null $expectedMime MIME esperado (opcional).
+     * @throws RuntimeException Si el MIME no es válido o no coincide.
+     */
+    private function ensureMimeMatchesAllowed(string $path, ?string $expectedMime): void
+    {
+        $detectedMime = $this->detectMimeFromFile($path);
+
+        if ($detectedMime === null) {
+            throw new RuntimeException('mime_detection_failed');
+        }
+
+        if ($expectedMime !== null && $detectedMime !== $expectedMime) {
+            throw new RuntimeException('http_download_mime_mismatch');
+        }
+
+        if (!\in_array($detectedMime, self::ALLOWED_MIMES, true)) {
+            throw new RuntimeException('mime_not_allowed');
+        }
+    }
+
+    /**
+     * Detecta el MIME real de un archivo usando finfo.
+     *
+     * @param string $path Ruta del archivo local.
+     * @return string|null Tipo MIME detectado o null si falla.
+     */
+    private function detectMimeFromFile(string $path): ?string
+    {
+        if (!function_exists('finfo_open')) {
+            return null;
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo === false) {
+            return null;
+        }
+
+        try {
+            $mime = finfo_file($finfo, $path);
+        } finally {
+            finfo_close($finfo);
+        }
+
+        if (!is_string($mime) || $mime === '') {
+            return null;
+        }
+
+        $semicolon = strpos($mime, ';');
+        if ($semicolon !== false) {
+            $mime = substr($mime, 0, $semicolon);
+        }
+
+        return strtolower(trim($mime));
+    }
+
+    /**
      * Crea instancia de cliente HTTP con headers y opciones por defecto.
+     *
+     * @param bool $stream Indica si se debe usar streaming.
+     * @param array|null $binding Información de binding para evitar SSRF.
+     * @return PendingRequest Cliente HTTP configurado.
+     * @throws RuntimeException Si no se puede usar CURLOPT_RESOLVE.
      */
     private function httpClient(bool $stream = false, ?array $binding = null): PendingRequest
     {
@@ -545,7 +798,8 @@ final class RemoteDownloader
             ]);
 
         if ($binding !== null && isset($binding['host']) && !$this->isIpLiteral($binding['host'])) {
-            $request = $request->withHeaders(['Host' => $binding['host']]);
+            $hostHeader = $this->sanitizeHostHeader($binding['host']);
+            $request = $request->withHeaders(['Host' => $hostHeader]);
         }
 
         return $request;
@@ -553,23 +807,122 @@ final class RemoteDownloader
 
     /**
      * Resuelve la URL absoluta de un Location de redirección.
+     *
+     * @param string $baseUrl URL base.
+     * @param string $location Cabecera Location.
+     * @return string URL absoluta resuelta.
      */
     private function resolveRedirectUrl(string $baseUrl, string $location): string
     {
-        $base = new Uri($baseUrl);
-        $target = new Uri($location);
-        return (string) UriResolver::resolve($base, $target);
+        $sanitizedLocation = trim($location);
+        if ($sanitizedLocation === '') {
+            throw new RuntimeException('http_redirect_location_missing');
+        }
+
+        try {
+            $base = new Uri($baseUrl);
+            $target = new Uri($sanitizedLocation);
+            $resolved = UriResolver::resolve($base, $target);
+        } catch (\InvalidArgumentException) {
+            throw new RuntimeException('http_redirect_invalid');
+        }
+
+        $scheme = strtolower($resolved->getScheme() ?? '');
+        if (!\in_array($scheme, ['http', 'https'], true)) {
+            throw new RuntimeException('http_redirect_scheme_not_allowed');
+        }
+
+        if ($resolved->getFragment() !== '') {
+            throw new RuntimeException('http_redirect_fragment_not_allowed');
+        }
+
+        return (string) $resolved;
     }
 
+    /**
+     * Verifica si una cadena es una IP literal.
+     *
+     * @param string $host Host a evaluar.
+     * @return bool Verdadero si es una IP.
+     */
     private function isIpLiteral(string $host): bool
     {
         return filter_var($host, FILTER_VALIDATE_IP) !== false;
     }
 
+    /**
+     * Formatea una entrada de resolución para CURLOPT_RESOLVE.
+     *
+     * @param string $host Host a resolver.
+     * @param int $port Puerto.
+     * @param string $ip IP a asociar.
+     * @return string Entrada formateada.
+     */
     private function formatCurlResolveEntry(string $host, int $port, string $ip): string
     {
         $ipFormatted = str_contains($ip, ':') ? "[{$ip}]" : $ip;
 
         return "{$host}:{$port}:{$ipFormatted}";
+    }
+
+    private function hardenTempFile(string $path): void
+    {
+        if ($path === '' || !file_exists($path) || !\function_exists('chmod')) {
+            return;
+        }
+
+        @chmod($path, 0600);
+    }
+
+    private function cleanupTempFile(string $path): void
+    {
+        if ($path === '' || !is_file($path)) {
+            return;
+        }
+
+        if (@\unlink($path) === false) {
+            Log::warning('RemoteDownloader failed to remove temp file', [
+                'path' => $path,
+            ]);
+        }
+    }
+
+    private function sanitizeHostHeader(string $host): string
+    {
+        $trimmed = trim($host);
+        if ($trimmed === '') {
+            throw new RuntimeException('http_host_invalid');
+        }
+
+        if (!preg_match('/^[A-Za-z0-9.-]+$/', $trimmed)) {
+            throw new RuntimeException('http_host_invalid_chars');
+        }
+
+        return $trimmed;
+    }
+
+    private function getMaxBytes(): int
+    {
+        return $this->maxBytes ?? self::HTTP_MAX_BYTES;
+    }
+
+    private function getStreamCopyTimeout(): int
+    {
+        return $this->copyTimeout ?? self::STREAM_COPY_TIMEOUT;
+    }
+
+    private function getRedirectLimit(): int
+    {
+        return $this->redirectLimit ?? self::HTTP_REDIRECT_LIMIT;
+    }
+
+    private function readTempFileSize(string $path): int
+    {
+        $size = @filesize($path);
+        if ($size === false) {
+            throw new RuntimeException('filesize_check_failed');
+        }
+
+        return (int) $size;
     }
 }

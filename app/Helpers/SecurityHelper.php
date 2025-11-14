@@ -688,6 +688,28 @@ final class SecurityHelper
     }
 
     /**
+     * Sanitiza nombres de archivo para logging evitando inyecciones.
+     *
+     * Elimina saltos de línea, reemplaza separadores de ruta y limita la longitud.
+     * @param string $filename Nombre original subido por el usuario
+     * @param int $maxLength
+     * @return string Nombre seguro
+     */
+    public static function sanitizeFilename(string $filename, int $maxLength = self::MAX_NAME_LENGTH): string
+    {
+        $clean = preg_replace(self::CRLF_REGEX, '', $filename); // Ej: "name\r\n" -> "name"
+        $clean = str_replace(['\\', '/'], '_', $clean); // Ej: "../secret.png" -> "__secret.png"
+        $clean = trim($clean);
+        $clean = preg_replace('/[^A-Za-z0-9_\-\.]/u', '_', $clean) ?? '';
+
+        if ($clean === '') {
+            return 'file';
+        }
+
+        return mb_substr($clean, 0, $maxLength, 'UTF-8'); // Ej: nombre largo -> truncado
+    }
+
+    /**
      * Genera hash seguro de una IP para logging sin exponer la real.
      *
      * Utiliza SHA256 con una sal para generar un hash irreversible de la IP,

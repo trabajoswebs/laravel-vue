@@ -83,23 +83,36 @@ class ProfileController extends Controller
         $this->authorize('delete', $user);
 
         Auth::logout();
+        try {
+            // Transacción: borrado + acciones relacionadas
+            DB::transaction(function () use ($user) {
+                // Si usas soft deletes, esto será reversible; si no, será permanente.
+                $user->delete();
+            });
 
-        // Transacción: borrado + acciones relacionadas
-        DB::transaction(function () use ($user) {
-            // Si usas soft deletes, esto será reversible; si no, será permanente.
-            $user->delete();
-        });
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
 
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+            Log::warning('Cuenta eliminada', SecurityHelper::sanitizeForLogging([
+                'user_id' => $user->id,
+                'email_domain' => $this->getEmailDomain($user->email),
+                'ip_hash' => SecurityHelper::hashIp(request()->ip()),
+                'metric' => 'profile.destroy.success',
+            ]));
 
-        Log::warning('Cuenta eliminada', SecurityHelper::sanitizeForLogging([
-            'user_id' => $user->id,
-            'email_domain' => $this->getEmailDomain($user->email),
-            'ip_hash' => SecurityHelper::hashIp(request()->ip()),
-        ]));
+            return redirect('/')->with(['success' => __('auth.deleted.success')]);
+            
+        } catch (\Throwable $e) {
+            Log::warning('Profile destroy failed', SecurityHelper::sanitizeForLogging([
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'metric' => 'profile.destroy.failed',
+            ]));
 
-        return redirect('/');
+            return back()->withErrors([
+                'profile' => __('auth.deleted.failed'),
+            ]);
+        }
     }
 
     /**

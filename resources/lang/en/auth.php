@@ -114,6 +114,10 @@ return [
         'failed' => 'We couldn’t update your profile. Please try again shortly.',
         'success' => 'All done – your changes are saved.',
     ],
+    'deleted' => [
+        'failed' => 'We couldn’t delete your account. Please try again shortly.',
+        'success' => 'Your account has been deleted successfully. We hope to see you back soon.',
+    ],
     'two_factor' => [
         'title' => 'Two-step verification',
         'subtitle' => 'Add an extra layer of security to your account.',

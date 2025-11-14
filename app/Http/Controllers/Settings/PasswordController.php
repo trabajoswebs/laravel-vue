@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class PasswordController extends Controller
 {
@@ -35,10 +37,22 @@ class PasswordController extends Controller
             'password' => ['required', Password::defaults()->uncompromised(), 'confirmed'],
         ]);
 
-        $request->user()->update([
-            'password' => Hash::make($validated['password']),
-        ]);
+        try {
+            $request->user()->update([
+                'password' => Hash::make($validated['password']),
+            ]);
 
-        return back()->with(['success' => __('auth.update.success')]);
+            return back()->with(['success' => __('auth.update.success')]);
+        } catch (Throwable $e) {
+            Log::warning('Password update failed', [
+                'user_id' => $request->user()?->getKey(),
+                'error' => $e->getMessage(),
+                'metric' => 'password.update.failed',
+            ]);
+
+            return back()->withErrors([
+                'password' => __('auth.update.failed'),
+            ]);
+        }
     }
 }
