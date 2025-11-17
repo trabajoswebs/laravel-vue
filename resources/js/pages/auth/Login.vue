@@ -72,7 +72,7 @@ defineProps<{
                 </div>
 
                 <Button type="submit" class="w-full mt-4" :tabindex="4" :disabled="processing">
-                    <LoaderCircle v-if="processing" class="w-4 h-4 animate-spin" />
+                    <LoaderCircle v-if="processing" class="w-4 h-4 animate-spin mr-1" />
                     {{ t('auth.log_in') }}
                 </Button>
             </div>

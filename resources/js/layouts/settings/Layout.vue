@@ -29,14 +29,17 @@ const currentPath = page.props.ziggy?.location ? new URL(page.props.ziggy.locati
 </script>
 
 <template>
-    <div class="px-4 py-6">
+    <div class="w-full max-w-5xl px-4 py-6 md:px-6 lg:py-10 xl:max-w-6xl">
         <Heading :title="t('settings.title')" :description="t('settings.appearance_description')" />
 
-        <div class="flex flex-col lg:flex-row lg:space-x-12">
-            <aside class="w-full max-w-xl lg:w-48">
-                <nav class="flex flex-col space-y-1 space-x-0">
-                    <Button v-for="item in sidebarNavItems" :key="item.href" variant="ghost"
-                        :class="['w-full justify-start', { 'bg-muted': currentPath === item.href }]" as-child>
+        <div class="mt-6 flex flex-col gap-8 lg:flex-row lg:items-start">
+            <!-- SIDEBAR -->
+            <aside class="w-full max-w-full lg:w-64 lg:flex-none">
+                <nav class="flex flex-col space-y-1">
+                    <Button v-for="item in sidebarNavItems" :key="item.href" variant="ghost" :class="[
+                        'w-full justify-start',
+                        { 'bg-muted': currentPath === item.href }
+                    ]" as-child>
                         <Link :href="item.href">
                         {{ item.title }}
                         </Link>
@@ -44,10 +47,12 @@ const currentPath = page.props.ziggy?.location ? new URL(page.props.ziggy.locati
                 </nav>
             </aside>
 
+            <!-- Separador solo en móvil -->
             <Separator class="my-6 lg:hidden" />
 
-            <div class="flex-1 md:max-w-2xl">
-                <section class="max-w-xl space-y-12">
+            <!-- CONTENIDO -->
+            <div class="flex-1 md:max-w-3xl lg:max-w-3xl xl:max-w-4xl">
+                <section class="space-y-12">
                     <slot />
                 </section>
             </div>

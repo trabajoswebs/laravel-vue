@@ -24,4 +24,17 @@ return [
     'quarantine' => [
         'disk' => env('MEDIA_QUARANTINE_DISK', 'quarantine'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Allowed Disks
+    |--------------------------------------------------------------------------
+    |
+    | Define qué discos de Filesystem son válidos para que el listener procese
+    | conversiones. Cuando está vacío, usa todos los disks configurados.
+    |
+    */
+    'allowed_disks' => env('MEDIA_ALLOWED_DISKS') !== null
+        ? array_map('trim', explode(',', (string) env('MEDIA_ALLOWED_DISKS', '')))
+        : [],
 ];

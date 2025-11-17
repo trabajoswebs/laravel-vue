@@ -21,6 +21,26 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 - **Herramientas de desarrollo** - ESLint, Prettier, TypeScript configurados y listas para CI/CD
 - **Capa de seguridad documentada** - CSP, rate limiting, auditoría y cabeceras listas para producción ([ver guía](docs/SECURITY.md))
 
+## 📁 Estructura del proyecto
+
+### Backend, media y seguridad endurecida
+- `app/Http/Controllers`, `Middleware` y `Requests` definen controladores Inertia, autenticación, ajustes y los middlewares (`SecurityHeaders`, `RateLimitUploads`, `SanitizeInput`, `UserAudit`) que corren en cada petición.
+- `app/Services` agrupa el pipeline de imágenes (workflow Imagick/Fallback, configuración, OptimizerService) y los servicios de subida/traducción que coordinan Spatie Media Library con ImagePipeline.
+- `app/Support/Media` reúne contratos, DTOs, perfiles (`AvatarProfile`, `GalleryProfile`), el recolector de artefactos, el coordinador de lifecycle y los jobs/listeners que limpian artefactos después de conversions.
+- `app/Support/Media/Security` contiene `PayloadScanner`, `ImageMetadataReader`, `ImageNormalizer`, `MimeNormalizer` y `UploadValidationLogger`, que amplifican `SecureImageValidation` y el `ImageUploadService` con detección de payloads, normalización y auditoría anónima.
+- `app/Rules/SecureImageValidation` es la puerta única para los uploads, y se combina con `config/image-pipeline.php`, `config/security.php` y `ImagePipelineServiceProvider` para proteger márgenes de error y habilitar `rate.uploads`.
+- `app/Providers` registra bindings (p. ej., `ImagePipelineServiceProvider`, `MediaLibraryBindingsServiceProvider`) y asegura que los helpers y eventos estén listos antes de servir la vista.
+
+### Frontend e internacionalización
+- `resources/js/pages`, `components`, `layouts/settings` y `layouts/app` concentran las vistas Inertia, incluyendo el nuevo `AvatarUploader` y los formularios de ajustes (perfil, contraseña, apariencia).
+- `resources/js/composables` y `resources/js/locales` alimentan `useLanguage`, `useAvatarUpload` y los archivos JSON que mantienen sincronizadas las traducciones cliente-servidor.
+- `resources/js/lib`, `resources/js/plugins`, `resources/js/utils`, `vite.config.ts`, `tsconfig.json`, `eslint.config.js` y `package.json` definen la experiencia TypeScript/Vite con pautas de linting, paths y herramientas como `laravel-pail` para logs en tiempo real.
+
+### Infraestructura, herramientas y documentación
+- `config/` expone `security.php`, `image-pipeline.php`, `media.php`, `media-library.php` y `audit.php` para gobernar políticas de CSP, rate limits, media lifecycle y auditoría.
+- `deploy/`, `docker/`, `Dockerfile`, `docker-compose.yml` y `scripts/check_storage_exec.sh` contienen los artefactos de despliegue y validadores (p. ej. copia de policy.xml para ImageMagick y comprobaciones de ejecución en `/storage`).
+- `docs/` aloja las guías de seguridad (`SECURITY.md`), traducciones dinámicas y media lifecycle, mientras que `app_tree.txt` y los tests (`tests/Unit`, `phpunit.xml`) mantienen la documentación viva y verificable.
+
 ## 🌍 Sistema de Internacionalización
 
 ### Traducciones Híbridas
@@ -162,16 +182,16 @@ Este proyecto incluye un pipeline endurecido para subir el avatar del usuario (L
 
 Configuración requerida (producción):
 
-1. Límite de tamaño a 10 MB (alineado en todas las capas)
+1. Límite de tamaño a 25 MB (alineado en todas las capas)
 
 ```env
 # .env
-IMG_MAX_BYTES=10485760
+IMG_MAX_BYTES=26214400
 ```
 
 ```php
 // config/media-library.php
-'max_file_size' => (int) env('IMG_MAX_BYTES', 10 * 1024 * 1024),
+'max_file_size' => (int) env('IMG_MAX_BYTES', 20 * 1024 * 1024),
 ```
 
 2. Driver de imágenes
@@ -606,7 +626,7 @@ composer run env:sail
 
 ```env
 # Límite de tamaño en bytes para la normalización
-IMG_MAX_BYTES=10485760
+IMG_MAX_BYTES=20971520
 
 # Driver de imágenes
 IMAGE_DRIVER=imagick

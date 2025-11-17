@@ -1,101 +1,91 @@
 <?php
 
-// 1. Declaración de tipos estrictos para evitar conversiones implícitas de tipos.
 declare(strict_types=1);
 
-// 2. Espacio de nombres para perfiles de conversión de medios.
 namespace App\Support\Media\ConversionProfiles;
 
-// 3. Importaciones de clases y enums necesarios.
+use App\Support\Media\Contracts\MediaOwner;
+use App\Support\Media\Profiles\AvatarProfile;
 use Illuminate\Support\Facades\Log;
 use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\Conversions\Conversion;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
- * Define y aplica perfiles de conversión de imagen para avatares.
+ * Perfil de conversión para imágenes de avatar.
  *
- * Este perfil:
- * - Genera versiones en diferentes tamaños (thumb, medium, large).
- * - Usa calidad y dimensiones centralizadas en FileConstraints.
- * - Aplica formato WebP con optimización y ligero sharpen.
- * - Permite configurar si se ejecutan en cola o no.
+ * Genera versiones optimizadas (thumb, medium, large) en formato WebP,
+ * respetando restricciones centralizadas de tamaño, calidad y procesamiento.
+ *
+ * Las conversiones:
+ * - Usan dimensiones y calidad definidas en {@see FileConstraints}.
+ * - Se aplican solo a la colección de avatares (configurable).
+ * - Son encolables según la configuración de rendimiento.
+ * - Incluyen optimización y ligero sharpen para mejorar percepción visual.
  */
 final class AvatarConversionProfile
 {
     /**
-     * Aplica las conversiones al modelo usando tamaños y calidad centralizados (FileConstraints).
+     * Aplica las conversiones de avatar al modelo dado.
      *
-     * @param object $model El modelo que posee el medio (debe usar el trait HasMedia).
-     * @param Media|null $media Instancia del modelo Media (opcional).
-     * @param string|null $collection Nombre de la colección de medios (opcional).
-     * @return void
+     * @param MediaOwner $model Modelo que usa {@see \Spatie\MediaLibrary\HasMedia}.
+     * @param Media|null $media Instancia del medio (para logging y fallback).
+     * @param AvatarProfile|null $profile Perfil que describe la colección/definiciones.
      */
-    public static function apply(object $model, ?Media $media = null, ?string $collection = null): void
+    public static function apply(MediaOwner $model, ?Media $media = null, ?AvatarProfile $profile = null): void
     {
-        // Verifica si el modelo tiene el método necesario para agregar conversiones (HasMedia trait).
+        $profile ??= app(AvatarProfile::class);
+
+        // Asegura que el modelo soporte conversiones (posee el trait `HasMedia`)
         if (!method_exists($model, 'addMediaConversion')) {
-            // Registra un error si el modelo no tiene el trait necesario.
             Log::warning('avatar_conversion_skipped_missing_trait', [
                 'model'      => get_class($model),
-                'media_id'   => $media?->id,                   // ✅ usa $media
-                'collection' => $collection ?? $media?->collection_name
-                    ?? config('image-pipeline.avatar_collection', 'avatar'),
+                'media_id'   => $media?->id,
+                'collection' => $profile->collection(),
             ]);
-            return; // Sale del método si no se puede aplicar el perfil.
+
+            return;
         }
 
-        // 4. Obtiene la instancia de FileConstraints para obtener configuraciones centralizadas.
-        /** @var FileConstraints $constraints */
         $constraints = app(FileConstraints::class);
-
-        // 5. Normaliza el nombre de la colección para aplicar las conversiones.
-        $collectionName = self::normalizeCollection($collection);
-
-        // 6. Define los tamaños de las conversiones basados en FileConstraints (SSOT - Single Source of Truth).
-        $sizes = [
-            // nombre => [width, height, fit]
-            'thumb'  => [FileConstraints::THUMB_WIDTH,  FileConstraints::THUMB_HEIGHT,  Fit::Crop],    // cuadrado
-            'medium' => [FileConstraints::MEDIUM_WIDTH, FileConstraints::MEDIUM_HEIGHT, Fit::Contain], // respeta AR
-            'large'  => [FileConstraints::LARGE_WIDTH,  FileConstraints::LARGE_HEIGHT,  Fit::Contain], // respeta AR
-        ];
-
-        // 7. Obtiene la calidad para el formato WebP desde FileConstraints.
+        $collectionName = $profile->collection();
+        $definitions = $profile->conversionDefinitions();
         $webpQuality = FileConstraints::WEBP_QUALITY;
-
-        // 8. Determina si las conversiones deben ejecutarse en cola o no.
         $queued = $constraints->queueConversionsForAvatar();
 
-        // 9. Función auxiliar para aplicar el formato WebP, calidad, optimización y ligero sharpen.
-        $applyWebp = static function (Conversion $conversion, int $w, int $h, Fit $fit) use ($webpQuality): void {
-            $conversion
-                ->fit($fit, $w, $h)  // Ajusta la imagen al tamaño y tipo especificado.
-                ->format('webp')     // Establece el formato de salida a WebP.
-                ->quality($webpQuality) // Aplica la calidad WebP.
-                ->optimize()         // Optimiza la imagen para tamaño.
-                ->sharpen(10);       // Aplica un ligero enfoque.
-        };
+        foreach ($definitions as $name => $definition) {
+            if (!self::definitionIsValid($definition)) {
+                Log::warning('avatar_conversion_invalid_definition', [
+                    'conversion' => $name,
+                    'definition' => $definition,
+                ]);
+                continue;
+            }
 
-        // 10. Itera sobre cada tamaño definido y aplica la conversión.
-        foreach ($sizes as $name => [$w, $h, $fit]) {
+            $width = (int) $definition['width'];
+            $height = (int) $definition['height'];
+            /** @var Fit $fit */
+            $fit = $definition['fit'];
+
             try {
-                // Crea la conversión con el nombre correspondiente.
-                $conversion = $model->addMediaConversion($name)
-                    ->performOnCollections($collectionName) // Aplica solo a la colección especificada.
-                    ->withResponsiveImages();               // Genera imágenes adaptables.
+                $conversion = $model
+                    ->addMediaConversion($name)
+                    ->performOnCollections($collectionName)
+                    ->withResponsiveImages();
 
-                // Configura si la conversión se ejecuta en cola o no.
-                $queued ? $conversion->queued() : $conversion->nonQueued();
+                if ($queued) {
+                    $conversion->queued();
+                } else {
+                    $conversion->nonQueued();
+                }
 
-                // Aplica el formato y ajustes WebP definidos anteriormente.
-                $applyWebp($conversion, $w, $h, $fit);
+                self::applyWebpFormatting($conversion, $width, $height, $fit, $webpQuality);
             } catch (\Throwable $e) {
-                // Registra un error si la creación de la conversión falla.
                 Log::error('avatar_conversion_profile_failed', [
                     'conversion' => $name,
-                    'width'      => $w,
-                    'height'     => $h,
-                    'fit'        => method_exists($fit, 'value') ? $fit->value : (string) $fit,
+                    'width'      => $width,
+                    'height'     => $height,
+                    'fit'        => $fit->value ?? (string) $fit,
                     'error'      => str($e->getMessage())->limit(160)->toString(),
                 ]);
             }
@@ -103,23 +93,30 @@ final class AvatarConversionProfile
     }
 
     /**
-     * Normaliza el nombre de la colección, usando un valor por defecto si es necesario.
+     * Valida que la definición contenga width/height/Fit válidos.
      *
-     * @param string|null $collection Nombre de la colección a normalizar.
-     * @return string Nombre de la colección normalizado o por defecto.
+     * @param array<string,mixed> $definition
      */
-    private static function normalizeCollection(?string $collection): string
+    private static function definitionIsValid(array $definition): bool
     {
-        // 11. Obtiene el nombre de la colección y lo limpia.
-        $configured = is_string($collection) ? trim($collection) : '';
-        if ($configured !== '') {
-            return $configured; // Si es válido, lo devuelve.
-        }
+        return isset($definition['width'], $definition['height'], $definition['fit'])
+            && is_numeric($definition['width'])
+            && is_numeric($definition['height'])
+            && $definition['fit'] instanceof Fit;
+    }
 
-        // 12. Busca un valor por defecto en la configuración.
-        $fallback = config('image-pipeline.avatar_collection', 'avatar');
-
-        // 13. Devuelve el valor por defecto de la configuración o 'avatar' si no es válido.
-        return is_string($fallback) && $fallback !== '' ? $fallback : 'avatar';
+    private static function applyWebpFormatting(
+        Conversion $conversion,
+        int $width,
+        int $height,
+        Fit $fit,
+        int $quality
+    ): void {
+        $conversion
+            ->fit($fit, $width, $height)
+            ->format('webp')
+            ->quality($quality)
+            ->optimize()
+            ->sharpen(10);
     }
 }

@@ -21,40 +21,74 @@ use InvalidArgumentException;
  */
 final class FileConstraints
 {
-    /** @var int bytes */
-    // Tamaño máximo permitido para un archivo de imagen, en bytes.
+    /**
+     * Tamaño máximo permitido para un archivo en bytes.
+     *
+     * @var int
+     */
     public readonly int $maxBytes;
 
-    /** @var int píxeles */
-    // Dimensión mínima permitida para el ancho o alto de la imagen, en píxeles.
+    /**
+     * Dimensión mínima permitida para ancho/alto.
+     *
+     * @var int
+     */
     public readonly int $minDimension;
 
-    /** @var int píxeles */
-    // Dimensión máxima permitida para el ancho o alto de la imagen, en píxeles.
+    /**
+     * Dimensión máxima permitida para ancho/alto.
+     *
+     * @var int
+     */
     public readonly int $maxDimension;
 
-    /** @var float megapíxeles */
-    // Límite máximo de megapíxeles (ancho * alto / 1,000,000) permitidos para la imagen.
+    /**
+     * Límite en megapíxeles (ancho * alto / 1e6).
+     *
+     * @var float
+     */
     public readonly float $maxMegapixels;
 
-    /** @var array<int,string> */
-    // Lista de extensiones de archivo permitidas (p. ej., ['jpg', 'png']).
+    /**
+     * Extensiones permitidas.
+     *
+     * @var array<int,string>
+     */
     public readonly array $allowedExtensions;
 
-    /** @var array<int,string> */
-    // Lista de tipos MIME permitidos (p. ej., ['image/jpeg', 'image/png']).
+    /**
+     * MIME types permitidas.
+     *
+     * @var array<int,string>
+     */
     public readonly array $allowedMimeTypes;
 
-    /** @var array<string,string> */
-    // Mapa que relaciona un tipo MIME con su extensión recomendada (p. ej., ['image/jpeg' => 'jpg']).
+    /**
+     * Mapa MIME => extensión recomendada.
+     *
+     * @var array<string,string>
+     */
     public readonly array $allowedMimeMap;
 
-    /** @var bool */
-    // Indica si las conversiones de imagen deben encolarse por defecto.
+    /**
+     * Lookup para validaciones rápidas de MIME.
+     *
+     * @var array<string,bool>
+     */
+    private readonly array $allowedMimeLookup;
+
+    /**
+     * Preferencia global para ejecutar conversions en cola.
+     *
+     * @var bool
+     */
     public readonly bool $queueConversionsDefault;
 
-    /** @var bool|null */
-    // Preferencia específica para avatares: si deben encolarse o no. Puede ser null si no está definida.
+    /**
+     * Preferencia específica para avatares.
+     *
+     * @var bool|null
+     */
     public readonly ?bool $avatarQueuePreference;
 
     /** Tamaño máximo de archivo (bytes). */
@@ -130,8 +164,6 @@ final class FileConstraints
         ?int $maxDimension = null,
         ?float $maxMegapixels = null,
     ) {
-        // Inicializa las propiedades leyendo la configuración, aplicando overrides y límites de seguridad.
-        // cfgInt/Float leen la clave de config, aplican el override si es necesario, y limitan el valor entre min y max.
         $config = config('image-pipeline', []);
         if (!is_array($config)) {
             Log::error('file_constraints.config_invalid', [
@@ -141,26 +173,28 @@ final class FileConstraints
             throw new InvalidArgumentException('Configuration "image-pipeline" must be an array.');
         }
 
-        $this->maxBytes      = $this->extractInt($config, 'max_bytes', $maxBytes, 1, 50 * 1024 * 1024, self::MAX_BYTES);
-        $this->minDimension  = $this->extractInt($config, 'min_dimension', $minDimension, 16, 16384, self::MIN_WIDTH);
-        $this->maxDimension  = $this->extractInt($config, 'max_edge', $maxDimension, $this->minDimension, 16384, self::MAX_WIDTH);
+        $this->maxBytes = $this->extractInt($config, 'max_bytes', $maxBytes, 1, 50 * 1024 * 1024, self::MAX_BYTES);
+        $this->minDimension = $this->extractInt($config, 'min_dimension', $minDimension, 16, 16384, self::MIN_WIDTH);
+        $this->maxDimension = $this->extractInt($config, 'max_edge', $maxDimension, $this->minDimension, 16384, self::MAX_WIDTH);
         $this->maxMegapixels = $this->extractFloat($config, 'max_megapixels', $maxMegapixels, 0.1, 100.0, self::MAX_MEGAPIXELS);
 
-        // cfgExtensions y cfgMimeMap leen y limpian listas de extensiones y mimes desde la config.
-        $this->allowedExtensions = $this->cfgExtensions('image-pipeline.allowed_extensions', self::ALLOWED_EXTENSIONS);
-        $this->allowedMimeMap    = $this->cfgMimeMap('image-pipeline.allowed_mimes', self::ALLOWED_MIME_MAP);
-        // Las MIME types permitidas son simplemente las claves del mapa MIME => extensión.
-        $this->allowedMimeTypes  = array_keys($this->allowedMimeMap);
+        $this->allowedExtensions = $this->cfgExtensions(
+            data_get($config, 'allowed_extensions'),
+            self::ALLOWED_EXTENSIONS
+        );
+        $this->allowedMimeMap = $this->cfgMimeMap(
+            data_get($config, 'allowed_mimes'),
+            self::ALLOWED_MIME_MAP
+        );
+        $this->allowedMimeTypes = array_keys($this->allowedMimeMap);
+        $this->allowedMimeLookup = array_fill_keys($this->allowedMimeTypes, true);
 
-        // cfgBool lee un valor booleano de la config, interpretando strings como "true", "1", etc.
         $this->queueConversionsDefault = $this->cfgBool(
-            'image-pipeline.queue_conversions_default',
+            data_get($config, 'queue_conversions_default'),
             self::QUEUE_CONVERSIONS_DEFAULT
         );
-
-        // resolveQueuePreference interpreta un valor de configuración (string/bool) y lo convierte a bool o null.
         $this->avatarQueuePreference = $this->resolveQueuePreference(
-            config('image-pipeline.avatar_queue_conversions')
+            data_get($config, 'avatar_queue_conversions')
         );
     }
 
@@ -192,6 +226,11 @@ final class FileConstraints
     public function allowedMimeMap(): array
     {
         return $this->allowedMimeMap;
+    }
+
+    public function isMimeAllowed(string $mime): bool
+    {
+        return isset($this->allowedMimeLookup[$mime]);
     }
 
     /**
@@ -250,11 +289,11 @@ final class FileConstraints
         }
 
         // Verifica que el tipo MIME detectado esté en la lista de permitidos
-        if ($realMime === null || !in_array($realMime, $this->allowedMimeTypes, true)) {
+        if ($realMime === null || !$this->isMimeAllowed($realMime)) {
             throw new InvalidArgumentException(
                 __('file-constraints.upload.mime_not_allowed', [
                     'mime'    => $realMime ?? __('file-constraints.upload.unknown_mime'), // Si no se detectó MIME, usa un texto genérico
-                    'allowed' => implode(', ', $this->allowedMimeTypes), // Lista los tipos permitidos
+                    'allowed' => implode(', ', $this->allowedMimeTypes),
                 ])
             );
         }
@@ -455,18 +494,16 @@ final class FileConstraints
     }
 
     /**
-     * Lee una lista de extensiones desde config aplicando saneado básico.
-     * Filtra entradas no válidas (no string, vacío) y devuelve un array limpio o un valor por defecto.
-     * Elimina duplicados.
+     * Limpia la lista de extensiones configuradas.
      *
-     * @param  string              $key      Clave de la configuración (p. ej., 'image-pipeline.allowed_extensions').
-     * @param  array<int,string>   $defaults Valor por defecto si la configuración no es válida o está vacía.
-     * @return array<int,string>   Lista de extensiones saneadas.
+     * Convierte a minúsculas, ignora valores no string o vacíos y elimina duplicados.
+     *
+     * @param  mixed              $value    Valor leído de la configuración (espera array de strings).
+     * @param  array<int,string>  $defaults Valor por defecto si el valor no es válido.
+     * @return array<int,string>           Lista saneada de extensiones.
      */
-    private function cfgExtensions(string $key, array $defaults): array
+    private function cfgExtensions(mixed $value, array $defaults): array
     {
-        // Lee el valor de la configuración
-        $value = config($key);
         // Si no es un array, devuelve los valores por defecto
         if (!is_array($value)) {
             return $defaults;
@@ -493,17 +530,16 @@ final class FileConstraints
     }
 
     /**
-     * Lee un mapa mime => extensión desde config aplicando saneado básico.
-     * Filtra entradas no válidas (clave o valor no string, vacío) y devuelve un array limpio o un valor por defecto.
+     * Limpia el mapa MIME => extensión configurado.
      *
-     * @param  string                    $key      Clave de la configuración (p. ej., 'image-pipeline.allowed_mimes').
-     * @param  array<string,string>      $defaults Valor por defecto si la configuración no es válida o está vacía.
-     * @return array<string,string>      Mapa MIME => extensión saneado.
+     * Normaliza claves/valores a minúsculas, elimina entradas inválidas y mantiene solo pares no vacíos.
+     *
+     * @param  mixed                    $value    Valor leído de la configuración (espera array asociativo).
+     * @param  array<string,string>     $defaults Valor por defecto si el valor no es válido.
+     * @return array<string,string>              Mapa MIME saneado.
      */
-    private function cfgMimeMap(string $key, array $defaults): array
+    private function cfgMimeMap(mixed $value, array $defaults): array
     {
-        // Lee el valor de la configuración
-        $value = config($key);
         // Si no es un array, devuelve los valores por defecto
         if (!is_array($value)) {
             return $defaults;
@@ -531,13 +567,14 @@ final class FileConstraints
     }
 
     /**
-     * Lee un booleano de config interpretando strings y enteros comunes.
-     * Convierte cadenas como "true", "1", "yes", "on" en `true` y "false", "0", "no", "off" en `false`.
+     * Normaliza valores booleanos escritos por el usuario.
+     *
+     * Admite strings y números comunes para habilitar/deshabilitar conversions en cola.
+     *
+     * @param mixed $value Valor leído de la configuración (string, bool, int).
      */
-    private function cfgBool(string $key, bool $default): bool
+    private function cfgBool(mixed $value, bool $default): bool
     {
-        // Lee el valor de la configuración
-        $value = config($key);
         // Si ya es booleano, devuélvelo
         if (is_bool($value)) {
             return $value;

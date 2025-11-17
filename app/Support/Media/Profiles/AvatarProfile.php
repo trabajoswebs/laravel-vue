@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Support\Media\Profiles;
 
 use App\Support\Media\Contracts\MediaOwner;
-use App\Support\Media\ImageProfile;
 use App\Support\Media\ConversionProfiles\AvatarConversionProfile;
+use App\Support\Media\ConversionProfiles\FileConstraints;
+use App\Support\Media\ImageProfile;
+use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
@@ -25,9 +27,34 @@ final class AvatarProfile implements ImageProfile
     private const DEFAULT_COLLECTION  = 'avatar';
 
     /**
-     * Nombres de conversiones predeterminadas para avatares.
+     * Definiciones predeterminadas para cada conversión.
+     *
+     * @var array<string,array{width:int,height:int,fit:Fit}>
      */
-    private const DEFAULT_CONVERSIONS = ['thumb', 'medium', 'large'];
+    private const DEFAULT_DEFINITIONS = [
+        'thumb' => [
+            'width' => FileConstraints::THUMB_WIDTH,
+            'height' => FileConstraints::THUMB_HEIGHT,
+            'fit' => Fit::Crop,
+        ],
+        'medium' => [
+            'width' => FileConstraints::MEDIUM_WIDTH,
+            'height' => FileConstraints::MEDIUM_HEIGHT,
+            'fit' => Fit::Contain,
+        ],
+        'large' => [
+            'width' => FileConstraints::LARGE_WIDTH,
+            'height' => FileConstraints::LARGE_HEIGHT,
+            'fit' => Fit::Contain,
+        ],
+    ];
+
+    /**
+     * Cache local de definiciones de conversión.
+     *
+     * @var array<string,array{width:int,height:int,fit:Fit}>|null
+     */
+    private ?array $conversionDefinitionsCache = null;
 
     /**
      * {@inheritDoc}
@@ -64,27 +91,7 @@ final class AvatarProfile implements ImageProfile
      */
     public function conversions(): array
     {
-        $sizes = config('image-pipeline.avatar_sizes', []);
-        if (!is_array($sizes) || $sizes === []) {
-            return self::DEFAULT_CONVERSIONS;
-        }
-
-        $names = [];
-        foreach ($sizes as $name => $definition) {
-            if (!is_string($name)) {
-                continue;
-            }
-
-            $trimmed = trim($name);
-            if ($trimmed === '') {
-                continue;
-            }
-
-            $names[] = $trimmed;
-        }
-
-        // Filtra duplicados y asegura que no esté vacío.
-        return $names !== [] ? array_values(array_unique($names)) : self::DEFAULT_CONVERSIONS;
+        return array_keys($this->conversionDefinitions());
     }
 
     /**
@@ -123,7 +130,7 @@ final class AvatarProfile implements ImageProfile
      */
     public function applyConversions(MediaOwner $model, ?Media $media = null): void
     {
-        AvatarConversionProfile::apply($model, $media, $this->collection());
+        AvatarConversionProfile::apply($model, $media, $this);
     }
 
     /**
@@ -135,5 +142,88 @@ final class AvatarProfile implements ImageProfile
     public function isSingleFile(): bool
     {
         return true;
+    }
+
+    /**
+     * Mapa de conversiones con dimensiones y estrategia de ajuste.
+     *
+     * @return array<string,array{width:int,height:int,fit:Fit}>
+     */
+    public function conversionDefinitions(): array
+    {
+        if ($this->conversionDefinitionsCache !== null) {
+            return $this->conversionDefinitionsCache;
+        }
+
+        $configured = config('image-pipeline.avatar_sizes');
+        $definitions = [];
+
+        if (is_array($configured) && $configured !== []) {
+            foreach ($configured as $name => $value) {
+                if (!is_string($name)) {
+                    continue;
+                }
+                $normalized = trim($name);
+                if ($normalized === '') {
+                    continue;
+                }
+
+                $definitions[$normalized] = $this->buildDefinition($normalized, $value);
+            }
+        }
+
+        if ($definitions === []) {
+            $definitions = self::DEFAULT_DEFINITIONS;
+        }
+
+        return $this->conversionDefinitionsCache = $definitions;
+    }
+
+    /**
+     * Construye una definición de conversión a partir de la configuración.
+     *
+     * @param string $name Nombre de la conversión.
+     * @param mixed $value Valor configurado (número o array).
+     * @return array{width:int,height:int,fit:Fit}
+     */
+    private function buildDefinition(string $name, mixed $value): array
+    {
+        $defaults = self::DEFAULT_DEFINITIONS[$name] ?? self::DEFAULT_DEFINITIONS['medium'];
+
+        $width = (int) $defaults['width'];
+        $height = (int) $defaults['height'];
+        $fit = $defaults['fit'];
+
+        if (is_numeric($value)) {
+            $width = $height = max(1, (int) $value);
+        } elseif (is_array($value)) {
+            if (isset($value['width']) && is_numeric($value['width'])) {
+                $width = max(1, (int) $value['width']);
+            }
+
+            if (isset($value['height']) && is_numeric($value['height'])) {
+                $height = max(1, (int) $value['height']);
+            }
+
+            if (isset($value['fit']) && is_string($value['fit'])) {
+                $resolvedFit = $this->resolveFitEnum($value['fit']);
+                if ($resolvedFit !== null) {
+                    $fit = $resolvedFit;
+                }
+            }
+        }
+
+        return [
+            'width' => $width,
+            'height' => $height,
+            'fit' => $fit,
+        ];
+    }
+
+    private function resolveFitEnum(string $candidate): ?Fit
+    {
+        $normalized = strtolower(trim($candidate));
+
+        return Fit::tryFrom($normalized);
     }
 }

@@ -51,7 +51,7 @@ final class ImagePipelineServiceProvider extends ServiceProvider
         $maxBytes = (int) ($config['max_bytes'] ?? 0);
         if ($maxBytes <= 0) {
             $failures[] = 'max_bytes';
-            config(['image-pipeline.max_bytes' => 15 * 1024 * 1024]); // 15MB predeterminado
+            config(['image-pipeline.max_bytes' => 25 * 1024 * 1024]); // 25MB predeterminado
         }
 
         // Valida y corrige bomb_ratio_threshold

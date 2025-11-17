@@ -49,7 +49,7 @@
         "avatar_uploading_short": "Subiendo…",
         "avatar_remove_button": "Quitar foto",
         "avatar_deleting_short": "Eliminando…",
-        "avatar_helper": "Formatos: JPEG, PNG, WebP, AVIF, GIF. Máx. aprox. 15 MB. Mínimo 128px por lado. Arrastra y suelta habilitado.",
+        "avatar_helper": "Formatos: JPEG, PNG, WebP, AVIF, GIF. Máx. aprox. 25 MB. Mínimo 128px por lado. Arrastra y suelta habilitado.",
         "avatar_helper_dynamic": "Formatos: {types}. Máx. {max}. Mínimo {min}px por lado. Arrastra y suelta habilitado.",
         "avatar_uploading_progress": "Subiendo… {progress}%",
         "avatar_deleting_status": "Eliminando tu avatar…",
@@ -93,6 +93,7 @@
         "avatar_error_cancelled_upload": "La subida del avatar fue cancelada.",
         "avatar_error_remove": "No pudimos eliminar tu avatar.",
         "avatar_error_cancelled_delete": "La eliminación del avatar fue cancelada.",
+        "avatar_error_route_missing": "No pudimos localizar la ruta del avatar ahora mismo. Recarga la página e inténtalo de nuevo.",
         "avatar_quick_hint": "JPG, PNG, WebP · Máx. 20 MB · También puedes arrastrar la imagen."
     },
     "settings": {

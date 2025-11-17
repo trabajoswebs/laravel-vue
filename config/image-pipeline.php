@@ -42,11 +42,11 @@ return [
     // Maximum edge length for output (maintains aspect ratio)
     'max_edge' => env('IMG_MAX_EDGE', 16384),
     
-// Maximum upload size for validation (bytes)
-'max_upload_size' => 10 * 1024 * 1024, // 10 MB
+    // Maximum upload size for validation (bytes)
+    'max_upload_size' => 25 * 1024 * 1024, // 25 MB
 
-// Maximum seconds allowed for image decode operations
-'decode_timeout_seconds' => (float) env('IMG_DECODE_TIMEOUT_SECONDS', 5),
+    // Maximum seconds allowed for image decode operations
+    'decode_timeout_seconds' => (float) env('IMG_DECODE_TIMEOUT_SECONDS', 5),
 
     /*
     |--------------------------------------------------------------------------
@@ -107,6 +107,18 @@ return [
         // Enable input image normalization
         'enabled' => env('IMG_NORMALIZE', true),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payload Scanning
+    |--------------------------------------------------------------------------
+    |
+    | Bytes scanned from the start of the file to detect suspicious payloads.
+    |
+    */
+
+    // Number of bytes to scan when analyzing payloads (defaults to 50 KB)
+    'scan_bytes' => env('IMG_SCAN_BYTES', 50 * 1024),
     
     /*
     |--------------------------------------------------------------------------

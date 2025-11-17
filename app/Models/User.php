@@ -106,10 +106,8 @@ class User extends Authenticatable implements HasMedia, MediaOwner
      */
     public function registerMediaConversions(?Media $media = null): void
     {
-        // Aplica las conversiones definidas en el perfil AvatarConversionProfile
-        $collection = app(AvatarProfile::class)->collection();
-
-        AvatarConversionProfile::apply($this, $media, $collection);
+        $profile = app(AvatarProfile::class);
+        AvatarConversionProfile::apply($this, $media, $profile);
     }
 
     /**

@@ -5,10 +5,17 @@ const props = defineProps<{ class?: string }>()
 </script>
 
 <template>
-    <div :class="cn(
-        'bg-white shadow rounded-lg p-6 bg-gradient-to-br from-card to-muted/30 lg:p-8 transition-all duration-300 space-y-8',
-        props.class
+    <section :class="cn(
+        // base: respeta tema claro/oscuro y tokens de diseño
+        'w-full rounded-xl border border-border bg-card text-card-foreground',
+        // espaciados responsivos
+        'p-4 sm:p-6 lg:p-8',
+        // sombra discreta y animación coherente
+        'shadow-sm lg:shadow-md transition-colors duration-200',
+        // separación interna vertical estándar
+        'space-y-6 sm:space-y-8',
+        props.class,
     )">
         <slot />
-    </div>
+    </section>
 </template>

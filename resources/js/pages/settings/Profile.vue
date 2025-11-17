@@ -18,9 +18,13 @@ import FormCard from '@/components/FormCard.vue';
 interface Props {
     mustVerifyEmail: boolean;
     status?: string;
+    avatarRoutes: {
+        upload: string;
+        delete: string;
+    };
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const { t } = useLanguage();
 
@@ -45,7 +49,11 @@ const user = computed<User>(() => page.props.auth.user as User);
                 <!-- Actualizar Avatar -->
                 <FormCard>
                     <HeadingSmall :title="t('profile.avatar_title')" :description="t('profile.avatar_description')" />
-                    <AvatarUploader :user="user" />
+                    <AvatarUploader
+                        :user="user"
+                        :upload-route="props.avatarRoutes.upload"
+                        :delete-route="props.avatarRoutes.delete"
+                    />
                 </FormCard>
 
                 <!-- Actualizar Cuenta -->

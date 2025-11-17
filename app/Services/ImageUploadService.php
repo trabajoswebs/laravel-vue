@@ -310,7 +310,7 @@ final class ImageUploadService
      */
     private function readUploadedFileOnce(UploadedFile $file): string
     {
-        $maxSize = (int) config('image-pipeline.max_upload_size', 10 * 1024 * 1024); // 10 MB por defecto
+        $maxSize = (int) config('image-pipeline.max_upload_size', 25 * 1024 * 1024); // 25 MB por defecto
         $size = (int) $file->getSize();
         if ($size > 0 && $size > $maxSize) {
             throw new InvalidArgumentException(__('media.uploads.max_size_exceeded', ['bytes' => $maxSize]));

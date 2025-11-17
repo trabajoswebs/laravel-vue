@@ -9,11 +9,15 @@ use Illuminate\Contracts\Validation\DataAwareRule;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Log;
 use Intervention\Image\ImageManager;
 use RuntimeException;
 use Throwable;
 use App\Support\Media\ConversionProfiles\FileConstraints;
+use App\Support\Media\Security\ImageMetadataReader;
+use App\Support\Media\Security\ImageNormalizer;
+use App\Support\Media\Security\MimeNormalizer;
+use App\Support\Media\Security\PayloadScanner;
+use App\Support\Media\Security\UploadValidationLogger;
 
 /**
  * Regla de validación endurecida para archivos de imagen.
@@ -43,13 +47,6 @@ use App\Support\Media\ConversionProfiles\FileConstraints;
 class SecureImageValidation implements ValidationRule, DataAwareRule
 {
     /**
-     * Número de bytes iniciales a escanear para detectar payloads sospechosos.
-     *
-     * @var int
-     */
-    private const SCAN_BYTES = 50 * 1024;
-
-    /**
      * Umbral de ratio de descompresión para detectar "image bombs".
      * Si (ancho*alto*bits/8) / size_bytes > RATIO → sospechoso.
      */
@@ -78,19 +75,6 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         'png'  => ['image/png'],
         'webp' => ['image/webp'],
         'avif' => ['image/avif'],
-    ];
-
-    /**
-     * Alias canónicos para determinados MIME reconocidos como equivalentes.
-     *
-     * @var array<string,string>
-     */
-    private const MIME_ALIAS_MAP = [
-        'image/jpg' => 'image/jpeg',
-        'image/pjpeg' => 'image/jpeg',
-        'image/x-png' => 'image/png',
-        'image/x-webp' => 'image/webp',
-        'image/x-avif' => 'image/avif',
     ];
 
     /**
@@ -126,6 +110,14 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      */
     private array $constraintsAllowedMimes = [];
 
+    private PayloadScanner $payloadScanner;
+
+    private ImageMetadataReader $metadataReader;
+
+    private ImageNormalizer $imageNormalizer;
+
+    private UploadValidationLogger $validationLogger;
+
     /**
      * Callable responsible for decoding the image path.
      *
@@ -153,6 +145,10 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     /** Permite caer a la lista global de MIMEs permitidos cuando FileConstraints no lo incluye. */
     private bool $allowGlobalMimeFallback = false;
 
+    private bool $userContextResolved = false;
+
+    private string|int|null $userIdFromContext = null;
+
     /**
      * Constructor de la regla de validación.
      *
@@ -164,6 +160,10 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      * @param bool|null            $normalize          Habilita o deshabilita la normalización adicional (re-encode).
      * @param int|null             $bombRatioThreshold Umbral personalizado para detectar image bombs. Si es null, se usa el valor de configuración.
      * @param FileConstraints|null $constraints        Instancia de FileConstraints que define los límites comunes. Si es null, se obtiene desde el contenedor de servicios.
+     * @param PayloadScanner|null  $payloadScanner     Servicio que detecta payloads sospechosos.
+     * @param ImageMetadataReader|null $metadataReader Servicio que obtiene metadatos confiables.
+     * @param ImageNormalizer|null $imageNormalizer    Servicio que re-encodea la imagen.
+     * @param UploadValidationLogger|null $validationLogger Logger especializado.
      */
     public function __construct(
         ?callable $decodeImage = null,
@@ -171,12 +171,16 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         ?bool $normalize = null,
         ?int $bombRatioThreshold = null,
         ?FileConstraints $constraints = null,
+        ?PayloadScanner $payloadScanner = null,
+        ?ImageMetadataReader $metadataReader = null,
+        ?ImageNormalizer $imageNormalizer = null,
+        ?UploadValidationLogger $validationLogger = null,
     ) {
         // Inicializa las restricciones y convierte los MIME permitidos a minúsculas para comparaciones consistentes
         $this->constraints = $constraints ?? app(FileConstraints::class);
         $allowedMimes = [];
         foreach ($this->constraints->allowedMimeTypes() as $mime) {
-            $normalized = self::normalizeMime($mime);
+            $normalized = MimeNormalizer::normalize($mime);
             if ($normalized !== null) {
                 $allowedMimes[] = $normalized;
             }
@@ -210,6 +214,12 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             throw new RuntimeException('SecureImageValidation requires minDimension <= maxDimension.');
         }
 
+        $this->payloadScanner = $payloadScanner ?? app(PayloadScanner::class);
+        $this->metadataReader = $metadataReader ?? app(ImageMetadataReader::class);
+        $this->imageNormalizer = $imageNormalizer
+            ?? app(ImageNormalizer::class, ['constraints' => $this->constraints]);
+        $this->validationLogger = $validationLogger ?? app(UploadValidationLogger::class);
+
         // Opciones de endurecimiento de seguridad
         $normalizationEnabled = config('image-pipeline.normalization.enabled', false);
         $this->enableNormalization = (bool) ($normalize ?? $normalizationEnabled);
@@ -242,6 +252,8 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     public function setData(array $data): static
     {
         $this->data = $data;
+        $this->userContextResolved = false;
+        $this->userIdFromContext = null;
         return $this;
     }
 
@@ -399,7 +411,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         }
 
         // Escanea únicamente los primeros bytes desde disco para minimizar uso de memoria
-        if (! $this->scanFileForSuspiciousPayload($path, $value->getClientOriginalName())) {
+        if (! $this->payloadScanner->fileIsClean($path, $value->getClientOriginalName(), $this->resolveUserId())) {
             $fail(__('validation.custom.image.malicious_payload'));
             return;
         }
@@ -444,18 +456,8 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         }
 
         // Extrae metadatos básicos de la imagen directamente desde el archivo en disco
-        $imageInfo = null;
-        set_error_handler(static function (): bool {
-            // Suprime errores de getimagesize y permite continuar
-            return true;
-        });
-        try {
-            $imageInfo = getimagesize($path);
-        } finally {
-            // Restaura el manejador de errores original
-            restore_error_handler();
-        }
-        if (!$imageInfo) {
+        $imageInfo = $this->metadataReader->readImageInfo($path);
+        if (!is_array($imageInfo)) {
             return false;
         }
 
@@ -472,7 +474,13 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         $originalFilename = $file->getClientOriginalName();
 
         // Determina el MIME confiable del archivo
-        $detectedMime = $this->resolveTrustedMime($path, $imageInfo, $originalFilename);
+        $detectedMime = $this->metadataReader->resolveTrustedMime(
+            $path,
+            fn(string $mime): bool => $this->isMimeAllowed($mime),
+            $imageInfo,
+            $originalFilename,
+            $this->resolveUserId(),
+        );
         if ($detectedMime === null) {
             return false;
         }
@@ -483,7 +491,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         }
 
         // Comprueba si la imagen es animada (si está prohibido)
-        if ($this->isAnimatedImage($detectedMime, $path)) {
+        if ($this->metadataReader->isAnimated($detectedMime, $path)) {
             return false;
         }
 
@@ -507,7 +515,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         // Aplica normalización opcional si está habilitada
         if ($this->enableNormalization) {
             try {
-                $normalized = $this->reencodeToSafeBytes($this->decodedImage, $detectedMime);
+                $normalized = $this->imageNormalizer->reencode($this->decodedImage, $detectedMime);
             } catch (Throwable $e) {
                 $this->logWarning('image_normalize_failed', $file->getClientOriginalName(), $e);
                 return false;
@@ -517,8 +525,14 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
                 return false;
             }
 
-            // Vuelve a escanear el contenido normalizado en busca de payloads sospechosos
-            if (!$this->scanContentForSuspiciousPayload($normalized, $file->getClientOriginalName())) {
+            try {
+                $contentClean = $this->payloadScanner->contentIsClean($normalized, $file->getClientOriginalName(), $this->resolveUserId());
+            } catch (RuntimeException $scannerException) {
+                $this->logWarning('image_normalized_pattern_invalid', $file->getClientOriginalName(), $scannerException);
+                return false;
+            }
+
+            if (! $contentClean) {
                 $this->logWarning('image_normalized_suspicious', $file->getClientOriginalName());
                 return false;
             }
@@ -535,7 +549,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
                 return false;
             }
 
-            if (! $this->overwriteFileWithBytes($path, $normalized)) {
+            if (! $this->imageNormalizer->overwrite($path, $normalized)) {
                 $this->logWarning('image_normalize_write_failed', $file->getClientOriginalName());
                 return false;
             }
@@ -562,54 +576,6 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     }
 
     /**
-     * Determina el MIME confiable combinando resultados de EXIF y finfo.
-     *
-     * Esta función obtiene el MIME mediante getimagesize/EXIF y finfo_file,
-     * confrontando ambos resultados para elevar la confianza. Cuando difieren
-     * pero ambos son válidos se prioriza finfo y se registra la discrepancia
-     * en lugar de rechazar automáticamente.
-     *
-     * @param string      $path             Ruta absoluta del archivo en disco.
-     * @param array|null  $imageInfo        Información opcional obtenida previamente con getimagesize().
-     * @param string|null $originalFilename Nombre original para trazabilidad en logs.
-     * @return string|null El MIME confiable o null si no se puede determinar o es inválido.
-     */
-    private function resolveTrustedMime(string $path, ?array $imageInfo = null, ?string $originalFilename = null): ?string
-    {
-        $exifMime = $this->detectExifMime($path, $imageInfo);
-        $finfoMime = $this->detectFinfoMime($path);
-
-        $exifAllowed = $exifMime !== null && $this->isMimeAllowed($exifMime);
-        $finfoAllowed = $finfoMime !== null && $this->isMimeAllowed($finfoMime);
-
-        if ($exifMime !== null && !$exifAllowed) {
-            $this->logWarning('image_mime_exif_rejected', $originalFilename ?? 'unknown', [
-                'mime' => $exifMime,
-            ]);
-            $exifMime = null;
-        }
-
-        if ($finfoMime !== null && !$finfoAllowed) {
-            $this->logWarning('image_mime_finfo_rejected', $originalFilename ?? 'unknown', [
-                'mime' => $finfoMime,
-            ]);
-            $finfoMime = null;
-        }
-
-        if ($finfoMime !== null && $exifMime !== null && $finfoMime !== $exifMime) {
-            $this->logWarning('image_mime_detector_mismatch', $originalFilename ?? 'unknown', [
-                'exif_mime' => $exifMime,
-                'finfo_mime' => $finfoMime,
-                'trusted_source' => 'finfo',
-            ]);
-
-            return $finfoMime;
-        }
-
-        return $finfoMime ?? $exifMime;
-    }
-
-    /**
      * Verifica que el MIME detectado esté autorizado para la extensión declarada.
      *
      * - Si la extensión tiene su propia whitelist (ej. «jpg» → ['image/jpeg'])
@@ -630,7 +596,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      */
     private function mimeMatchesExtension(string $extension, string $mime, ?string $originalFilename = null): bool
     {
-        $normalizedMime = self::normalizeMime($mime);
+        $normalizedMime = MimeNormalizer::normalize($mime);
         if ($normalizedMime === null) {
             return false;
         }
@@ -662,58 +628,6 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     }
 
     /**
-     * Detecta el MIME usando la información EXIF/getimagesize.
-     *
-     * @param string $path Ruta del archivo en disco.
-     * @param array|null $imageInfo Información opcional obtenida previamente.
-     * @return string|null El MIME detectado o null si falla.
-     */
-    private function detectExifMime(string $path, ?array $imageInfo = null): ?string
-    {
-        $info = $imageInfo;
-        if ($info === null) {
-            $info = @getimagesize($path);
-        }
-
-        if (!is_array($info) || !isset($info[2])) {
-            return null;
-        }
-
-        // Convierte el índice de tipo de imagen a MIME
-        $mime = image_type_to_mime_type((int) $info[2]);
-
-        return self::normalizeMime($mime);
-    }
-
-    /**
-     * Detecta el MIME usando la extensión fileinfo de PHP sobre disco.
-     *
-     * @param string $path Ruta del archivo en disco.
-     * @return string|null El MIME detectado o null si falla.
-     */
-    private function detectFinfoMime(string $path): ?string
-    {
-        if (!function_exists('finfo_open')) {
-            return null;
-        }
-
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        if ($finfo === false) {
-            return null;
-        }
-
-        try {
-            // Analiza el archivo directamente para obtener el MIME
-            $mime = finfo_file($finfo, $path);
-        } finally {
-            // Cierra el recurso de finfo
-            finfo_close($finfo);
-        }
-
-        return self::normalizeMime($mime);
-    }
-
-    /**
      * Verifica si un MIME está permitido según el perfil activo.
      *
      * Prioriza los MIME provenientes de FileConstraints y puede, opcionalmente,
@@ -725,7 +639,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      */
     private function isMimeAllowed(string $mime): bool
     {
-        $normalized = self::normalizeMime($mime);
+        $normalized = MimeNormalizer::normalize($mime);
         if ($normalized === null) {
             return false;
         }
@@ -741,160 +655,6 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
             && in_array($normalized, self::ALLOWED_MIME_TYPES, true)
         ) {
             return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Normaliza un string de MIME.
-     *
-     * Convierte a minúsculas, elimina espacios y parámetros adicionales (como charset).
-     *
-     * @param string|null $mime El MIME a normalizar.
-     * @return string|null El MIME normalizado o null si es inválido.
-     */
-    private static function normalizeMime(?string $mime): ?string
-    {
-        if (!is_string($mime)) {
-            return null;
-        }
-
-        $normalized = strtolower(trim($mime));
-        if ($normalized === '') {
-            return null;
-        }
-
-        // Elimina parámetros adicionales después de ';'
-        $semicolon = strpos($normalized, ';');
-        if ($semicolon !== false) {
-            $normalized = substr($normalized, 0, $semicolon);
-        }
-
-        if (isset(self::MIME_ALIAS_MAP[$normalized])) {
-            $normalized = self::MIME_ALIAS_MAP[$normalized];
-        }
-
-        return $normalized;
-    }
-
-    /**
-     * Verifica si una imagen es animada (solo GIF y WebP actualmente).
-     *
-     * @param string $mime El MIME detectado de la imagen.
-     * @param string $path Ruta de la imagen en disco.
-     * @return bool True si la imagen es animada.
-     */
-    private function isAnimatedImage(string $mime, string $path): bool
-    {
-        $normalized = self::normalizeMime($mime);
-        if ($normalized === null) {
-            return false;
-        }
-
-        // Solo comprueba animación para tipos de imagen relevantes
-        return match ($normalized) {
-            'image/webp' => $this->isAnimatedWebp($path),
-            'image/gif'  => $this->isAnimatedGif($path),
-            default      => false,
-        };
-    }
-
-    /**
-     * Comprueba si un archivo GIF es animado leyendo el stream desde disco.
-     */
-    private function isAnimatedGif(string $path): bool
-    {
-        $handle = @fopen($path, 'rb');
-        if ($handle === false) {
-            return false;
-        }
-
-        try {
-            $header = fread($handle, 6);
-            if (!is_string($header) || !str_starts_with($header, 'GIF')) {
-                return false;
-            }
-
-            $descriptorCount = 0;
-            while (!feof($handle)) {
-                $chunk = fread($handle, 8192);
-                if ($chunk === false || $chunk === '') {
-                    break;
-                }
-
-                $descriptorCount += substr_count($chunk, "\x2C"); // Descriptor de imagen
-                if ($descriptorCount > 1) {
-                    return true;
-                }
-            }
-        } finally {
-            fclose($handle);
-        }
-
-        return false;
-    }
-
-    /**
-     * Comprueba si un archivo WebP es animado sin cargarlo completo en memoria.
-     */
-    private function isAnimatedWebp(string $path): bool
-    {
-        $handle = @fopen($path, 'rb');
-        if ($handle === false) {
-            return false;
-        }
-
-        try {
-            $header = fread($handle, 16);
-            if (!is_string($header) || strlen($header) < 16) {
-                return false;
-            }
-
-            if (substr($header, 0, 4) !== 'RIFF' || substr($header, 8, 4) !== 'WEBP') {
-                return false;
-            }
-
-            // Sitúa el puntero justo después del encabezado RIFF/WEBP
-            if (fseek($handle, 12, SEEK_SET) !== 0) {
-                return false;
-            }
-
-            while (!feof($handle)) {
-                $chunkHeader = fread($handle, 8);
-                if (!is_string($chunkHeader) || strlen($chunkHeader) < 8) {
-                    break;
-                }
-
-                $chunkId = substr($chunkHeader, 0, 4);
-                $chunkSizeData = substr($chunkHeader, 4, 4);
-                $chunkSize = unpack('V', $chunkSizeData)[1] ?? 0;
-
-                if ($chunkId === 'VP8X') {
-                    $chunkData = fread($handle, $chunkSize);
-                    if (!is_string($chunkData) || strlen($chunkData) < 1) {
-                        break;
-                    }
-
-                    $flags = ord($chunkData[0]);
-                    if ($flags & 0x02) {
-                        return true;
-                    }
-                } elseif ($chunkId === 'ANIM') {
-                    return true;
-                } else {
-                    if (fseek($handle, $chunkSize, SEEK_CUR) === -1) {
-                        break;
-                    }
-                }
-
-                // Padding a byte si el chunk tiene tamaño impar
-                if ($chunkSize % 2 === 1 && fseek($handle, 1, SEEK_CUR) === -1) {
-                    break;
-                }
-            }
-        } finally {
-            fclose($handle);
         }
 
         return false;
@@ -1006,262 +766,6 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     }
 
     /**
-     * Re-encode a normalized image to safe bytes, attempting to strip metadata.
-     * Tries Intervention v2 encode()/stream() and v3 toPng()/toJpeg() best-effort.
-     *
-     * Esta función intenta re-codificar la imagen decodificada para producir
-     * un binario limpio y seguro, potencialmente eliminando metadatos o código malicioso oculto.
-     *
-     * @param object $image El objeto de imagen decodificado.
-     * @param string|null $preferredMime El tipo MIME preferido para la salida.
-     * @return string|null El contenido binario de la imagen normalizada o null si falla.
-     */
-    private function reencodeToSafeBytes(object $image, ?string $preferredMime = null): ?string
-    {
-        $format = $this->chooseSafeFormat($preferredMime);
-
-        // Intenta usar los métodos específicos de Intervention v3 (toPng, toJpeg, etc.)
-        $method = null;
-        if ($format === 'png' && method_exists($image, 'toPng')) {
-            $method = 'toPng';
-        } elseif (in_array($format, ['jpg', 'jpeg'], true) && method_exists($image, 'toJpeg')) {
-            $method = 'toJpeg';
-        } elseif ($format === 'webp' && method_exists($image, 'toWebp')) {
-            $method = 'toWebp';
-        }
-        if ($method) {
-            try {
-                /** @var mixed $res */
-                $res = $image->{$method}(90); // Asume calidad 90 como ejemplo
-                $bytes = $this->stringifyEncoded($res);
-                if (is_string($bytes) && $bytes !== '') {
-                    return $bytes;
-                }
-            } catch (Throwable) {
-                // Si falla, intenta el fallback
-            }
-        }
-
-        // Último recurso: guardar temporalmente el objeto codificado y leerlo
-        if (method_exists($image, 'save')) {
-            $tmp = tempnam(sys_get_temp_dir(), 'norm_img_');
-            if ($tmp === false) {
-                return null;
-            }
-            try {
-                $image->save($tmp);
-                $bytes = file_get_contents($tmp);
-                if (! is_string($bytes) || $bytes === '') {
-                    return null;
-                }
-
-                return $bytes;
-            } finally {
-                if (file_exists($tmp) && ! unlink($tmp)) {
-                    Log::debug('secure_image_validation_temp_unlink_failed', ['path' => $tmp]);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Sustituye el contenido del archivo original por la versión normalizada.
-     *
-     * El proceso se realiza de forma atómica:
-     * 1. Crea un fichero temporal en el mismo directorio del destino.
-     * 2. Escribe los bytes proporcionados en dicho temporal con bloqueo exclusivo.
-     * 3. Aplica permisos 0600 sobre el temporal.
-     * 4. Renombra el temporal sobre el fichero original.
-     *
-     * Si cualquier paso falla se elimina el temporal y se devuelve false.
-     *
-     * @param string $path  Ruta completa al fichero que será sobrescrito.
-     * @param string $bytes Contenido binario que se escribirá.
-     *
-     * @return bool true si la sustitución fue exitosa, false en caso contrario.
-     */
-    private function overwriteFileWithBytes(string $path, string $bytes): bool
-    {
-        $directory = dirname($path);
-        if ($directory === '' || $directory === '.') {
-            $directory = sys_get_temp_dir();
-        }
-
-        $tempPath = tempnam($directory, 'sec_norm_');
-        if ($tempPath === false) {
-            return false;
-        }
-
-        if (file_put_contents($tempPath, $bytes, LOCK_EX) === false) {
-            @unlink($tempPath);
-            return false;
-        }
-
-        @chmod($tempPath, 0600);
-
-        if (!@rename($tempPath, $path)) {
-            @unlink($tempPath);
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Decide el formato seguro para la normalización.
-     *
-     * @param string|null $preferredMime El MIME original de la imagen.
-     * @return string El formato elegido (e.g., 'jpeg', 'png').
-     */
-    private function chooseSafeFormat(?string $preferredMime): string
-    {
-        // Mantiene JPEG si es origen JPEG (para evitar pérdidas innecesarias), si no PNG lossless
-        if (is_string($preferredMime) && str_contains($preferredMime, 'jpeg')) {
-            return 'jpeg';
-        }
-        return 'png';
-    }
-
-    /**
-     * Intenta convertir objetos de encode/stream/encoded a string binario.
-     *
-     * Esta función maneja las diferentes formas en que Intervention puede devolver
-     * los datos codificados (como objetos con métodos toString, getEncoded, etc.).
-     *
-     * @param mixed $encoded El resultado del proceso de codificación.
-     * @return string|null El contenido binario como string o null si falla.
-     */
-    private function stringifyEncoded(mixed $encoded): ?string
-    {
-        if (is_string($encoded)) {
-            return $encoded;
-        }
-        if (is_object($encoded)) {
-            if (method_exists($encoded, 'toString')) {
-                try {
-                    return (string) $encoded->toString();
-                } catch (Throwable) {
-                }
-            }
-            if (method_exists($encoded, '__toString')) {
-                try {
-                    return (string) $encoded;
-                } catch (Throwable) {
-                }
-            }
-            if (method_exists($encoded, 'getEncoded')) {
-                try {
-                    return (string) $encoded->getEncoded();
-                } catch (Throwable) {
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Escanea los primeros bytes del archivo directamente desde disco para detectar payloads sospechosos.
-     *
-     * Abre el fichero en modo binario, lee los primeros self::SCAN_BYTES y
-     * delega el análisis real a scanContentForSuspiciousPayload().
-     *
-     * Si el fichero no puede abrirse o estar vacío se registra un warning y se
-     * devuelve false.
-     *
-     * @param string      $path             Ruta completa al fichero que se va a inspeccionar.
-     * @param string|null $originalFilename Nombre original del fichero (para logs).
-     *
-     * @return bool true si no se detecta nada sospechoso, false en caso contrario
-     *              o si el fichero es inaccesible.
-     */
-    private function scanFileForSuspiciousPayload(string $path, ?string $originalFilename = null): bool
-    {
-        $handle = @fopen($path, 'rb');
-        if ($handle === false) {
-            $this->logWarning('image_scan_failed', $originalFilename ?? 'unknown', ['reason' => 'unreadable']);
-            return false;
-        }
-
-        try {
-            $buffer = fread($handle, self::SCAN_BYTES);
-            if ($buffer === false || $buffer === '') {
-                return false;
-            }
-
-            return $this->scanContentForSuspiciousPayload($buffer, $originalFilename);
-        } finally {
-            fclose($handle);
-        }
-    }
-
-    /**
-     * Aplica heurísticas de payload sospechoso sobre el contenido en memoria.
-     *
-     * Escanea los primeros bytes del contenido del archivo en busca de patrones
-     * conocidos que puedan indicar código malicioso incrustado.
-     *
-     * @param string      $content           Contenido binario ya leído.
-     * @param string|null $originalFilename  Nombre original (solo para auditoría anonimizada).
-     * @return bool True si no se encuentran patrones sospechosos.
-     */
-    private function scanContentForSuspiciousPayload(string $content, ?string $originalFilename = null): bool
-    {
-        // Limita el escaneo a los primeros N bytes
-        $buffer = substr($content, 0, self::SCAN_BYTES);
-
-        foreach ($this->suspiciousPayloadPatterns() as $pattern) {
-            if (preg_match($pattern, $buffer)) {
-                $this->logWarning('image_suspicious_payload', $originalFilename ?? 'unknown', ['pattern' => $pattern]);
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Patrón heurístico para detectar payloads sospechosos dentro de binarios de imagen.
-     *
-     * @return list<non-empty-string> Una lista de patrones de expresión regular.
-     */
-    private function suspiciousPayloadPatterns(): array
-    {
-        // Intenta obtener los patrones desde la configuración
-        $patterns = config('image-pipeline.suspicious_payload_patterns');
-
-        if (!is_array($patterns) || $patterns === []) {
-            // Devuelve patrones predeterminados si no hay configuración
-            return [
-                '/<\?php/i', // Inicio de script PHP
-                '/<\?=/i',  // Inicio de script PHP con echo
-                '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s{0,100}\(/i', // Funciones de ejecución
-                '/base64_decode\s{0,100}\(/i', // Decodificación base64
-            ];
-        }
-
-        // Procesa y filtra los patrones de la configuración
-        return array_values(
-            array_filter(
-                array_map(static function ($pattern) {
-                    // Si es un string directo
-                    if (is_string($pattern) && $pattern !== '') {
-                        return $pattern;
-                    }
-
-                    // Si es un array con clave 'pattern'
-                    if (is_array($pattern) && isset($pattern['pattern']) && is_string($pattern['pattern'])) {
-                        return $pattern['pattern'];
-                    }
-
-                    return null;
-                }, $patterns),
-                static fn ($pattern) => is_string($pattern) && $pattern !== ''
-            )
-        );
-    }
-
-    /**
      * Registra advertencias para auditoría y respuesta ante incidentes.
      *
      * Se añade el `user_id` cuando es posible.
@@ -1274,38 +778,30 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
      */
     private function logWarning(string $event, string $filename, array|Throwable|null $context = null): void
     {
-        // Intenta obtener el ID del usuario desde el contexto de validación o la solicitud actual
-        $userId = Arr::get($this->data, 'user_id');
+        $this->validationLogger->warning($event, $filename, $context, $this->resolveUserId());
+    }
 
-        if ($userId === null && function_exists('request')) {
+    private function resolveUserId(): string|int|null
+    {
+        if ($this->userContextResolved) {
+            return $this->userIdFromContext;
+        }
+
+        $this->userIdFromContext = Arr::get($this->data, 'user_id');
+
+        if ($this->userIdFromContext === null && function_exists('request')) {
             try {
                 $user = request()->user();
-
                 if ($user !== null) {
-                    $userId = $user->getAuthIdentifier();
+                    $this->userIdFromContext = $user->getAuthIdentifier();
                 }
-            } catch (Throwable $ignored) {
-                // Ignora errores si no hay contexto HTTP disponible.
+            } catch (Throwable) {
+                // Contexto HTTP no disponible: continuar sin user_id.
             }
         }
 
-        // Prepara el contexto del log
-        $contextArray = [
-            'event' => $event,
-            // Se almacena un hash del nombre del archivo para anonimizarlo
-            'file_hash' => hash('sha256', (string) $filename),
-            'user_id' => $userId,
-        ];
+        $this->userContextResolved = true;
 
-        // Añade detalles del error si se proporciona un Throwable
-        if ($context instanceof Throwable) {
-            $contextArray['exception'] = $context->getMessage();
-        } elseif (is_array($context)) {
-            // Mezcla el contexto adicional
-            $contextArray = array_merge($contextArray, $context);
-        }
-
-        // Registra la advertencia
-        Log::warning('secure_image_validation', $contextArray);
+        return $this->userIdFromContext;
     }
 }

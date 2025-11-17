@@ -9,6 +9,8 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { useLanguage } from '@/composables/useLanguage';
 
+import FormCard from '@/components/FormCard.vue';
+
 const { t } = useLanguage();
 
 const breadcrumbItems: BreadcrumbItem[] = [
@@ -26,9 +28,11 @@ const breadcrumbItems: BreadcrumbItem[] = [
 
         <SettingsLayout>
             <div class="space-y-6">
-                <HeadingSmall :title="t('settings.appearance_settings')"
-                    :description="t('settings.appearance_description')" />
-                <AppearanceTabs />
+                <FormCard>
+                    <HeadingSmall :title="t('settings.appearance_settings')"
+                        :description="t('settings.appearance_description')" />
+                    <AppearanceTabs />
+                </FormCard>
             </div>
         </SettingsLayout>
     </AppLayout>

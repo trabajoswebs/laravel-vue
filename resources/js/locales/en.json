@@ -49,7 +49,7 @@
         "avatar_uploading_short": "Uploading…",
         "avatar_remove_button": "Remove",
         "avatar_deleting_short": "Removing…",
-        "avatar_helper": "Formats: JPEG, PNG, WebP, AVIF, GIF. Max 15 MB (approx.). Min 128px per side. Drag & drop supported.",
+        "avatar_helper": "Formats: JPEG, PNG, WebP, AVIF, GIF. Max 25 MB (approx.). Min 128px per side. Drag & drop supported.",
         "avatar_helper_dynamic": "Formats: {types}. Max {max}. Min {min}px per side. Drag & drop supported.",
         "avatar_uploading_progress": "Uploading… {progress}%",
         "avatar_deleting_status": "Removing your avatar…",
@@ -93,6 +93,7 @@
         "avatar_error_cancelled_upload": "Avatar upload was cancelled.",
         "avatar_error_remove": "We couldn’t remove your avatar.",
         "avatar_error_cancelled_delete": "Avatar deletion was cancelled.",
+        "avatar_error_route_missing": "We couldn't find the avatar endpoint right now. Refresh the page and try again.",
         "avatar_quick_hint": "JPG, PNG, WebP · Max 20 MB · You can also drag your image."
     },
     "settings": {
