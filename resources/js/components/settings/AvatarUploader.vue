@@ -16,17 +16,21 @@ import type { User } from '@/types';
 
 // Definición de props del componente
 interface Props {
-    user?: User | null;
-    helperText?: string;
+    user?: User | null; // Usuario para mostrar el avatar, opcional
+    helperText?: string; // Texto de ayuda adicional, opcional
+    uploadRoute?: string; // Ruta o URL personalizada para subir el avatar
+    deleteRoute?: string; // Ruta o URL personalizada para eliminar el avatar
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    user: null,
-    helperText: '',
+    user: null, // Valor por defecto para user
+    helperText: '', // Valor por defecto para helperText
+    uploadRoute: undefined,
+    deleteRoute: undefined,
 });
 
 // Referencias y IDs
-const fileInput = ref<HTMLInputElement | null>(null); // Referencia al input de archivo
+const fileInput = ref<HTMLInputElement | null>(null); // Referencia al input de archivo para abrirlo programáticamente
 const baseId = useId() ?? `avatar-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; // ID único para el componente
 const uploadInputId = `${baseId}-input`; // ID para el input de archivo
 const helperId = `${baseId}-helper`; // ID para el texto de ayuda
@@ -39,28 +43,32 @@ const { getInitials } = useInitials(); // Función para obtener iniciales del no
 
 // Estado y funciones para la subida de avatar
 const {
-    authUser,
-    hasAvatar,
-    isUploading,
-    isDeleting,
-    uploadProgress,
-    errors,
-    generalError,
-    uploadAvatar,
-    removeAvatar,
-    resolveAvatarUrl,
-    cancelUpload,
-    constraints,
-    allowedMimeSummary,
-    formatBytesLabel,
-    acceptMimeTypes,
-} = useAvatarUpload();
+    authUser, // Usuario autenticado
+    hasAvatar, // Indica si el usuario tiene avatar
+    isUploading, // Indica si hay una subida en curso
+    isDeleting, // Indica si hay una eliminación en curso
+    uploadProgress, // Progreso de la subida (0-100)
+    errors, // Errores de validación
+    generalError, // Error general
+    uploadAvatar, // Función para subir avatar
+    removeAvatar, // Función para eliminar avatar
+    resolveAvatarUrl, // Función para obtener URL del avatar
+    cancelUpload, // Función para cancelar subida
+    constraints, // Restricciones de subida
+    allowedMimeSummary, // Resumen de tipos MIME permitidos
+    formatBytesLabel, // Función para formatear bytes
+    acceptMimeTypes, // Tipos MIME aceptados
+} = useAvatarUpload({
+    uploadRoute: props.uploadRoute,
+    deleteRoute: props.deleteRoute,
+});
 
 // Computadas
 const targetUser = computed<User | null>(() => props.user ?? authUser.value ?? null); // Usuario objetivo para el avatar
 const avatarUrl = computed<string | null>(() => resolveAvatarUrl(targetUser.value)); // URL del avatar actual
 const displayName = computed<string>(() => targetUser.value?.name ?? ''); // Nombre del usuario
 
+// Texto alternativo para la imagen del avatar
 const avatarImageAlt = computed<string>(() => {
     if (displayName.value) {
         return t('profile.avatar_image_alt_named', { name: displayName.value });
@@ -68,11 +76,13 @@ const avatarImageAlt = computed<string>(() => {
     return t('profile.avatar_image_alt_generic');
 });
 
+// Porcentaje de subida redondeado
 const uploadPercentage = computed<number>(() => {
     if (uploadProgress.value === null) return 0;
     return Math.round(uploadProgress.value);
 });
 
+// Progreso visual para la barra (con mínimo para visibilidad)
 const visualProgress = computed<number>(() => {
     if (uploadProgress.value === null) return 0;
     const value = uploadProgress.value;
@@ -96,6 +106,7 @@ const helperMessage = computed<string>(() => {
     });
 });
 
+// Mensaje de error del avatar
 const avatarErrorMessage = computed<string>(() => {
     const fieldErrors = errors.value.avatar;
     if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
@@ -110,17 +121,20 @@ const isUploadCancellable = computed<boolean>(() => isUploading.value); // Indic
 const acceptAttribute = computed<string>(() => acceptMimeTypes); // Tipos MIME permitidos
 const isDragActive = ref(false); // Indica si hay arrastre activo
 
+// Establece el estado de arrastre
 const setDragState = (active: boolean) => {
     if (active && isBusy.value) return;
     isDragActive.value = active;
 };
 
+// Texto del hint de drop
 const dropHint = computed<string>(() =>
     isDragActive.value
         ? t('profile.avatar_drop_hint_active')
         : t('profile.avatar_drop_hint')
 );
 
+// Claves para los formatos localizados
 const formatLocaleKeys = [
     'profile.avatar_format_jpg',
     'profile.avatar_format_jpeg',
@@ -130,8 +144,10 @@ const formatLocaleKeys = [
     'profile.avatar_format_gif',
 ] as const;
 
+// Formatso localizados
 const localizedFormats = computed<string[]>(() => formatLocaleKeys.map((key) => t(key)));
 
+// Indica si hay una imagen para mostrar
 const hasImage = computed<boolean>(() => Boolean(renderedAvatarUrl.value));
 
 const activeUploadToken = ref<symbol | null>(null); // Token para identificar la subida activa
@@ -139,6 +155,7 @@ const isImageLoading = ref(false); // Indica si la imagen está cargando
 
 type AvatarUploadResult = Awaited<ReturnType<typeof uploadAvatar>>;
 
+// Limpia la vista previa y restablece estado
 const clearPreview = () => {
     if (previewUrl.value) {
         URL.revokeObjectURL(previewUrl.value); // Libera la URL de objeto
@@ -147,41 +164,48 @@ const clearPreview = () => {
     isImageLoading.value = false;
 };
 
+// Limpia la vista previa al desmontar
 onBeforeUnmount(() => {
-    clearPreview(); // Limpia la vista previa al desmontar
+    clearPreview();
 });
 
+// Limpia la vista previa cuando se completa la subida
 watch([avatarUrl, isUploading], ([next, uploading]) => {
     if (!uploading && next) {
-        clearPreview(); // Limpia la vista previa cuando se completa la subida
+        clearPreview();
     }
 });
 
+// Actualiza el estado de carga de la imagen
 watch(
     renderedAvatarUrl,
     (nextUrl) => {
-        isImageLoading.value = Boolean(nextUrl); // Actualiza estado de carga
+        isImageLoading.value = Boolean(nextUrl);
     },
     { immediate: true }
 );
 
+// Evita que el overlay quede activo mientras hay acciones en curso
 watch(isBusy, (busy) => {
     if (busy) {
-        setDragState(false); // Evita que el overlay quede activo mientras hay acciones en curso
+        setDragState(false);
     }
 });
 
+// Abre el diálogo de selección de archivo
 const triggerFileDialog = () => {
     if (isBusy.value) return;
-    fileInput.value?.click(); // Abre el diálogo de selección de archivo
+    fileInput.value?.click();
 };
 
+// Resetea el input de archivo
 const resetInput = () => {
     if (fileInput.value) {
-        fileInput.value.value = ''; // Resetea el input de archivo
+        fileInput.value.value = '';
     }
 };
 
+// Aplica la vista previa de la imagen
 const applyPreview = (file: File | null) => {
     clearPreview();
     if (file) {
@@ -189,9 +213,11 @@ const applyPreview = (file: File | null) => {
     }
 };
 
+// Construye la descripción del error
 const buildErrorDescription = (error: unknown) =>
     (error instanceof Error ? error.message : generalError.value) ?? t('profile.avatar_error_generic');
 
+// Muestra una notificación de error
 const notifyFailure = (titleKey: string, error: unknown, logContext: string) => {
     toast.error(t(titleKey), {
         description: buildErrorDescription(error),
@@ -202,6 +228,7 @@ const notifyFailure = (titleKey: string, error: unknown, logContext: string) => 
     }
 };
 
+// Muestra una notificación de éxito de subida
 const showUploadSuccessToast = (result: AvatarUploadResult) => {
     toast.success(t('profile.avatar_upload_success_toast'), {
         description: t('profile.avatar_upload_success_details', {
@@ -212,6 +239,7 @@ const showUploadSuccessToast = (result: AvatarUploadResult) => {
     });
 };
 
+// Procesa el archivo subido
 const processFile = async (file: File | null) => {
     const token = Symbol('avatar-upload'); // Token único para esta subida
     activeUploadToken.value = token;
@@ -235,12 +263,14 @@ const processFile = async (file: File | null) => {
     }
 };
 
+// Maneja el cambio de archivo
 const handleFileChange = async (event: Event) => {
     const input = event.target as HTMLInputElement | null;
     const file = input?.files?.[0] ?? null;
     await processFile(file);
 };
 
+// Maneja la eliminación del avatar
 const handleRemove = async () => {
     try {
         await removeAvatar();
@@ -250,6 +280,7 @@ const handleRemove = async () => {
     }
 };
 
+// Maneja la cancelación de la subida
 const handleCancelUpload = () => {
     cancelUpload();
     resetInput();
@@ -259,11 +290,13 @@ const handleCancelUpload = () => {
     toast.warning(t('profile.avatar_upload_cancelled_toast'));
 };
 
+// Maneja el evento dragenter
 const handleDragActivate = (event: DragEvent) => {
     event.preventDefault();
     setDragState(true); // Mantiene el estado de arrastre sincronizado entre dragenter/dragover
 };
 
+// Maneja el evento dragleave
 const handleDragLeave = (event: DragEvent) => {
     event.preventDefault();
     const currentTarget = event.currentTarget as HTMLElement | null;
@@ -276,11 +309,13 @@ const handleDragLeave = (event: DragEvent) => {
     setDragState(false);
 };
 
+// Maneja el evento dragend
 const handleDragEnd = (event: DragEvent) => {
     event.preventDefault();
     setDragState(false);
 };
 
+// Maneja el evento drop
 const handleDrop = async (event: DragEvent) => {
     event.preventDefault();
     setDragState(false);
@@ -290,32 +325,47 @@ const handleDrop = async (event: DragEvent) => {
     await processFile(droppedFile);
 };
 
+// Maneja la carga de la imagen
 const handleImageLoad = () => {
     isImageLoading.value = false; // Marca la imagen como cargada
 };
 
+// Maneja el error de carga de la imagen
 const handleImageError = () => {
     isImageLoading.value = false; // Marca la imagen como fallida
 };
 </script>
 
 <template>
-    <section class="relative" :class="{
-        'border-primary bg-primary/5 shadow-primary/20': isDragActive,
-        'border-border hover:border-border/60': !isDragActive
-    }" @dragenter.prevent="handleDragActivate" @dragover.prevent="handleDragActivate"
+    <section
+        class="avatar-drop-zone relative overflow-hidden rounded-2xl border-2 border-dashed border-border/60 bg-muted/20 p-6 shadow-md transition-all duration-300 ease-out"
+        :class="{
+            'avatar-drop-zone--active border-primary/60 ring-2 ring-primary/30': isDragActive,
+            'hover:border-primary/40 hover:shadow-xl': !isDragActive
+        }" @dragenter.prevent="handleDragActivate" @dragover.prevent="handleDragActivate"
         @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @dragend.prevent="handleDragEnd" role="region"
         aria-label="Profile avatar uploader">
         <!-- Overlay drag & drop -->
-        <div v-if="isDragActive"
-            class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-xl bg-primary/10 backdrop-blur-sm pointer-events-none">
-            <div class="relative">
-                <div class="absolute inset-0 animate-ping rounded-full bg-primary/30"></div>
-                <Upload class="relative h-16 w-16 text-primary" />
+        <div v-if="isDragActive" class="drag-overlay">
+            <div class="drag-overlay__content">
+                <div class="drag-overlay__icon" aria-hidden="true">
+                    <span class="drag-overlay__icon-ring"></span>
+                    <span class="drag-overlay__icon-pulse"></span>
+                    <Upload class="drag-overlay__icon-svg" />
+                </div>
+                <p class="drag-overlay__title">
+                    {{ dropHint }}
+                </p>
+                <p class="drag-overlay__subtitle">
+                    {{ t('profile.avatar_drag_tip') }}
+                </p>
+                <div class="drag-overlay__pill">
+                    <span>{{ localizedFormats.slice(0, 3).join(' • ') }}</span>
+                    <span class="drag-overlay__pill-label">{{ localizedFormats.join(' • ') }}</span>
+                    <span class="drag-overlay__pill-divider" aria-hidden="true"></span>
+                    <span>{{ t('profile.avatar_max_size_value') }}</span>
+                </div>
             </div>
-            <p class="text-lg font-semibold text-primary">
-                {{ dropHint }}
-            </p>
         </div>
 
         <!-- LAYOUT PRINCIPAL -->
@@ -507,6 +557,9 @@ const handleImageError = () => {
 </template>
 
 <style scoped>
+/* ---------------------------------------
+ * Animaciones básicas
+ * ------------------------------------- */
 @keyframes fade-in {
     from {
         opacity: 0;
@@ -531,18 +584,175 @@ const handleImageError = () => {
     animation: fade-in 0.2s ease-out, slide-in-from-top-2 0.2s ease-out;
 }
 
+/* ---------------------------------------
+ * Zona de drop del avatar
+ * ------------------------------------- */
+.avatar-drop-zone {
+    position: relative;
+
+    /* Tokens locales basados en tu tema global */
+    --avatar-primary: var(--primary);
+    --avatar-primary-foreground: var(--primary-foreground);
+    --avatar-foreground: var(--foreground);
+    --avatar-muted-foreground: var(--muted-foreground);
+    --avatar-card: var(--card);
+    --avatar-border: var(--border);
+}
+
+.avatar-drop-zone--active {
+    /* Sombra basada en el primario, no en un verde hardcodeado */
+    box-shadow: 0 35px 80px -35px color-mix(in srgb, var(--avatar-primary) 55%, transparent);
+}
+
+/* ---------------------------------------
+ * Overlay de drag & drop
+ * ------------------------------------- */
+.drag-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    border-radius: 1.5rem;
+    pointer-events: none;
+    overflow: hidden;
+    backdrop-filter: blur(4px);
+    /* Usa el primario global para el velo */
+    background-color: color-mix(in srgb, var(--avatar-primary) 15%, transparent);
+}
+
+.drag-overlay::before,
+.drag-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+}
+
+.drag-overlay::before {
+    inset: -15%;
+    opacity: 0.95;
+}
+
+.drag-overlay::after {
+    background-size: 28px 28px;
+    opacity: 0.35;
+    animation: drag-overlay-slide 12s linear infinite;
+    mix-blend-mode: screen;
+}
+
+.drag-overlay__content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    text-align: center;
+    color: var(--avatar-foreground);
+}
+
+.drag-overlay__title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    /* Glow basado en el primario del tema */
+    text-shadow: 0 10px 35px color-mix(in srgb, var(--avatar-primary) 45%, transparent);
+}
+
+.drag-overlay__subtitle {
+    font-size: 0.95rem;
+    max-width: 22rem;
+    /* Mezcla foreground con muted-foreground de tu tema */
+    color: color-mix(in srgb,
+            var(--avatar-foreground) 80%,
+            var(--avatar-muted-foreground) 20%);
+}
+
+.drag-overlay__pill {
+    margin-top: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    border-radius: 999px;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--avatar-primary-foreground) 45%, transparent);
+    background: color-mix(in srgb, var(--avatar-primary) 25%, var(--avatar-card));
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--avatar-primary-foreground);
+}
+
+.drag-overlay__pill-divider {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--avatar-primary-foreground) 75%, transparent);
+}
+
+.drag-overlay__icon {
+    position: relative;
+    width: 4.6rem;
+    height: 4.6rem;
+    margin-bottom: 0.35rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drag-overlay__icon-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--avatar-primary) 40%, transparent);
+    animation: drag-overlay-ring 16s linear infinite;
+}
+
+.drag-overlay__icon-pulse {
+    position: absolute;
+    inset: 0.65rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--avatar-primary) 50%, transparent);
+    filter: blur(4px);
+    animation: drag-overlay-pulse 2s ease-in-out infinite;
+}
+
+.drag-overlay__icon-svg {
+    position: relative;
+    width: 2.4rem;
+    height: 2.4rem;
+    display: block;
+    color: var(--avatar-primary);
+    /* Sombra coherente con el primario del tema */
+    filter: drop-shadow(0 10px 22px color-mix(in srgb, var(--avatar-primary) 60%, transparent));
+}
+
+/* ---------------------------------------
+ * Sombras (ajustadas a foreground)
+ * ------------------------------------- */
 .shadow-lg {
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 10px 25px -5px color-mix(in srgb, var(--avatar-foreground) 10%, transparent),
+        0 8px 10px -6px color-mix(in srgb, var(--avatar-foreground) 8%, transparent);
 }
 
 .shadow-xl {
-    box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.15), 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 20px 35px -10px color-mix(in srgb, var(--avatar-foreground) 15%, transparent),
+        0 10px 20px -5px color-mix(in srgb, var(--avatar-foreground) 10%, transparent);
 }
 
 .shadow-2xl {
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    box-shadow:
+        0 25px 50px -12px color-mix(in srgb, var(--avatar-foreground) 25%, transparent);
 }
 
+/* ---------------------------------------
+ * Skeleton del avatar
+ * ------------------------------------- */
 .avatar-skeleton {
     width: 100%;
     height: 100%;
@@ -553,9 +763,10 @@ const handleImageError = () => {
     width: 100%;
     height: 100%;
     border-radius: 1rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    /* Fondo y borde basados en card/border para que respete claro/oscuro */
+    background: color-mix(in srgb, var(--avatar-card) 94%, var(--avatar-foreground) 6%);
+    border: 1px solid color-mix(in srgb, var(--avatar-border) 80%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--avatar-border) 35%, transparent);
     overflow: hidden;
 }
 
@@ -566,8 +777,8 @@ const handleImageError = () => {
     width: 2.8rem;
     height: 2.8rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.18);
-    box-shadow: 0 0 25px rgba(0, 0, 0, 0.45);
+    background: color-mix(in srgb, var(--avatar-primary-foreground) 18%, transparent);
+    box-shadow: 0 0 25px color-mix(in srgb, var(--avatar-foreground) 45%, transparent);
 }
 
 .avatar-skeleton__mountain {
@@ -575,7 +786,9 @@ const handleImageError = () => {
     bottom: 18%;
     width: 60%;
     height: 55%;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.65));
+    background: linear-gradient(180deg,
+            color-mix(in srgb, var(--avatar-foreground) 20%, transparent),
+            color-mix(in srgb, var(--avatar-foreground) 65%, transparent));
     clip-path: polygon(0 100%, 50% 0, 100% 100%);
     opacity: 0.85;
 }
@@ -597,9 +810,14 @@ const handleImageError = () => {
     left: 0;
     width: 100%;
     height: 22%;
-    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.9));
+    background: linear-gradient(180deg,
+            transparent,
+            color-mix(in srgb, var(--avatar-foreground) 90%, transparent));
 }
 
+/* ---------------------------------------
+ * Efecto shimmer
+ * ------------------------------------- */
 .shimmer {
     position: relative;
     overflow: hidden;
@@ -610,7 +828,11 @@ const handleImageError = () => {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    /* Usa el color de texto claro del tema para el brillo */
+    background: linear-gradient(120deg,
+            transparent,
+            color-mix(in srgb, var(--avatar-primary-foreground) 35%, transparent),
+            transparent);
     transform: translateX(-100%);
     animation: avatar-shimmer 1.8s ease-in-out infinite;
     z-index: 1;
@@ -622,18 +844,61 @@ const handleImageError = () => {
     }
 }
 
+/* ---------------------------------------
+ * Keyframes overlay drag
+ * ------------------------------------- */
+@keyframes drag-overlay-slide {
+    from {
+        transform: translateX(-10%);
+    }
+
+    to {
+        transform: translateX(10%);
+    }
+}
+
+@keyframes drag-overlay-pulse {
+    0% {
+        opacity: 0.45;
+        transform: scale(0.85);
+    }
+
+    50% {
+        opacity: 0.9;
+        transform: scale(1);
+    }
+
+    100% {
+        opacity: 0.45;
+        transform: scale(0.85);
+    }
+}
+
+@keyframes drag-overlay-ring {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* ---------------------------------------
+ * Utilidades locales
+ * ------------------------------------- */
+
+/* NO sobreescribas aquí los .bg-primary/text-primary/border-primary de Tailwind.
+   Si quieres mantenerlas para este componente, que apunten a los tokens globales. */
 .bg-primary {
-    background-color: #18b463;
+    background-color: var(--primary);
 }
 
 .text-primary {
-    color: #18b463;
+    color: var(--primary);
 }
 
 .border-primary {
-    border-color: #18b463;
+    border-color: var(--primary);
 }
 
+/* Transición genérica de botones solo dentro del componente */
 button {
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -642,10 +907,12 @@ button:focus-visible {
     outline: none;
 }
 
+/* Mantén la semántica de Tailwind para el gradiente */
 .bg-gradient-to-br {
     background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
 }
 
+/* Botón de warning usando tokens de toasts y primario del tema */
 .warning-button {
     background-color: var(--toast-warning-accent);
     color: var(--primary-foreground);
