@@ -51,6 +51,7 @@ class ProfileAvatarController extends Controller
         /** @var User $authUser */
         $authUser = $request->user();
 
+        // Registra información sobre la solicitud de actualización de avatar
         Log::info('Avatar update request received', [
             'user_id' => $authUser?->getKey(),
             'has_file' => $request->hasFile('avatar'),
@@ -58,8 +59,10 @@ class ProfileAvatarController extends Controller
         ]);
 
         try {
+            // Ejecuta la acción de actualización del avatar
             $media = $action($authUser, $request->file('avatar'));
 
+            // Prepara la respuesta con información del avatar actualizado
             $payload = [
                 'message' => __('settings.profile.avatar.updated'),
                 'media_id' => $media->id,
@@ -67,12 +70,17 @@ class ProfileAvatarController extends Controller
                 'avatar_version' => $authUser->avatar_version ?? null,
             ];
 
-            if ($request->wantsJson()) {
-                return response()->json($payload, 200);
-            }
+            // Genera retroalimentación para el cliente
+            $feedback = $this->buildAvatarUploadFeedback($request->file('avatar'), $payload['message']);
 
-            return back()->with('success', $payload['message']);
+            return $this->respondWithSuccess(
+                $request,
+                $payload,
+                $feedback['description'],
+                $feedback['event']
+            );
         } catch (Throwable $e) {
+            // Registra el error en caso de fallo
             Log::error('Avatar update failed', [
                 'user_id' => $authUser->getKey(),
                 'error' => $e->getMessage(),
@@ -81,6 +89,7 @@ class ProfileAvatarController extends Controller
 
             $errorMessage = __('settings.profile.avatar.update_failed');
 
+            // Devuelve error en formato JSON o redirect con flash
             if ($request->wantsJson()) {
                 return response()->json([
                     'message' => $errorMessage,
@@ -88,7 +97,9 @@ class ProfileAvatarController extends Controller
                 ], 422);
             }
 
-            return back()->withErrors(['avatar' => $errorMessage]);
+            return back()
+                ->withErrors(['avatar' => $errorMessage])
+                ->with('error', $errorMessage);
         }
     }
 
@@ -111,24 +122,33 @@ class ProfileAvatarController extends Controller
         /** @var User $authUser */
         $authUser = $request->user();
 
+        // Autoriza la eliminación del avatar
         $this->authorize('deleteAvatar', $authUser);
 
         try {
+            // Ejecuta la acción de eliminación del avatar
             $deleted = $action($authUser);
 
+            // Mensajes dependiendo de si se eliminó o no
             $message = $deleted
                 ? __('settings.profile.avatar.deleted')
                 : __('settings.profile.avatar.nothing_to_delete');
 
-            if ($request->wantsJson()) {
-                return response()->json([
+            $description = $deleted
+                ? __('settings.profile.avatar.deleted_description')
+                : __('settings.profile.avatar.nothing_to_delete_description');
+
+            return $this->respondWithSuccess(
+                $request,
+                [
                     'message' => $message,
                     'deleted' => $deleted,
-                ], 200);
-            }
-
-            return back()->with('success', $message);
+                ],
+                $description,
+                $this->buildEventFlash($message, $description)
+            );
         } catch (Throwable $e) {
+            // Registra el error en caso de fallo
             Log::error('Avatar delete failed', [
                 'user_id' => $authUser->getKey(),
                 'error' => $e->getMessage(),
@@ -137,6 +157,7 @@ class ProfileAvatarController extends Controller
 
             $errorMessage = __('settings.profile.avatar.delete_failed');
 
+            // Devuelve error en formato JSON o redirect con flash
             if ($request->wantsJson()) {
                 return response()->json([
                     'message' => $errorMessage,
@@ -144,12 +165,16 @@ class ProfileAvatarController extends Controller
                 ], 422);
             }
 
-            return back()->withErrors(['avatar' => $errorMessage]);
+            return back()
+                ->withErrors(['avatar' => $errorMessage])
+                ->with('error', $errorMessage);
         }
     }
 
     /**
-     * @param Request $request
+     * Recopila información sobre los archivos subidos en la solicitud.
+     *
+     * @param Request $request La solicitud HTTP que contiene los archivos subidos.
      * @return array<int, array<string, mixed>>
      */
     private function gatherUploadedFileInfo(Request $request): array
@@ -164,6 +189,7 @@ class ProfileAvatarController extends Controller
                     continue;
                 }
 
+                // Agrega información del archivo al array
                 $files[] = [
                     'field' => $field,
                     'size' => $entry->getSize(),
@@ -175,5 +201,167 @@ class ProfileAvatarController extends Controller
         }
 
         return $files;
+    }
+
+    /**
+     * Responde con un payload de éxito, ya sea como JSON o redirect con flash.
+     *
+     * @param Request $request La solicitud HTTP.
+     * @param array $payload Datos de éxito.
+     * @param string|null $description Descripción opcional del mensaje.
+     * @param array|null $event Datos del evento para notificaciones UI.
+     * @return RedirectResponse|JsonResponse
+     */
+    private function respondWithSuccess(Request $request, array $payload, ?string $description = null, ?array $event = null): RedirectResponse|JsonResponse
+    {
+        if ($description !== null) {
+            $payload['description'] = $description;
+        }
+
+        if ($event !== null) {
+            $payload['event'] = $event;
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json($payload, 200);
+        }
+
+        return back()->with($this->buildFlashData($payload['message'] ?? null, $description, $event));
+    }
+
+    /**
+     * Construye un array para datos de sesión flash.
+     *
+     * @param string|null $message Mensaje principal.
+     * @param string|null $description Descripción opcional.
+     * @param array|null $event Datos del evento.
+     * @return array<string, mixed>
+     */
+    private function buildFlashData(?string $message, ?string $description, ?array $event): array
+    {
+        $cleanEvent = $event ? array_filter([
+            'title' => $event['title'] ?? null,
+            'description' => $event['description'] ?? null,
+        ], fn ($value) => $value !== null && $value !== '') : null;
+
+        return array_filter([
+            'success' => $message,
+            'message' => $message,
+            'description' => $description,
+            'event' => $cleanEvent,
+        ], fn ($value) => $value !== null && $value !== '');
+    }
+
+    /**
+     * Construye retroalimentación (descripción y evento) para la subida de avatar.
+     *
+     * @param UploadedFile|null $file El archivo subido.
+     * @param string $message Mensaje de éxito principal.
+     * @return array{description: string|null, event: array<string, string>|null}
+     */
+    private function buildAvatarUploadFeedback(?UploadedFile $file, string $message): array
+    {
+        $description = $this->formatAvatarDescription($file);
+
+        return [
+            'description' => $description,
+            'event' => $this->buildEventFlash($message, $description),
+        ];
+    }
+
+    /**
+     * Construye un payload estructurado para notificaciones de evento.
+     *
+     * @param string|null $title Título del evento.
+     * @param string|null $description Descripción del evento.
+     * @return array<string, string>|null
+     */
+    private function buildEventFlash(?string $title, ?string $description): ?array
+    {
+        $normalizedTitle = is_string($title) ? trim($title) : '';
+        if ($normalizedTitle === '') {
+            return null;
+        }
+
+        $payload = ['title' => $normalizedTitle];
+
+        if (is_string($description) && trim($description) !== '') {
+            $payload['description'] = trim($description);
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Formatea una descripción legible del avatar subido.
+     *
+     * @param UploadedFile|null $file El archivo subido.
+     * @return string|null
+     */
+    private function formatAvatarDescription(?UploadedFile $file): ?string
+    {
+        $filename = $this->resolveUploadedFilename($file);
+        if ($filename === null) {
+            return null;
+        }
+
+        [$width, $height] = $this->readImageDimensions($file);
+
+        if ($width !== null && $height !== null) {
+            return __('settings.profile.avatar.updated_details', [
+                'filename' => $filename,
+                'width' => $width,
+                'height' => $height,
+            ]);
+        }
+
+        return __('settings.profile.avatar.updated_details_simple', [
+            'filename' => $filename,
+        ]);
+    }
+
+    /**
+     * Extrae y sanea el nombre original del archivo subido.
+     *
+     * @param UploadedFile|null $file El archivo subido.
+     * @return string|null
+     */
+    private function resolveUploadedFilename(?UploadedFile $file): ?string
+    {
+        if (!$file instanceof UploadedFile) {
+            return null;
+        }
+
+        $originalName = (string) $file->getClientOriginalName();
+        if (trim($originalName) === '') {
+            return null;
+        }
+
+        return SecurityHelper::sanitizeFilename($originalName);
+    }
+
+    /**
+     * Lee las dimensiones de la imagen desde un archivo subido.
+     *
+     * @param UploadedFile|null $file El archivo subido.
+     * @return array{0:int|null,1:int|null}
+     */
+    private function readImageDimensions(?UploadedFile $file): array
+    {
+        if (!$file instanceof UploadedFile) {
+            return [null, null];
+        }
+
+        $path = $file->getRealPath();
+        if (!is_string($path) || $path === '') {
+            return [null, null];
+        }
+
+        $info = @getimagesize($path);
+        if (!is_array($info) || !isset($info[0], $info[1])) {
+            return [null, null];
+        }
+
+        return [(int) $info[0], (int) $info[1]];
     }
 }

@@ -14,7 +14,8 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 - **Traducciones dinámicas** - Sistema híbrido cliente-servidor
 - **Diseño responsive** - Funciona en todos los dispositivos
 - **Modo oscuro** - Soporte para temas claro/oscuro
-- **Procesamiento de imágenes endurecido** - Pipeline multi-etapas con SecureImageValidation, normalización y OptimizerService (local/remoto)
+- **Procesamiento de imágenes endurecido** - UploadPipeline unificado (ImageUploadService + DefaultUploadService) con SecureImageValidation, normalización y OptimizerService (local/remoto)
+- **Cuarentena con verificación de integridad** - LocalQuarantineRepository (hash sidecars, promote seguro) + comandos `quarantine:*` para mantener la cuarentena limpia
 - **Media lifecycle resiliente** - Scheduler transaccional + CleanupMediaArtifactsJob para limpiar artefactos en cualquier disco
 - **Media Library** - Gestión avanzada de archivos multimedia con Spatie
 - **Docker & Laravel Sail** - Entorno de desarrollo containerizado
@@ -25,7 +26,7 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 
 ### Backend, media y seguridad endurecida
 - `app/Http/Controllers`, `Middleware` y `Requests` definen controladores Inertia, autenticación, ajustes y los middlewares (`SecurityHeaders`, `RateLimitUploads`, `SanitizeInput`, `UserAudit`) que corren en cada petición.
-- `app/Services` agrupa el pipeline de imágenes (workflow Imagick/Fallback, configuración, OptimizerService) y los servicios de subida/traducción que coordinan Spatie Media Library con ImagePipeline.
+- `app/Services` agrupa el pipeline de imágenes (workflows Imagick/Fallback, configuraciones, OptimizerService) y el módulo de uploads (`UploadPipeline`, `DefaultUploadService`, `LocalQuarantineRepository`, excepciones dedicadas) que coordinan Spatie Media Library con el pipeline endurecido y la cuarentena verificable.
 - `app/Support/Media` reúne contratos, DTOs, perfiles (`AvatarProfile`, `GalleryProfile`), el recolector de artefactos, el coordinador de lifecycle y los jobs/listeners que limpian artefactos después de conversions.
 - `app/Support/Media/Security` contiene `PayloadScanner`, `ImageMetadataReader`, `ImageNormalizer`, `MimeNormalizer` y `UploadValidationLogger`, que amplifican `SecureImageValidation` y el `ImageUploadService` con detección de payloads, normalización y auditoría anónima.
 - `app/Rules/SecureImageValidation` es la puerta única para los uploads, y se combina con `config/image-pipeline.php`, `config/security.php` y `ImagePipelineServiceProvider` para proteger márgenes de error y habilitar `rate.uploads`.
@@ -38,8 +39,9 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 - `resources/js/lib`, `resources/js/plugins`, `resources/js/utils`, `vite.config.ts`, `tsconfig.json`, `eslint.config.js` y `package.json` definen la experiencia TypeScript/Vite con pautas de linting, paths y herramientas como `laravel-pail` para logs en tiempo real.
 
 ### Infraestructura, herramientas y documentación
-- `config/` expone `security.php`, `image-pipeline.php`, `media.php`, `media-library.php` y `audit.php` para gobernar políticas de CSP, rate limits, media lifecycle y auditoría.
+- `config/` expone `security.php`, `image-pipeline.php`, `media.php`, `media-library.php`, `audit.php` y ajustes de cuarentena para gobernar políticas de CSP, rate limits, media lifecycle, hash sidecars y auditoría.
 - `app/Support/Sanitization/DisplayName` convierte nombres visibles en value objects sanitizados y reutilizables, mientras que `app/Support/Security/RateLimitSignatureFactory` normaliza las firmas usadas por los limitadores de Laravel.
+- `app/Console/Commands` y `app/Console/Kernel.php` añaden las herramientas `quarantine:prune` y `quarantine:cleanup-sidecars` para mantener la cuarentena bajo control (programables vía scheduler).
 - `deploy/`, `docker/`, `Dockerfile`, `docker-compose.yml` y `scripts/check_storage_exec.sh` contienen los artefactos de despliegue y validadores (p. ej. copia de policy.xml para ImageMagick y comprobaciones de ejecución en `/storage`).
 - `docs/` aloja las guías de seguridad (`SECURITY.md`), traducciones dinámicas y media lifecycle, mientras que `app_tree.txt` y los tests (`tests/Unit`, `phpunit.xml`) mantienen la documentación viva y verificable.
 

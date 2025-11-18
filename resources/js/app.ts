@@ -41,6 +41,7 @@ type FlashPayload = {
 type EventFlash = {
     title: string;
     description?: string;
+    variant?: ToastVariant;
 };
 
 type InertiaSuccessEvent = CustomEvent<{ page: Page }>;
@@ -136,6 +137,17 @@ const toastVisuals = {
 
 type ToastVariant = keyof typeof toastVisuals;
 
+const normalizeToastVariant = (variant: unknown): ToastVariant | undefined => {
+    if (typeof variant !== 'string') {
+        return undefined;
+    }
+
+    const normalized = variant.trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(toastVisuals, normalized)
+        ? (normalized as ToastVariant)
+        : undefined;
+};
+
 /**
  * Función de ayuda para traducir claves almacenadas en i18n.
  * @example translate('flash.default_success') => 'Operación exitosa'
@@ -170,10 +182,12 @@ const extractEventFlash = (raw: FlashPayload['event']): EventFlash | null => {
     }
 
     const description = toSanitizedNonEmptyString(source.description);
+    const variant = normalizeToastVariant(source.variant);
 
     return {
         title,
         description,
+        variant,
     };
 };
 
@@ -188,7 +202,8 @@ const handleEventFlash = (flash: FlashPayload): boolean => {
         return false;
     }
 
-    showToast('event', eventFlash.title, eventFlash.description);
+    const variant = eventFlash.variant ?? 'event';
+    showToast(variant, eventFlash.title, eventFlash.description);
     return true;
 };
 

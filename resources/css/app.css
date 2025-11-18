@@ -357,30 +357,35 @@
 [data-sonner-toast][data-type='success'].toast-success {
     background: var(--success-bg);
     color: var(--success-text);
+    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-success-border) 70%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-warning,
 [data-sonner-toast][data-type='warning'].toast-warning {
     background: var(--warning-bg);
     color: var(--warning-text);
+    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-warning-border) 70%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-error,
 [data-sonner-toast][data-type='error'].toast-error {
     background: var(--error-bg);
     color: var(--error-text);
+    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-error-border) 70%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-info,
 [data-sonner-toast][data-type='info'].toast-info {
     background: var(--info-bg);
     color: var(--info-text);
+    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-info-border) 70%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-event,
 [data-sonner-toast][data-type='event'].toast-event {
     background: var(--event-bg);
     color: var(--event-text);
+    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-event-border) 50%, transparent);
 }
 
 /* Colores de icono por tipo (independientes del fondo). */
@@ -388,7 +393,15 @@
     color: var(--toast-success-accent);
 }
 
+[data-sonner-toast].toast-success [data-title] {
+    color: var(--toast-success-accent);
+}
+
 [data-sonner-toast].toast-warning [data-sonner-icon] {
+    color: var(--toast-warning-accent);
+}
+
+[data-sonner-toast].toast-warning [data-title] {
     color: var(--toast-warning-accent);
 }
 
@@ -396,11 +409,23 @@
     color: var(--toast-error-accent);
 }
 
+[data-sonner-toast].toast-error [data-title] {
+    color: var(--toast-error-accent);
+}
+
 [data-sonner-toast].toast-info [data-sonner-icon] {
     color: var(--toast-info-accent);
 }
 
+[data-sonner-toast].toast-info [data-title] {
+    color: var(--toast-info-accent);
+}
+
 [data-sonner-toast].toast-event [data-sonner-icon] {
+    color: var(--toast-event-accent);
+}
+
+[data-sonner-toast].toast-event [data-title] {
     color: var(--toast-event-accent);
 }
 

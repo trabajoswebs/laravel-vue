@@ -6,14 +6,21 @@ namespace App\Services;
 
 use App\Services\Security\Scanners\ClamAvScanner;
 use App\Services\Security\Scanners\YaraScanner;
+use App\Services\Upload\Contracts\UploadPipeline;
+use App\Services\Upload\Contracts\UploadResult;
+use App\Services\Upload\Contracts\UploadService;
 use App\Services\Upload\Core\QuarantineRepository;
+use App\Services\Upload\Exceptions\NormalizationFailedException;
+use App\Services\Upload\Exceptions\QuarantineException;
+use App\Services\Upload\Exceptions\ScanFailedException;
+use App\Services\Upload\Exceptions\UploadValidationException;
+use App\Services\Upload\Exceptions\VirusDetectedException;
 use App\Support\Media\Contracts\MediaOwner;
 use App\Support\Media\ImageProfile;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use InvalidArgumentException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
@@ -54,14 +61,16 @@ final class ImageUploadService
     /**
      * Constructor
      *
-     * @param ImagePipeline $pipeline Pipeline de procesamiento de imágenes
+     * @param UploadPipeline $pipeline Pipeline de procesamiento de imágenes
+     * @param UploadService $uploadService Servicio de adjunto a Media Library
      * @param ExceptionHandler $exceptions Manejador de excepciones
      * @param QuarantineRepository $quarantine Repositorio de almacenamiento en cuarentena
      * @param ClamAvScanner $clamScanner Escáner de virus ClamAV
      * @param YaraScanner|null $yaraScanner Escáner de patrones YARA (opcional)
      */
     public function __construct(
-        private readonly ImagePipeline $pipeline,
+        private readonly UploadPipeline $pipeline,
+        private readonly UploadService $uploadService,
         private readonly ExceptionHandler $exceptions,
         private readonly QuarantineRepository $quarantine,
         private readonly ClamAvScanner $clamScanner,
@@ -85,40 +94,34 @@ final class ImageUploadService
      * @param UploadedFile $file El archivo de imagen subido
      * @param ImageProfile $profile Configuración del perfil de imagen
      * @return Media La entidad de medio creada
-     * 
-     * @throws InvalidArgumentException Cuando el archivo es inválido o falla el escaneo
+     *
+     * @throws UploadValidationException|VirusDetectedException|NormalizationFailedException
+     * @throws ScanFailedException|QuarantineException
      * @throws \Throwable Cuando ocurre cualquier otro error durante el procesamiento
      */
     public function upload(MediaOwner $owner, UploadedFile $file, ImageProfile $profile): Media
     {
-        // Valida el archivo de entrada
         if (!$file->isValid()) {
-            throw new InvalidArgumentException(__('media.uploads.invalid_image'));
+            throw new UploadValidationException(__('media.uploads.invalid_image'));
         }
 
         $collection = $profile->collection();
         $disk = $profile->disk();
-        $result = null;
         $quarantinePath = null;
         $processedFile = $file;
+        $artifact = null;
 
         try {
-            // =========================================================================
-            // 🔹 FASE DE ESCANEADO DE SEGURIDAD
-            // =========================================================================
-            
             if ($this->scanFeatureEnabled()) {
                 if ($this->isCircuitOpen()) {
                     Log::warning('image_upload.scan_circuit_open', [
                         'max_failures' => $this->scanCircuitMaxFailures,
                     ]);
-                    throw new InvalidArgumentException(__('media.uploads.scan_unavailable'));
+                    throw new ScanFailedException(__('media.uploads.scan_unavailable'));
                 }
 
-                // Crea una copia en cuarentena y escanea esa copia
                 [$processedFile, $quarantinePath] = $this->createQuarantinedFile($file);
 
-                // Encapsula el escaneo para prevenir la continuidad si falla
                 try {
                     $this->runScanners($processedFile, $quarantinePath);
                     $this->resetScanFailures();
@@ -127,71 +130,33 @@ final class ImageUploadService
                         'scanners' => $this->activeScannerKeys(),
                     ]);
                 } catch (\Throwable $scanException) {
-                    // Limpieza temprana e interrupción del flujo
                     if ($quarantinePath !== null) {
                         $this->quarantine->delete($quarantinePath);
                         $quarantinePath = null;
                     }
+
                     throw $scanException;
                 }
             }
 
-            // =========================================================================
-            // 🔹 FASE DE PROCESAMIENTO DE IMAGEN
-            // =========================================================================
-            
-            $result = $this->pipeline->process($processedFile);
+            $artifact = $this->pipeline->process($processedFile);
 
-            // =========================================================================
-            // 🔹 FASE DE ADJUNTO DE MEDIO
-            // =========================================================================
-            
-            // Nombre determinista por hash y colección
-            $target = sprintf('%s-%s.%s', $collection, $result->contentHash(), $result->extension());
-
-            // Cabeceras seguras
-            $safeFilename = str_replace('"', "'", basename($target));
-            $headers = [
-                'ACL' => 'private',
-                'ContentType' => $result->mime(),
-                'ContentDisposition' => sprintf('inline; filename="%s"', $safeFilename),
-            ];
-
-            $adder = $owner->addMedia($result->path())
-                ->usingFileName($target)
-                ->addCustomHeaders($headers)
-                ->withCustomProperties([
-                    'version'     => $result->contentHash(),
-                    'uploaded_at' => now()->toIso8601String(),
-                    'mime_type'   => $result->mime(),
-                    'width'       => $result->width(),
-                    'height'      => $result->height(),
-                    'headers'     => $headers,
-                ]);
-
-            // Maneja colecciones de archivo único
-            if ($profile->isSingleFile() && \method_exists($adder, 'singleFile')) {
-                $adder->singleFile();
-            }
-
-            // Guarda en la colección de medios
-            $media = filled($disk)
-                ? $adder->toMediaCollection($collection, $disk)
-                : $adder->toMediaCollection($collection);
+            $media = $this->uploadService->attach(
+                $owner,
+                $artifact,
+                $collection,
+                $disk,
+                $profile->isSingleFile()
+            );
 
             return $media;
-
         } catch (\Throwable $exception) {
-            // =========================================================================
-            // 🔹 FASE DE MANEJO DE ERRORES
-            // =========================================================================
-            
-            // Contexto del archivo sin información de identificación personal (PII)
             $fileContext = [
                 'extension' => $file->getClientOriginalExtension(),
                 'size' => $file->getSize(),
                 'mime' => $file->getMimeType(),
             ];
+
             if (config('app.debug', false)) {
                 $fileContext['name_hash'] = hash('sha256', (string) $file->getClientOriginalName());
             }
@@ -206,31 +171,12 @@ final class ImageUploadService
 
             throw $exception;
         } finally {
-            // =========================================================================
-            // 🔹 FASE DE LIMPIEZA
-            // =========================================================================
-            
-            // Limpieza de cuarentena
             if ($quarantinePath !== null) {
                 $this->quarantine->delete($quarantinePath);
             }
 
-            // Limpieza de artefactos del pipeline
-            if ($result !== null) {
-                try {
-                    $result->cleanup();
-                } catch (\Throwable $cleanupException) {
-                    $this->report(
-                        'image_upload.cleanup_failed',
-                        $cleanupException,
-                        [
-                            'model'      => $owner::class,
-                            'model_id'   => $owner->getKey(),
-                            'collection' => $collection,
-                        ],
-                        'warning'
-                    );
-                }
+            if ($artifact instanceof UploadResult) {
+                $this->cleanupArtifactPath($artifact);
             }
         }
     }
@@ -306,24 +252,24 @@ final class ImageUploadService
      *
      * @param UploadedFile $file Archivo subido a leer
      * @return string Contenido del archivo como bytes
-     * @throws InvalidArgumentException Cuando el archivo excede el límite de tamaño o no es legible
+     * @throws UploadValidationException Cuando el archivo excede el límite de tamaño o no es legible
      */
     private function readUploadedFileOnce(UploadedFile $file): string
     {
         $maxSize = (int) config('image-pipeline.max_upload_size', 25 * 1024 * 1024); // 25 MB por defecto
         $size = (int) $file->getSize();
         if ($size > 0 && $size > $maxSize) {
-            throw new InvalidArgumentException(__('media.uploads.max_size_exceeded', ['bytes' => $maxSize]));
+            throw new UploadValidationException(__('media.uploads.max_size_exceeded', ['bytes' => $maxSize]));
         }
 
         $realPath = $file->getRealPath();
         if (!is_string($realPath) || $realPath === '' || !is_readable($realPath)) {
-            throw new InvalidArgumentException(__('media.uploads.source_unreadable'));
+            throw new UploadValidationException(__('media.uploads.source_unreadable'));
         }
 
         $bytes = file_get_contents($realPath);
         if (!is_string($bytes)) {
-            throw new InvalidArgumentException(__('media.uploads.source_unreadable'));
+            throw new UploadValidationException(__('media.uploads.source_unreadable'));
         }
 
         return $bytes;
@@ -358,7 +304,8 @@ final class ImageUploadService
      *
      * @param UploadedFile $file Archivo a escanear
      * @param string $path Ruta del archivo para contexto
-     * @throws InvalidArgumentException Cuando falla el escaneo o se detecta malware
+     * @throws ScanFailedException Cuando falla el escaneo
+     * @throws VirusDetectedException Cuando se detecta malware
      */
     private function runScanners(UploadedFile $file, string $path): void
     {
@@ -368,7 +315,7 @@ final class ImageUploadService
             // La falta de manejadores es un fallo técnico
             $this->recordScanFailure();
             Log::error('image_upload.scan_missing_handlers');
-            throw new InvalidArgumentException(__('media.uploads.scan_unavailable'));
+            throw new ScanFailedException(__('media.uploads.scan_unavailable'));
         }
 
         $context = [
@@ -381,21 +328,19 @@ final class ImageUploadService
             try {
                 $clean = $scanner($file, $context);
             } catch (\Throwable $e) {
-                // Fallo técnico del escáner: abre el circuit breaker
                 $this->recordScanFailure();
                 Log::error('image_upload.scanner_failure', [
                     'scanner' => $this->scannerName($scanner),
                     'error'   => $e->getMessage(),
                 ]);
-                throw new InvalidArgumentException(__('media.uploads.scan_unavailable'));
+                throw new ScanFailedException(__('media.uploads.scan_unavailable'));
             }
 
             if (!$clean) {
-                // Malware detectado correctamente: NO abre el circuit breaker
                 Log::warning('image_upload.scan_blocked', [
                     'scanner' => $this->scannerName($scanner),
                 ]);
-                throw new InvalidArgumentException(__('media.uploads.scan_blocked'));
+                throw new VirusDetectedException(__('media.uploads.scan_blocked'));
             }
         }
     }
@@ -426,6 +371,20 @@ final class ImageUploadService
     private function scannerName(object $scanner): string
     {
         return strtolower(class_basename($scanner));
+    }
+
+    /**
+     * Elimina archivos temporales pendientes.
+     */
+    private function cleanupArtifactPath(?UploadResult $artifact): void
+    {
+        if ($artifact === null) {
+            return;
+        }
+
+        if (is_string($artifact->path) && is_file($artifact->path)) {
+            @unlink($artifact->path);
+        }
     }
 
     // =========================================================================

@@ -31,4 +31,14 @@ interface QuarantineRepository
      * @param  array  $metadata  Datos adicionales requeridos por la implementación.
      */
     public function promote(string $path, array $metadata = []): string;
+
+    /**
+     * Eliminar artefactos antiguos (TTL en horas) y devolver cantidad de archivos removidos.
+     */
+    public function pruneStaleFiles(int $maxAgeHours = 24): int;
+
+    /**
+     * Eliminar archivos sidecar huérfanos (ej. hashes) y devolver la cantidad limpiada.
+     */
+    public function cleanupOrphanedSidecars(): int;
 }

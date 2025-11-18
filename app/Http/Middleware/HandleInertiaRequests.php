@@ -72,6 +72,7 @@ class HandleInertiaRequests extends Middleware
                     'message' => $this->sanitizeFlashMessage($request, 'message'),
                     'warning' => $this->sanitizeFlashMessage($request, 'warning'),
                     'error'   => $this->sanitizeFlashMessage($request, 'error'),
+                    'description' => $this->sanitizeFlashMessage($request, 'description'),
                     'event'   => $this->prepareEventFlash($request),
                 ]),
 
@@ -251,6 +252,7 @@ class HandleInertiaRequests extends Middleware
             'description' => isset($event['description']) && is_string($event['description'])
                 ? SecurityHelper::sanitizePlainText($event['description'])
                 : null,
+            'variant' => $this->sanitizeToastVariant($event['variant'] ?? null),
         ]);
 
         return $sanitized ?: null;
@@ -290,6 +292,24 @@ class HandleInertiaRequests extends Middleware
 
         $state = $request->cookie('sidebar_state');
         return in_array($state, ['true', '1', 'on'], true);
+    }
+
+    /**
+     * Sanitiza y valida el variant de un toast/evento.
+     *
+     * @param mixed $value
+     * @return string|null
+     */
+    protected function sanitizeToastVariant(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($value));
+        $allowed = ['success', 'warning', 'error', 'info', 'event'];
+
+        return in_array($normalized, $allowed, true) ? $normalized : null;
     }
 
     /**

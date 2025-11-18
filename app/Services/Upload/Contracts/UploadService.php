@@ -6,6 +6,7 @@ namespace App\Services\Upload\Contracts;
 
 use Illuminate\Http\UploadedFile;
 use Spatie\MediaLibrary\HasMedia as HasMediaContract;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * Contrato de alto nivel para servicios de subida.
@@ -42,9 +43,19 @@ interface UploadService
     public function normalize(string $bytes): string;
 
     /**
-     * Asociar el archivo resultante al modelo dueño.
+     * Asociar el artefacto resultante al modelo dueño utilizando un perfil concreto.
      *
-     * La implementación decide si utiliza perfiles/conversiones.
+     * @param HasMediaContract $owner    Modelo que recibirá el media.
+     * @param UploadResult     $artifact Artefacto ya normalizado con metadata.
+     * @param string           $profile  Perfil/collection de Media Library.
+     * @param string|null      $disk     Disco opcional para la colección.
+     * @param bool             $singleFile Indica si la colección es de archivo único.
      */
-    public function attach(HasMediaContract $owner, string $profile): void;
+    public function attach(
+        HasMediaContract $owner,
+        UploadResult $artifact,
+        string $profile,
+        ?string $disk = null,
+        bool $singleFile = false
+    ): Media;
 }
