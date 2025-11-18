@@ -10,6 +10,7 @@ const { t } = useLanguage();
 
 defineProps<{
     status?: string;
+    statusMessage?: string;
 }>();
 </script>
 
@@ -18,8 +19,9 @@ defineProps<{
 
         <Head :title="t('auth.email_verification')" />
 
-        <div v-if="status === 'verification-link-sent'" class="mb-4 text-center text-sm font-medium text-green-600">
-            {{ t('auth.verification_link_sent') }}
+        <div v-if="status === 'verification-link-sent' || statusMessage"
+            class="mb-4 text-center text-sm font-medium text-green-600">
+            {{ statusMessage ?? t('auth.verification_link_sent') }}
         </div>
 
         <Form method="post" :action="route('verification.send')" class="space-y-6 text-center" v-slot="{ processing }">

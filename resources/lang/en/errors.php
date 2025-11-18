@@ -116,6 +116,7 @@ return [
     'email_already_registered' => 'Email is already registered',
     'invalid_token' => 'Invalid or expired token',
     'rate_limit_exceeded' => 'Rate limit exceeded. Please try again later',
+    'rate_limit_wait' => 'You have made too many requests. Try again in :seconds seconds.',
 
     // Database Errors
     'database_connection_failed' => 'Failed to connect to the database',

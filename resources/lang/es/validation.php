@@ -197,6 +197,7 @@ return [
             'invalid_signature' => 'No hemos podido verificar que sea una imagen válida.',
             'invalid_dimensions' => 'La imagen es demasiado grande.',
             'malicious_payload' => 'Hemos detectado contenido sospechoso en la imagen.',
+            'rate_limit' => 'Has alcanzado el límite de subidas. Espera unos segundos y vuelve a intentarlo.',
         ],
 
         'avatar' => [

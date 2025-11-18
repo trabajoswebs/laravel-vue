@@ -202,6 +202,7 @@ return [
             'invalid_signature' => 'We could not verify that the file is a genuine image. Try another file.',
             'invalid_dimensions' => 'The image dimensions exceed the allowed limits.',
             'malicious_payload' => 'We detected suspicious content in the image and rejected the upload.',
+            'rate_limit' => 'You have reached the upload limit. Please wait a few seconds before trying again.',
         ],
         'avatar' => [
             'required' => 'Please choose an image for your avatar.',

@@ -144,17 +144,15 @@ class UserAudit
 
      public function __construct()
     {
-         // Validar que los valores críticos estén disponibles
+         $this->defaultChannel   = config('audit.channels.default', 'daily');
+         $this->securityChannel  = config('audit.channels.security', 'security');
+
+         $sampleRate = config('audit.sample_rate', 0.01);
+         $this->sampleRate = max(0, min(1, (float) $sampleRate));
+
          $this->criticalActions  = $this->sanitizePatterns(config('audit.critical_actions', []));
          $this->excludedRoutes   = $this->sanitizePatterns(config('audit.excluded_routes', []));
          $this->sensitiveFields  = config('audit.sensitive_fields', []);
-         
-         // Validar sample_rate
-         $sampleRate = config('audit.sample_rate', 0.01);
-         $this->sampleRate = max(0, min(1, (float) $sampleRate)); // Entre 0 y 1
-         
-         $this->defaultChannel   = config('audit.channels.default', 'daily');
-         $this->securityChannel  = config('audit.channels.security', 'security');
     }
  
      /**

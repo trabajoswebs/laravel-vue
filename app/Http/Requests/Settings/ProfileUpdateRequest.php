@@ -4,9 +4,11 @@ namespace App\Http\Requests\Settings;
 
 use App\Helpers\SecurityHelper;
 use App\Models\User;
+use App\Support\Sanitization\DisplayName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ProfileUpdateRequest extends FormRequest
 {
@@ -40,21 +42,21 @@ class ProfileUpdateRequest extends FormRequest
 
         // Nombre: usamos filled() para ignorar campos vacíos
         if ($this->filled('name')) {
-            try {
-                // "  Juan  Pérez " => "Juan Pérez"
-                $sanitizedData['name'] = SecurityHelper::sanitizeUserName((string) $this->input('name'));
-            } catch (\InvalidArgumentException $e) {
-                // Dejar el valor crudo para que la validación lo capture
-                $sanitizedData['name'] = (string) $this->input('name');
+            $displayName = DisplayName::from($this->input('name'));
 
-                // Log seguro: no guardamos IP en claro, usamos hash
-                \Illuminate\Support\Facades\Log::info(
-                    'ProfileUpdateRequest: sanitizeUserName failed',
-                    [
-                        'field'   => 'name',
-                        'ip_hash' => SecurityHelper::hashIp(request()->ip()),
-                    ]
-                );
+            if ($displayName->isValid()) {
+                $sanitizedData['name'] = $displayName->sanitized();
+            } else {
+                Log::warning('ProfileUpdateRequest: display name rejected, enforcing validation failure', [
+                    'field' => 'name',
+                    'name_hash' => hash('sha256', $displayName->original()),
+                    'ip_hash' => SecurityHelper::hashIp((string) $this->ip()),
+                    'error' => $displayName->errorMessage(),
+                ]);
+
+                throw ValidationException::withMessages([
+                    'name' => __('settings.profile.invalid_name_characters')
+                ]);
             }
         }
 

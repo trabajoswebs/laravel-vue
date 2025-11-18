@@ -57,8 +57,6 @@ class ProfileAvatarController extends Controller
             'files' => $this->gatherUploadedFileInfo($request),
         ]);
 
-        $this->authorize('updateAvatar', $authUser);
-
         try {
             $media = $action($authUser, $request->file('avatar'));
 

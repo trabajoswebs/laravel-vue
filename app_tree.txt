@@ -65,6 +65,8 @@ Models/
 Observers/
   MediaObserver.php - Observa cambios en media para marcar artefactos y registros de auditoría.
 Policies/
+  Concerns/
+    HandlesMediaOwnership.php - Trait que centraliza la comprobación de propiedad y privilegios elevados sobre recursos multimedia.
   UserPolicy.php - Autoriza acciones de usuario y gestión de media.
 Providers/
   AppServiceProvider.php - Registra servicios base, comandos de consola y macros.
@@ -122,6 +124,7 @@ Support/
       FileConstraints.php - Límites compartidos de tamaño, extensiones y MIMEs.
     DTO/
       CleanupPayload.php - Payload serializado usado por `MediaCleanupScheduler`.
+      CleanupStatePayload.php - DTO durable que persiste artefactos, conversions y orígenes pendientes en `MediaCleanupState`.
       ConversionExpectations.php - Lista de conversions esperadas con nombres y prioridad.
       ReplacementResult.php - Resultado de reemplazar un media que incluye snapshot y expectativas.
       ReplacementSnapshot.php - Snapshot de artefactos previos agrupados por disco.
@@ -145,3 +148,7 @@ Support/
     Services/
       MediaCleanupScheduler.php - Programa la limpieza de artefactos y reintenta con estados recuperables.
       MediaReplacementService.php - Orquesta el reemplazo de un media single-file y dispara cleanup tras commit.
+  Sanitization/
+    DisplayName.php - Value object que sanitiza y transporta nombres visibles de usuario con validación explícita y mensajes de error uniformes.
+  Security/
+    RateLimitSignatureFactory.php - Genera firmas de rate limiting (login, API, general) usando IPs hasheadas o IDs de usuario para mantener la privacidad.

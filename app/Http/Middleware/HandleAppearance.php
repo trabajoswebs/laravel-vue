@@ -14,10 +14,27 @@ class HandleAppearance
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
+    private const DEFAULT_THEME = 'light';
+    private const ALLOWED_THEMES = ['light', 'dark', 'system'];
+
     public function handle(Request $request, Closure $next): Response
     {
-        View::share('appearance', $request->cookie('appearance') ?? 'system');
+        $requestedAppearance = $request->cookie('appearance');
+        $safeAppearance = $this->normalizeAppearance($requestedAppearance);
+
+        View::share('appearance', $safeAppearance);
 
         return $next($request);
+    }
+
+    private function normalizeAppearance(?string $value): string
+    {
+        if ($value === null) {
+            return self::DEFAULT_THEME;
+        }
+
+        return in_array($value, self::ALLOWED_THEMES, true)
+            ? $value
+            : self::DEFAULT_THEME;
     }
 }

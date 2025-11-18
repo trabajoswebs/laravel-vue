@@ -29,6 +29,7 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 - `app/Support/Media` reúne contratos, DTOs, perfiles (`AvatarProfile`, `GalleryProfile`), el recolector de artefactos, el coordinador de lifecycle y los jobs/listeners que limpian artefactos después de conversions.
 - `app/Support/Media/Security` contiene `PayloadScanner`, `ImageMetadataReader`, `ImageNormalizer`, `MimeNormalizer` y `UploadValidationLogger`, que amplifican `SecureImageValidation` y el `ImageUploadService` con detección de payloads, normalización y auditoría anónima.
 - `app/Rules/SecureImageValidation` es la puerta única para los uploads, y se combina con `config/image-pipeline.php`, `config/security.php` y `ImagePipelineServiceProvider` para proteger márgenes de error y habilitar `rate.uploads`.
+- `app/Policies/Concerns/HandlesMediaOwnership` encapsula la verificación de propiedad y permisos elevados sobre medios para que `UserPolicy` reutilice la misma lógica entre acciones.
 - `app/Providers` registra bindings (p. ej., `ImagePipelineServiceProvider`, `MediaLibraryBindingsServiceProvider`) y asegura que los helpers y eventos estén listos antes de servir la vista.
 
 ### Frontend e internacionalización
@@ -38,6 +39,7 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 
 ### Infraestructura, herramientas y documentación
 - `config/` expone `security.php`, `image-pipeline.php`, `media.php`, `media-library.php` y `audit.php` para gobernar políticas de CSP, rate limits, media lifecycle y auditoría.
+- `app/Support/Sanitization/DisplayName` convierte nombres visibles en value objects sanitizados y reutilizables, mientras que `app/Support/Security/RateLimitSignatureFactory` normaliza las firmas usadas por los limitadores de Laravel.
 - `deploy/`, `docker/`, `Dockerfile`, `docker-compose.yml` y `scripts/check_storage_exec.sh` contienen los artefactos de despliegue y validadores (p. ej. copia de policy.xml para ImageMagick y comprobaciones de ejecución en `/storage`).
 - `docs/` aloja las guías de seguridad (`SECURITY.md`), traducciones dinámicas y media lifecycle, mientras que `app_tree.txt` y los tests (`tests/Unit`, `phpunit.xml`) mantienen la documentación viva y verificable.
 

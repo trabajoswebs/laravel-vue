@@ -113,6 +113,7 @@ return [
     'email_already_registered' => 'Ese email ya está registrado.',
     'invalid_token' => 'El enlace no es válido o ha caducado.',
     'rate_limit_exceeded' => 'Demasiados intentos. Espera un momento.',
+    'rate_limit_wait' => 'Has hecho demasiadas peticiones. Espera :seconds segundos antes de intentarlo de nuevo.',
 
     // Errores de Base de Datos
     'database_connection_failed' => 'No podemos conectar con la base de datos.',

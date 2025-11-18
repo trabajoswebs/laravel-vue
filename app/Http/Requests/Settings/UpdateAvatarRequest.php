@@ -20,11 +20,17 @@ use App\Support\Media\ConversionProfiles\FileConstraints as FC;
 class UpdateAvatarRequest extends FormRequest
 {
     /**
-     * Autorización básica (la autorización fina debe vivir en Policy/Controller).
+     * Autorización basada en la Policy `updateAvatar`.
      */
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        $user = $this->user();
+
+        if ($user === null) {
+            return false;
+        }
+
+        return $user->can('updateAvatar', $user);
     }
 
     /**

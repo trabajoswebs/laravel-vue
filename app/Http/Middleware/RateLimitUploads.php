@@ -46,7 +46,7 @@ class RateLimitUploads
         // Verifica si se han excedido los intentos permitidos.
         if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
             // Mensaje de error para el límite de tasa.
-            $message = __('validation.custom.image.rate_limit') ?: __('rate_limit', ['seconds' => $decaySeconds]);
+            $message = __('validation.custom.image.rate_limit') ?: __('errors.rate_limit_wait', ['seconds' => $decaySeconds]);
 
             if ($request->expectsJson()) {
                 // Si la solicitud espera JSON, responde con un JSON y código 429.

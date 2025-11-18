@@ -9,6 +9,6 @@ return [
             'nothing_to_delete' => 'No avatar to delete (idempotent operation).',
             'delete_failed' => 'Could not delete avatar. Please try again.',
         ],
+        'invalid_name_characters' => 'The name contains invalid characters. Use letters, spaces, and simple marks like accents, hyphens, or apostrophes.',
     ],
 ];
-
