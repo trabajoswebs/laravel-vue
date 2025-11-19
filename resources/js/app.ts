@@ -130,8 +130,8 @@ const toastVisuals = {
         icon: '/icons/toast-info.svg',
     },
     event: {
-        className: 'toast-event',
-        icon: '/icons/toast-event.svg',
+        className: 'toast-success toast-event',
+        icon: '/icons/toast-success.svg',
     },
 } as const;
 

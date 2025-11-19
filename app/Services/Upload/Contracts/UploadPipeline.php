@@ -4,29 +4,24 @@ declare(strict_types=1);
 
 namespace App\Services\Upload\Contracts;
 
+use Illuminate\Http\UploadedFile;
+use SplFileObject;
+
 /**
  * Contrato para pipelines de análisis/normalización de subidas.
  *
- * Permite coordinar etapas reutilizables para distintos tipos de archivos.
+ * Orquesta el flujo completo a través de un único punto de entrada que acepta
+ * distintas fuentes sin obligar a cargar el archivo entero en memoria.
  */
 interface UploadPipeline
 {
     /**
-     * Ejecuta análisis defensivos (firma, heurísticas, metadatos).
+     * Procesa un artefacto recibido desde cualquier fuente soportada.
      *
-     * Debe devolver los bytes originales o lanzar en caso de bloqueo.
-     */
-    public function analyze(string $bytes): string;
-
-    /**
-     * Ejecuta normalización opcional (re-encode, compresión, stripping).
+     * @param  UploadedFile|SplFileObject|string  $source  Fuente del archivo (UploadedFile, stream o ruta absoluta).
+     * @return UploadResult
      *
-     * Debe devolver los bytes normalizados que continuarán en la pipeline.
+     * @throws \App\Services\Upload\Exceptions\UploadException
      */
-    public function normalize(string $bytes): string;
-
-    /**
-     * Devuelve el resultado final de la pipeline (DTO con metadata, flags, etc.).
-     */
-    public function result(): UploadResult;
+    public function process(UploadedFile|SplFileObject|string $source): UploadResult;
 }

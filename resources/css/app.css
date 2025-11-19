@@ -1,4 +1,4 @@
-/* ------------------------------------------------------------------
+/* ------------------------------------------------------------------ 
  * Configuración base e imports
  * ------------------------------------------------------------------ */
 /* Importa las utilidades y capas de Tailwind generadas por el plugin oficial. */
@@ -141,28 +141,28 @@
     --sidebar-ring: hsl(217.2 91.2% 59.8%);
     --sidebar: hsl(0 0% 98%);
 
-    /* Tokens para toasts (tema claro). Cada categoría tiene fondo, borde y texto. */
-    --success-bg: var(--background);
-    --success-border: var(--secondary-foreground);
-    --success-text: hsl(140 89% 30%);
+    /* Tokens para toasts (tema claro). Monocromos y sobrios por tipo. */
+    --success-bg: hsl(142 30% 97%);
+    --success-border: hsl(142 28% 86%);
+    --success-text: hsl(142 30% 22%);
 
-    --warning-bg: hsl(48 100% 97%);
-    --warning-border: hsl(49 88% 84%);
-    --warning-text: hsl(31 77% 61%);
+    --warning-bg: hsl(38 100% 97%);
+    --warning-border: hsl(38 92% 86%);
+    --warning-text: hsl(32 92% 24%);
 
-    --error-bg: hsl(0 100% 97%);
-    --error-border: hsl(0 76% 56%);
-    --error-text: hsl(0 87% 49%);
+    --error-bg: hsl(0 85% 98%);
+    --error-border: hsl(0 80% 86%);
+    --error-text: hsl(0 70% 24%);
 
-    --info-bg: hsl(221 75% 95%);
-    --info-border: hsl(221 80% 56%);
-    --info-text: hsl(221 70% 28%);
+    --info-bg: hsl(221 80% 98%);
+    --info-border: hsl(221 78% 86%);
+    --info-text: hsl(221 65% 24%);
 
-    --event-bg: var(--background);
-    --event-border: var(--secondary-foreground);
-    --event-text: #111111;
+    --event-bg: var(--card);
+    --event-border: var(--border);
+    --event-text: var(--foreground);
 
-    /* Alias específicos para el componente vue-sonner (evita sobrescribir el tema global). */
+    /* Alias específicos para vue-sonner (light). */
     --toast-success-bg: var(--success-bg);
     --toast-success-border: var(--success-border);
     --toast-success-text: var(--success-text);
@@ -183,12 +183,12 @@
     --toast-event-border: var(--event-border);
     --toast-event-text: var(--event-text);
 
-    /* Acentos de icono para toasts (colores intensos). */
-    --toast-success-accent: hsl(140 100% 27%);
-    --toast-warning-accent: hsl(31 92% 45%);
-    --toast-error-accent: hsl(0 100% 45%);
-    --toast-info-accent: hsl(210 92% 45%);
-    --toast-event-accent: #111111;
+    /* Acentos de icono (mismo tono que el texto, unicolor por tipo). */
+    --toast-success-accent: hsl(142 40% 30%);
+    --toast-warning-accent: hsl(32 90% 38%);
+    --toast-error-accent: hsl(0 75% 40%);
+    --toast-info-accent: hsl(221 75% 40%);
+    --toast-event-accent: var(--foreground);
 }
 
 /* ------------------------------------------------------------------
@@ -234,53 +234,53 @@
     --sidebar-ring: hsl(217.2 91.2% 59.8%);
     --sidebar: hsl(240 5.9% 10%);
 
-    /* Tokens para toasts en oscuro (usamos sufijo -dark para separar de los claros). */
-    --success-bg: hsl(156 44% 16%);
-    --success-border: hsl(156 48% 30%);
-    --success-text: hsl(156 56% 78%);
+    /* Tokens para toasts en oscuro. Misma lógica que en claro, solo bajamos luminosidad. */
+    --success-bg: hsl(142 28% 16%);
+    --success-border: hsl(142 32% 32%);
+    --success-text: hsl(142 40% 80%);
 
-    --warning-bg: hsl(38 78% 14%);
-    --warning-border: hsl(37 84% 32%);
-    --warning-text: hsl(37 90% 74%);
+    --warning-bg: hsl(38 82% 16%);
+    --warning-border: hsl(38 86% 34%);
+    --warning-text: hsl(38 90% 82%);
 
-    --error-bg: hsl(0 72% 15%);
-    --error-border: hsl(0 76% 32%);
-    --error-text: hsl(0 82% 78%);
+    --error-bg: hsl(0 72% 16%);
+    --error-border: hsl(0 76% 34%);
+    --error-text: hsl(0 82% 82%);
 
-    --info-bg: hsl(221 74% 16%);
-    --info-border: hsl(221 78% 34%);
-    --info-text: hsl(221 80% 78%);
+    --info-bg: hsl(221 72% 16%);
+    --info-border: hsl(221 76% 34%);
+    --info-text: hsl(221 82% 82%);
 
-    --event-bg: #ffffff; /* Eventos con fondo claro para resaltar en oscuro. */
+    --event-bg: hsl(222 47% 11%);
     --event-border: hsl(0 0% 25%);
-    --event-text: #111111;
+    --event-text: var(--foreground);
 
-    /* Alias específicos que usa vue-sonner cuando el tema data-sonner-theme="dark" está activo. */
-    --toast-success-bg-dark: hsl(156 44% 16%);
-    --toast-success-border-dark: hsl(156 48% 30%);
-    --toast-success-text-dark: hsl(156 56% 78%);
+    /* Alias vue-sonner (dark) apuntando a los mismos tokens → cohesión total. */
+    --toast-success-bg-dark: var(--success-bg);
+    --toast-success-border-dark: var(--success-border);
+    --toast-success-text-dark: var(--success-text);
 
-    --toast-warning-bg-dark: hsl(38 78% 14%);
-    --toast-warning-border-dark: hsl(37 84% 32%);
-    --toast-warning-text-dark: hsl(37 90% 74%);
+    --toast-warning-bg-dark: var(--warning-bg);
+    --toast-warning-border-dark: var(--warning-border);
+    --toast-warning-text-dark: var(--warning-text);
 
-    --toast-error-bg-dark: hsl(0 72% 15%);
-    --toast-error-border-dark: hsl(0 76% 32%);
-    --toast-error-text-dark: hsl(0 82% 78%);
+    --toast-error-bg-dark: var(--error-bg);
+    --toast-error-border-dark: var(--error-border);
+    --toast-error-text-dark: var(--error-text);
 
-    --toast-info-bg-dark: hsl(221 74% 16%);
-    --toast-info-border-dark: hsl(221 78% 34%);
-    --toast-info-text-dark: hsl(221 80% 78%);
+    --toast-info-bg-dark: var(--info-bg);
+    --toast-info-border-dark: var(--info-border);
+    --toast-info-text-dark: var(--info-text);
 
-    --toast-event-bg-dark: #ffffff;
-    --toast-event-border-dark: hsl(0 0% 25%);
-    --toast-event-text-dark: #111111;
+    --toast-event-bg-dark: var(--event-bg);
+    --toast-event-border-dark: var(--event-border);
+    --toast-event-text-dark: var(--event-text);
 
-    /* Acentos de icono para toasts en oscuro (alto contraste). */
-    --toast-success-accent: #22c55e; /* verde-500 */
-    --toast-warning-accent: #fb923c; /* orange-400 */
-    --toast-error-accent: #f87171; /* red-400 */
-    --toast-info-accent: #60a5fa; /* blue-400 */
+    /* Acentos de icono en oscuro, en el mismo tono que cada tipo. */
+    --toast-success-accent: hsl(142 55% 55%);
+    --toast-warning-accent: hsl(32 90% 58%);
+    --toast-error-accent: hsl(0 80% 58%);
+    --toast-info-accent: hsl(221 80% 60%);
 }
 
 /* ------------------------------------------------------------------
@@ -316,7 +316,8 @@
 /* ------------------------------------------------------------------
  * Estilos para toasts (vue-sonner)
  * ------------------------------------------------------------------ */
-/* Modo claro: mapea las variables comunes a las que vue-sonner espera según su data-attrs. */
+
+/* Modo claro: mapeo de tokens */
 [data-sonner-toaster][data-sonner-theme='light'] {
     --success-bg: var(--toast-success-bg);
     --success-text: var(--toast-success-text);
@@ -334,7 +335,7 @@
     --event-text: var(--toast-event-text);
 }
 
-/* Modo oscuro: usa el set de variables *-dark definido dentro de .dark. */
+/* Modo oscuro: usa los alias *-dark que ya apuntan a los tokens base. */
 [data-sonner-toaster][data-sonner-theme='dark'] {
     --success-bg: var(--toast-success-bg-dark);
     --success-text: var(--toast-success-text-dark);
@@ -352,84 +353,101 @@
     --event-text: var(--toast-event-text-dark);
 }
 
-/* Asignación de fondos y texto por tipo de toast cuando se activan "rich colors". */
+/* Base del toast: card sobrio, unicolor por tipo. */
+[data-sonner-toast] {
+    /* Valores por defecto, luego los tipos los sobreescriben. */
+    --toast-bg: var(--card);
+    --toast-border-color: var(--border);
+    --toast-foreground: var(--foreground);
+    --toast-body-color: var(--muted-foreground);
+    --toast-icon-color: var(--toast-accent-color, var(--primary));
+
+    border-radius: 0.75rem;
+    border: 1px solid var(--toast-border-color);
+    background-color: var(--toast-bg);
+    color: var(--toast-foreground);
+    box-shadow: 0 18px 45px -24px rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(14px);
+}
+
+/* Overrides por tipo: misma estructura, solo cambia el tono. */
+[data-sonner-toast].toast-success,
+[data-sonner-toast][data-type='success'] {
+    --toast-bg: var(--success-bg);
+    --toast-border-color: var(--success-border);
+    --toast-foreground: var(--success-text);
+    --toast-body-color: color-mix(in srgb, var(--success-text) 86%, var(--success-bg) 14%);
+    --toast-icon-color: var(--toast-success-accent);
+    --toast-accent-color: var(--toast-success-accent);
+}
+
+[data-sonner-toast].toast-warning,
+[data-sonner-toast][data-type='warning'] {
+    --toast-bg: var(--warning-bg);
+    --toast-border-color: var(--warning-border);
+    --toast-foreground: var(--warning-text);
+    --toast-body-color: color-mix(in srgb, var(--warning-text) 86%, var(--warning-bg) 14%);
+    --toast-icon-color: var(--toast-warning-accent);
+    --toast-accent-color: var(--toast-warning-accent);
+}
+
+[data-sonner-toast].toast-error,
+[data-sonner-toast][data-type='error'] {
+    --toast-bg: var(--error-bg);
+    --toast-border-color: var(--error-border);
+    --toast-foreground: var(--error-text);
+    --toast-body-color: color-mix(in srgb, var(--error-text) 86%, var(--error-bg) 14%);
+    --toast-icon-color: var(--toast-error-accent);
+    --toast-accent-color: var(--toast-error-accent);
+}
+
+[data-sonner-toast].toast-info,
+[data-sonner-toast][data-type='info'] {
+    --toast-bg: var(--info-bg);
+    --toast-border-color: var(--info-border);
+    --toast-foreground: var(--info-text);
+    --toast-body-color: color-mix(in srgb, var(--info-text) 86%, var(--info-bg) 14%);
+    --toast-icon-color: var(--toast-info-accent);
+    --toast-accent-color: var(--toast-info-accent);
+}
+
+[data-sonner-toast].toast-event,
+[data-sonner-toast][data-type='event'] {
+    --toast-bg: var(--event-bg);
+    --toast-border-color: var(--event-border);
+    --toast-foreground: var(--event-text);
+    --toast-body-color: color-mix(in srgb, var(--event-text) 86%, var(--event-bg) 14%);
+    --toast-icon-color: var(--toast-event-accent);
+    --toast-accent-color: var(--toast-event-accent);
+}
+
+/* Si activas richColors solo aumenta el glow, no cambia la paleta. */
 [data-rich-colors='true'][data-sonner-toast].toast-success,
-[data-sonner-toast][data-type='success'].toast-success {
-    background: var(--success-bg);
-    color: var(--success-text);
-    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-success-border) 70%, transparent);
+[data-rich-colors='true'][data-sonner-toast][data-type='success'] {
+    box-shadow: 0 22px 55px -28px color-mix(in srgb, var(--toast-success-accent) 55%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-warning,
-[data-sonner-toast][data-type='warning'].toast-warning {
-    background: var(--warning-bg);
-    color: var(--warning-text);
-    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-warning-border) 70%, transparent);
+[data-rich-colors='true'][data-sonner-toast][data-type='warning'] {
+    box-shadow: 0 22px 55px -28px color-mix(in srgb, var(--toast-warning-accent) 55%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-error,
-[data-sonner-toast][data-type='error'].toast-error {
-    background: var(--error-bg);
-    color: var(--error-text);
-    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-error-border) 70%, transparent);
+[data-rich-colors='true'][data-sonner-toast][data-type='error'] {
+    box-shadow: 0 22px 55px -28px color-mix(in srgb, var(--toast-error-accent) 55%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-info,
-[data-sonner-toast][data-type='info'].toast-info {
-    background: var(--info-bg);
-    color: var(--info-text);
-    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-info-border) 70%, transparent);
+[data-rich-colors='true'][data-sonner-toast][data-type='info'] {
+    box-shadow: 0 22px 55px -28px color-mix(in srgb, var(--toast-info-accent) 55%, transparent);
 }
 
 [data-rich-colors='true'][data-sonner-toast].toast-event,
-[data-sonner-toast][data-type='event'].toast-event {
-    background: var(--event-bg);
-    color: var(--event-text);
-    box-shadow: 0 20px 35px -22px color-mix(in srgb, var(--toast-event-border) 50%, transparent);
+[data-rich-colors='true'][data-sonner-toast][data-type='event'] {
+    box-shadow: 0 22px 55px -28px color-mix(in srgb, var(--toast-event-accent) 55%, transparent);
 }
 
-/* Colores de icono por tipo (independientes del fondo). */
-[data-sonner-toast].toast-success [data-sonner-icon] {
-    color: var(--toast-success-accent);
-}
-
-[data-sonner-toast].toast-success [data-title] {
-    color: var(--toast-success-accent);
-}
-
-[data-sonner-toast].toast-warning [data-sonner-icon] {
-    color: var(--toast-warning-accent);
-}
-
-[data-sonner-toast].toast-warning [data-title] {
-    color: var(--toast-warning-accent);
-}
-
-[data-sonner-toast].toast-error [data-sonner-icon] {
-    color: var(--toast-error-accent);
-}
-
-[data-sonner-toast].toast-error [data-title] {
-    color: var(--toast-error-accent);
-}
-
-[data-sonner-toast].toast-info [data-sonner-icon] {
-    color: var(--toast-info-accent);
-}
-
-[data-sonner-toast].toast-info [data-title] {
-    color: var(--toast-info-accent);
-}
-
-[data-sonner-toast].toast-event [data-sonner-icon] {
-    color: var(--toast-event-accent);
-}
-
-[data-sonner-toast].toast-event [data-title] {
-    color: var(--toast-event-accent);
-}
-
-/* Ajustes de layout e iconografía dentro del toast cuando data-styled='true' */
+/* Layout interno e iconografía, minimalista. */
 [data-sonner-toast][data-styled='true'] [data-icon] {
     display: inline-flex;
     align-items: center;
@@ -441,65 +459,22 @@
     background: transparent;
 }
 
+[data-sonner-toast][data-styled='true'] [data-sonner-icon],
+[data-sonner-toast][data-styled='true'] [data-icon] {
+    color: var(--toast-icon-color);
+}
+
 [data-sonner-toast][data-styled='true'] [data-title] {
-    font-weight: 600; /* Titular algo más marcado */
+    font-weight: 600;
+    color: var(--toast-foreground);
 }
 
 [data-sonner-toast][data-styled='true'] [data-description] {
-    color: var(--muted-foreground); /* Descripción en color secundario */
+    color: var(--toast-body-color);
 }
 
-/* En rich-colors mantenemos la descripción en el mismo tono secundario. */
-[data-rich-colors='true'][data-sonner-toast][data-styled='true'] [data-description] {
-    color: var(--muted-foreground);
-}
-
-/* Tamaño de iconos embebidos (svg/img) dentro del contenedor de icono. */
 [data-sonner-toast][data-styled='true'] [data-icon] > svg,
 [data-sonner-toast][data-styled='true'] [data-icon] > img {
     width: 20px;
     height: 20px;
-}
-
-/* Overrides por tipo usando [data-type] por si el proveedor marca tipos sin las clases extra. */
-[data-sonner-toast].toast-success [data-icon],
-[data-sonner-toast][data-type='success'] [data-icon] {
-    color: var(--toast-success-accent);
-}
-
-[data-sonner-toast].toast-warning [data-icon],
-[data-sonner-toast][data-type='warning'] [data-icon] {
-    color: var(--toast-warning-accent);
-}
-
-[data-sonner-toast].toast-error [data-icon],
-[data-sonner-toast][data-type='error'] [data-icon] {
-    color: var(--toast-error-accent);
-}
-
-[data-sonner-toast].toast-info [data-icon],
-[data-sonner-toast][data-type='info'] [data-icon] {
-    color: var(--toast-info-accent);
-}
-
-/* Para "event" el icono usa fondo oscuro con texto claro, para dar contraste con la descripción. */
-[data-sonner-toast].toast-event [data-icon],
-[data-sonner-toast][data-type='event'] [data-icon] {
-    background: #000000;
-    color: #ffffff;
-}
-
-/* Toast event usa un icono ligeramente más compacto para dejar espacio a la descripción */
-[data-sonner-toast].toast-event [data-icon] {
-    width: 24px;
-    height: 24px;
-}
-
-/* Y reduce el svg interno en consonancia. */
-[data-sonner-toast].toast-event [data-icon] > svg,
-[data-sonner-toast].toast-event [data-icon] > img,
-[data-sonner-toast][data-type='event'] [data-icon] > svg,
-[data-sonner-toast][data-type='event'] [data-icon] > img {
-    width: 16px;
-    height: 16px;
 }

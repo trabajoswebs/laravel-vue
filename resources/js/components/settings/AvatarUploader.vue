@@ -1,7 +1,6 @@
 <script setup lang="ts">
 // Importaciones de Vue y bibliotecas externas
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
-import { toast } from 'vue-sonner';
 import { Camera, ImagePlus, Loader2, Upload, X } from 'lucide-vue-next';
 
 // Importaciones de componentes UI
@@ -153,8 +152,6 @@ const hasImage = computed<boolean>(() => Boolean(renderedAvatarUrl.value));
 const activeUploadToken = ref<symbol | null>(null); // Token para identificar la subida activa
 const isImageLoading = ref(false); // Indica si la imagen está cargando
 
-type AvatarUploadResult = Awaited<ReturnType<typeof uploadAvatar>>;
-
 // Limpia la vista previa y restablece estado
 const clearPreview = () => {
     if (previewUrl.value) {
@@ -213,32 +210,6 @@ const applyPreview = (file: File | null) => {
     }
 };
 
-// Construye la descripción del error
-const buildErrorDescription = (error: unknown) =>
-    (error instanceof Error ? error.message : generalError.value) ?? t('profile.avatar_error_generic');
-
-// Muestra una notificación de error
-const notifyFailure = (titleKey: string, error: unknown, logContext: string) => {
-    toast.error(t(titleKey), {
-        description: buildErrorDescription(error),
-    });
-
-    if (import.meta.env.DEV) {
-        console.warn(logContext, error);
-    }
-};
-
-// Muestra una notificación de éxito de subida
-const showUploadSuccessToast = (result: AvatarUploadResult) => {
-    toast.success(t('profile.avatar_upload_success_toast'), {
-        description: t('profile.avatar_upload_success_details', {
-            filename: result.filename,
-            width: result.width,
-            height: result.height,
-        }),
-    });
-};
-
 // Procesa el archivo subido
 const processFile = async (file: File | null) => {
     const token = Symbol('avatar-upload'); // Token único para esta subida
@@ -246,14 +217,13 @@ const processFile = async (file: File | null) => {
     applyPreview(file);
 
     try {
-        const result = await uploadAvatar(file ?? undefined);
-        if (activeUploadToken.value === token) {
-            showUploadSuccessToast(result);
-        }
+        await uploadAvatar(file ?? undefined);
     } catch (error) {
         if (activeUploadToken.value !== token) return;
         clearPreview();
-        notifyFailure('profile.avatar_upload_failed_toast', error, 'Avatar upload failed:');
+        if (import.meta.env.DEV) {
+            console.warn('Avatar upload failed:', error);
+        }
     } finally {
         if (activeUploadToken.value === token) {
             resetInput();
@@ -274,9 +244,10 @@ const handleFileChange = async (event: Event) => {
 const handleRemove = async () => {
     try {
         await removeAvatar();
-        toast.success(t('profile.avatar_remove_success_toast'));
     } catch (error) {
-        notifyFailure('profile.avatar_remove_failed_toast', error, 'Avatar removal failed:');
+        if (import.meta.env.DEV) {
+            console.warn('Avatar removal failed:', error);
+        }
     }
 };
 
@@ -287,7 +258,6 @@ const handleCancelUpload = () => {
     activeUploadToken.value = null;
     clearPreview();
     setDragState(false);
-    toast.warning(t('profile.avatar_upload_cancelled_toast'));
 };
 
 // Maneja el evento dragenter

@@ -1,44 +1,194 @@
 app/
-  Actions/
-    Profile/ (delete/update avatar actions con locking y eventos)
-  Console/
-    Kernel.php – registra comandos y planifica `quarantine:*`
-    Commands/
-      CleanAuditLogs.php – limpia logs históricos
-      QuarantinePruneCommand.php – llama a `QuarantineRepository::pruneStaleFiles`
-      QuarantineCleanupSidecarsCommand.php – elimina sidecars `.sha256` huérfanos
-  Events/ (AvatarDeleted, AvatarUpdated)
-  Helpers/ (SecurityHelper, AvatarHeaderInspector)
-  Http/
-    Controllers/ (auth, settings, media con Inertia)
-    Middleware/ (SecurityHeaders, RateLimitUploads, SanitizeInput, etc.)
-    Requests/ (LoginRequest, UpdateAvatarRequest, UploadImageRequest…)
-  Jobs/ (CleanupMediaArtifactsJob, PostProcessAvatarMedia)
-  Listeners/ (QueueAvatarPostProcessing, RunPendingMediaCleanup)
-  Models/
-    User.php + trait TracksMediaVersions
-  Observers/
-    MediaObserver.php – monitoriza eventos de Spatie
-  Policies/
-    UserPolicy y trait HandlesMediaOwnership
-  Providers/
-    AppServiceProvider – bindings y comandos
-    ImagePipelineServiceProvider – valida `config/image-pipeline.php`, alias middleware
-    MediaLibraryBindings/HtmlPurifier/Auth/Event providers
-  Rules/
-    SecureImageValidation – única entrada para archivos
-  Services/
-    ImagePipeline/ (config, workflows Imagick/GD, logger, artifacts)
-    ImagePipelineResult / ImageUploadService / OptimizerService
-    Upload/
-      Contracts – UploadPipeline, UploadResult, UploadMetadata, UploadService
-      Core – LocalQuarantineRepository (hash sidecar, prune/cleanup), QuarantineRepository interface
-      DefaultUploadPipeline / DefaultUploadService / ImageUploadPipelineAdapter
-      Exceptions – VirusDetectedException, UploadValidationException, etc.
-    Security/Scanners – ClamAV, YARA, AbstractScanner
-    TranslationService, DocumentPipeline placeholder
-  Support/
-    Media (perfiles, DTOs, scheduler, replacement service, security normalizers, contracts)
-    Documents/Profiles (placeholder para workflows futuros)
-    Sanitization/DisplayName
-    Security/RateLimitSignatureFactory
+- **Actions/** – Acciones invocables que encapsulan lógica de dominio.
+  - **Profile/**
+    - `DeleteAvatar.php` – Elimina el avatar de un usuario dentro de una transacción, limpia artefactos y dispara `AvatarDeleted`.
+    - `UpdateAvatar.php` – Reemplaza el avatar con conversión y versionado atómico, disparando `AvatarUpdated`.
+
+- **Console/** – Comandos artisan y registro de tareas programadas.
+  - `Kernel.php` – Registra comandos `quarantine:*` y define schedule para mantenimiento.
+  - **Commands/**
+    - `CleanAuditLogs.php` – Poda entradas viejas de auditoría para mantener tablas livianas.
+    - `QuarantineCleanupSidecarsCommand.php` – Elimina archivos sidecar huérfanos del repositorio de cuarentena.
+    - `QuarantinePruneCommand.php` – Invoca al repositorio de cuarentena para purgar archivos obsoletos.
+
+- **Events/** – Eventos de dominio disparados por cambios de usuario.
+  - **User/**
+    - `AvatarDeleted.php` – Describe el evento cuando un avatar es eliminado y transporta IDs relevantes.
+    - `AvatarUpdated.php` – Evento que comunica que el avatar se reemplazó y permite listeners posteriores.
+
+- **Helpers/** – Funciones utilitarias puras.
+  - `AvatarHeaderInspector.php` – Analiza cabeceras devueltas por S3 para detectar configuraciones peligrosas.
+  - `SecurityHelper.php` – Ofrece sanitización y helpers de seguridad reutilizables para strings y payloads.
+
+- **Http/** – Capa HTTP (controladores, middlewares y requests).
+  - **Controllers/** – Controladores Inertia y API.
+    - **Auth/**
+      - `AuthenticatedSessionController.php` – Gestiona login/logout con hardening adicional.
+      - `ConfirmablePasswordController.php` – Fuerza verificación de contraseña antes de acciones sensibles.
+      - `EmailVerificationNotificationController.php` – Reenvía enlaces de verificación respetando límites.
+      - `EmailVerificationPromptController.php` – Presenta la vista que guía al usuario a verificar su correo.
+      - `NewPasswordController.php` – Completa el flujo de reset actualizando la contraseña.
+      - `PasswordResetLinkController.php` – Genera y envía enlaces para restablecer contraseña.
+      - `RegisteredUserController.php` – Alta de usuarios, validación y creación segura.
+      - `VerifyEmailController.php` – Procesa los enlaces de verificación y marca el correo como verificado.
+    - `Controller.php` – Clase base que aplica helpers comunes y protección CSRF.
+    - `LanguageController.php` – Cambia/detecta idioma del usuario con validación, rate limiting y persistencia.
+    - **Media/**
+      - `.gitkeep` – Mantiene el directorio versionado para futuros controladores de media.
+      - `ShowAvatar.php` – Devuelve la imagen de avatar procesada respetando permisos y headers seguros.
+    - **Settings/**
+      - `PasswordController.php` – Permite actualizar la contraseña autenticada con validaciones fortalecidas.
+      - `ProfileAvatarController.php` – Une requests/settings para subir o borrar avatares desde la UI.
+      - `ProfileController.php` – Actualiza datos de perfil (nombre, idioma, etc.) con sanitización centralizada.
+
+  - **Middleware/** – Filtros HTTP globales.
+    - `HandleAppearance.php` – Inyecta preferencia de modo (oscuro/claro) en la capa de presentación.
+    - `HandleInertiaRequests.php` – Comparte datos globales con Inertia (usuario, traducciones, flash, Ziggy).
+    - `PreventBruteForce.php` – Detiene intentos de fuerza bruta utilizando `RateLimiter` y métricas.
+    - `RateLimitUploads.php` – Aplica límites dinámicos a endpoints de subida para evitar abuso.
+    - `SanitizeInput.php` – Limpia payloads entrantes antes de llegar a controladores.
+    - `SecurityHeaders.php` – Establece cabeceras HTTP endurecidas (CSP, HSTS, etc.).
+    - `TrustProxies.php` – Configura proxies de confianza para detectar IP reales.
+    - `UserAudit.php` – Propaga metadatos de auditoría (IP, agente) para jobs/eventos.
+
+  - **Requests/** – Form requests con reglas y autorización.
+    - **Auth/**
+      - `LoginRequest.php` – Valida credenciales y aplica controles adicionales para el login.
+    - **Concerns/**
+      - `SanitizesInputs.php` – Trait que limpia inputs comunes (strings, arrays) antes de validarlos.
+    - **Settings/**
+      - `DeleteAvatarRequest.php` – Garantiza que la eliminación de avatar esté autorizada y auditada.
+      - `ProfileUpdateRequest.php` – Valida nombre, idioma y demás campos de perfil.
+      - `UpdateAvatarRequest.php` – Controla peso, formato y firma del archivo de avatar.
+    - `UploadImageRequest.php` – Request genérica para subidas aseguradas (dimensionamiento/mimes).
+
+- **Jobs/** – Tareas asincrónicas en cola.
+  - `CleanupMediaArtifactsJob.php` – Borra artefactos sobrantes en discos tras eliminar un medio.
+  - `PostProcessAvatarMedia.php` – Lanza conversiones/pipeline extra después de subir un avatar.
+
+- **Listeners/** – Reaccionan a eventos de dominio.
+  - **Media/**
+    - `RunPendingMediaCleanup.php` – Escucha eventos y agenda limpieza de conversiones antiguas.
+  - **User/**
+    - `QueueAvatarPostProcessing.php` – Encola procesamiento diferido cuando se actualiza un avatar.
+
+- **Models/** – Modelos Eloquent y traits relacionados.
+  - **Concerns/**
+    - `TracksMediaVersions.php` – Trait que ayuda a sincronizar columnas de versión con colecciones de media.
+  - `User.php` – Modelo principal de usuario con atributos de avatar y helpers de autenticación.
+
+- **Observers/**
+  - `MediaObserver.php` – Observa eventos del Spatie MediaLibrary para poblar metadata/custom props.
+
+- **Policies/** – Reglas de autorización.
+  - **Concerns/**
+    - `HandlesMediaOwnership.php` – Trait que encapsula chequeos de propiedad de media.
+  - `UserPolicy.php` – Autoriza operaciones sobre usuarios y expone scopes para paneles.
+
+- **Providers/** – Service providers de Laravel.
+  - `AppServiceProvider.php` – Registra bindings core, macros y configuración global.
+  - `AuthServiceProvider.php` – Define políticas y gates del sistema.
+  - `EventServiceProvider.php` – Mapea eventos a listeners para avatar/media.
+  - `HtmlPurifierServiceProvider.php` – Configura y expone el sanitizador HTML seguro.
+  - `ImagePipelineServiceProvider.php` – Registra bindings/pipelines de imágenes y valida configuración.
+  - `MediaLibraryBindingsServiceProvider.php` – Ajusta integraciones con Spatie Media Library.
+
+- **Rules/**
+  - `SecureImageValidation.php` – Regla personalizada para validar imágenes (mimes, firmas, tamaño).
+
+- **Services/** – Servicios de dominio y adaptadores externos.
+  - **Concerns/**
+    - `GuardsUploadedImage.php` – Trait que ejecuta chequeos comunes sobre imágenes recibidas.
+  - **DocumentPipeline/**
+    - `.gitkeep` – Placeholder para futuros pipelines documentales.
+  - **ImagePipeline/**
+    - `FallbackWorkflow.php` – Workflow simplificado cuando Imagick no está disponible.
+    - `ImageProcessingException.php` – Excepción específica de la canalización de imágenes.
+    - `ImagickWorkflow.php` – Implementa conversiones usando Imagick y perfiles definidos.
+    - `PipelineArtifacts.php` – Value object que describe archivos temporales generados.
+    - `PipelineConfig.php` – Lee configuración de pipeline y ofrece helpers de acceso.
+    - `PipelineLogger.php` – Pequeño logger contextual para depurar la pipeline.
+  - `ImagePipeline.php` – Fachada que coordina el pipeline seleccionado.
+  - `ImagePipelineResult.php` – DTO que encapsula resultados de conversiones (media y snapshots).
+  - `ImageUploadService.php` – Servicio de alto nivel para subir imágenes siguiendo la pipeline (alias usado al actualizar avatares).
+
+  - **Optimizer/** – Componentes y adaptadores para optimización externa de imágenes.
+    - **Adapters/**
+      - `LocalOptimizationAdapter.php` – Corre optimizaciones de archivos en el servidor local.
+      - `RemoteDownloader.php` – Descarga artefactos optimizados desde workers remotos.
+      - `RemoteUploader.php` – Sube archivos a servicios externos para optimización.
+  - `OptimizerService.php` – Orquestador que decide cómo y cuándo optimizar medios y coordina los adapters.
+
+  - **Security/**
+    - **Scanners/**
+      - `AbstractScanner.php` – Contrato base para motores antivirus/analizadores.
+      - `ClamAvScanner.php` – Implementa escaneo usando ClamAV.
+      - `YaraScanner.php` – Realiza escaneos con reglas YARA para malware.
+
+  - `TranslationService.php` – Detecta locale, carga traducciones y expone metadata idiomática.
+
+  - **Upload/**
+    - **Contracts/**
+      - `UploadMetadata.php` – Describe metadatos calculados durante la subida.
+      - `UploadPipeline.php` – Contrato para pasos que normalizan/validan uploads.
+      - `UploadResult.php` – DTO del resultado (media, snapshot, reportes).
+      - `UploadService.php` – Interfaz para servicios que ejecutan pipelines de subida.
+    - **Core/**
+      - `LocalQuarantineRepository.php` – Implementación que gestiona uploads en cuarentena local y sidecars hash.
+      - `QuarantineRepository.php` – Contrato que define operaciones sobre la cuarentena (`store`, `prune`, `cleanup`).
+    - `DefaultUploadPipeline.php` – Pipeline por defecto que orquesta normalización, escaneo y almacenamiento.
+    - `DefaultUploadService.php` – Servicio estándar que usa la pipeline por defecto.
+    - **Exceptions/**
+      - `NormalizationFailedException.php` – Se lanza si no se logró normalizar el archivo.
+      - `QuarantineException.php` – Estado genérico cuando la cuarentena falla.
+      - `QuarantineIntegrityException.php` – Indica discrepancias entre archivo y sidecar hash.
+      - `ScanFailedException.php` – Representa errores al correr los escáneres antivirus.
+      - `UnexpectedUploadException.php` – Captura fallos no tipificados durante la subida.
+      - `UploadException.php` – Excepción base para todos los errores del módulo.
+      - `UploadValidationException.php` – Falla al validar inputs o restricciones del upload.
+      - `VirusDetectedException.php` – Indica que un antivirus detectó una amenaza.
+    - `ImageUploadPipelineAdapter.php` – Adaptador para conectar pipelines con el módulo de imágenes.
+
+- **Support/** – Soporte compartido, DTOs y utilidades ricas.
+  - **Documents/**
+    - **Profiles/**
+      - `.gitkeep` – Mantiene vivo el directorio de plantillas documentales.
+
+  - **Media/**
+    - **Contracts/**
+      - `MediaOwner.php` – Contrato que deben cumplir modelos propietarios de media.
+    - **ConversionProfiles/**
+      - `AvatarConversionProfile.php` – Define conversiones/H*265 y tamaños de avatares.
+      - `FileConstraints.php` – Describe restricciones de peso/mime para perfilar colecciones.
+    - **DTO/**
+      - `CleanupPayload.php` – Lista artefactos a eliminar tras limpieza.
+      - `CleanupStatePayload.php` – Transporta el estado de limpieza a workers.
+      - `ConversionExpectations.php` – Define expectativas (dimensiones, formatos) para conversiones.
+      - `ReplacementResult.php` – Representa el resultado de un reemplazo de media.
+      - `ReplacementSnapshot.php` – Snapshot serializable de medios anteriores.
+      - `ReplacementSnapshotItem.php` – Entrada individual del snapshot (colección, IDs, paths).
+    - `ImageProfile.php` – Base para perfiles de media (colección, disco, conversions).
+    - **Jobs/**
+      - `PerformConversionsJob.php` – Job que ejecuta conversions asíncronas de media.
+    - `MediaArtifactCollector.php` – Recorre discos y colecciones para conocer artefactos asociados.
+    - `MediaLifecycleCoordinator.php` – Coordina reemplazos, limpieza y eventos alrededor del ciclo de vida de media.
+    - **Models/**
+      - `MediaCleanupState.php` – Modelo que rastrea el estado de limpieza/pendiente por colección.
+    - **Profiles/**
+      - `AvatarProfile.php` – Perfil de media que describe la colección avatar y sus reglas.
+      - `GalleryProfile.php` – Perfil alterno usado para galerías/futuros features.
+    - **Security/**
+      - `ImageMetadataReader.php` – Extrae metadatos EXIF/ICC de forma segura.
+      - `ImageNormalizer.php` – Normaliza imágenes (orientación, strip metadata).
+      - `MimeNormalizer.php` – Reconcilia MIME real vs declarado.
+      - `PayloadScanner.php` – Orquesta los scanners de seguridad sobre archivos.
+      - `UploadValidationLogger.php` – Centraliza logs de validación/seguridad de uploads.
+    - **Services/**
+      - `MediaCleanupScheduler.php` – Agenda jobs de limpieza según conversiones pendientes.
+      - `MediaReplacementService.php` – Servicio de alto nivel para reemplazar media respetando perfiles.
+
+  - **Sanitization/**
+    - `DisplayName.php` – Sanitiza nombres mostrados evitando caracteres peligrosos.
+
+  - **Security/**
+    - `RateLimitSignatureFactory.php` – Genera firmas estables para aplicar rate limits basados en request.

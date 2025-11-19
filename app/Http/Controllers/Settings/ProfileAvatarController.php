@@ -10,6 +10,11 @@ use App\Helpers\SecurityHelper;
 use App\Http\Controllers\Controller;                  // Ej. base Controller de Laravel
 use App\Http\Requests\Settings\UpdateAvatarRequest;   // Ej. valida imagen (mimes, tamaño, dimensiones)
 use App\Models\User;                                  // Ej. modelo User
+use App\Services\Upload\Exceptions\NormalizationFailedException;
+use App\Services\Upload\Exceptions\QuarantineException;
+use App\Services\Upload\Exceptions\ScanFailedException;
+use App\Services\Upload\Exceptions\UploadValidationException;
+use App\Services\Upload\Exceptions\VirusDetectedException;
 use Illuminate\Auth\Access\AuthorizationException;    // Ej. excepciones de autorización
 use Illuminate\Http\JsonResponse;                     // Ej. respuesta JSON
 use Illuminate\Http\RedirectResponse;                 // Ej. respuesta redirect
@@ -51,6 +56,12 @@ class ProfileAvatarController extends Controller
         /** @var User $authUser */
         $authUser = $request->user();
 
+        if (!$authUser) {
+            throw new AuthorizationException('Authenticated user required to update avatar.');
+        }
+
+        $this->authorize('updateAvatar', $authUser);
+
         // Registra información sobre la solicitud de actualización de avatar
         Log::info('Avatar update request received', [
             'user_id' => $authUser?->getKey(),
@@ -79,6 +90,35 @@ class ProfileAvatarController extends Controller
                 $feedback['description'],
                 $feedback['event']
             );
+        } catch (VirusDetectedException $e) {
+            Log::warning('Avatar upload rejected (virus detected)', [
+                'user_id' => $authUser->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->respondValidationFailure($request, __('media.uploads.scan_blocked'));
+        } catch (UploadValidationException $e) {
+            Log::warning('Avatar upload rejected (validation failed)', [
+                'user_id' => $authUser->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->respondValidationFailure($request, __('media.uploads.invalid_image'));
+        } catch (NormalizationFailedException $e) {
+            Log::error('Avatar upload normalization failed', [
+                'user_id' => $authUser->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->respondServerFailure($request);
+        } catch (ScanFailedException|QuarantineException $e) {
+            // Registra un error si falla la infraestructura de escaneo o cuarentena
+            Log::error('Avatar upload infrastructure error', [
+                'user_id' => $authUser->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return $this->respondServerFailure($request);
         } catch (Throwable $e) {
             // Registra el error en caso de fallo
             Log::error('Avatar update failed', [
@@ -87,19 +127,7 @@ class ProfileAvatarController extends Controller
                 'exception' => $e,
             ]);
 
-            $errorMessage = __('settings.profile.avatar.update_failed');
-
-            // Devuelve error en formato JSON o redirect con flash
-            if ($request->wantsJson()) {
-                return response()->json([
-                    'message' => $errorMessage,
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 422);
-            }
-
-            return back()
-                ->withErrors(['avatar' => $errorMessage])
-                ->with('error', $errorMessage);
+            return $this->respondServerFailure($request);
         }
     }
 
@@ -201,6 +229,47 @@ class ProfileAvatarController extends Controller
         }
 
         return $files;
+    }
+
+    /**
+     * Respuesta estándar para errores de validación de upload.
+     *
+     * @param Request $request La solicitud HTTP.
+     * @param string $message Mensaje de error.
+     * @return RedirectResponse|JsonResponse
+     */
+    private function respondValidationFailure(Request $request, string $message): RedirectResponse|JsonResponse
+    {
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => $message,
+            ], 422);
+        }
+
+        return back()
+            ->withErrors(['avatar' => $message])
+            ->with('error', $message);
+    }
+
+    /**
+     * Respuesta estándar para fallos internos del upload.
+     *
+     * @param Request $request La solicitud HTTP.
+     * @return RedirectResponse|JsonResponse
+     */
+    private function respondServerFailure(Request $request): RedirectResponse|JsonResponse
+    {
+        $message = __('settings.profile.avatar.update_failed');
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => $message,
+            ], 500);
+        }
+
+        return back()
+            ->withErrors(['avatar' => $message])
+            ->with('error', $message);
     }
 
     /**

@@ -56,7 +56,12 @@ class ProfileController extends Controller
 
                 $user->save();
 
-                return to_route('profile.edit')->with(['success' => __('auth.update.success')]);
+                $successMessage = __('auth.update.success');
+                return to_route('profile.edit')->with([
+                    'success' => $successMessage,
+                    'message' => $successMessage,
+                    'event' => ['title' => $successMessage],
+                ]);
             });
         } catch (\Throwable $e) {
             Log::error('Profile update failed', [

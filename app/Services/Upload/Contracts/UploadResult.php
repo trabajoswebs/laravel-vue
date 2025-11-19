@@ -13,14 +13,16 @@ namespace App\Services\Upload\Contracts;
 final class UploadResult
 {
     /**
-     * @param string      $path      Ruta o clave del artefacto persistido.
-     * @param string|null $checksum  Hash opcional para deduplicar o auditar.
-     * @param array       $metadata  Datos adicionales (mime real, dimensiones, flags).
+     * @param string               $path          Ruta o identificador final del archivo aceptado.
+     * @param int                  $size          Tamaño del archivo en bytes después de la normalización.
+     * @param UploadMetadata       $metadata      Metadata bien tipada del artefacto.
+     * @param string|null          $quarantineId  Identificador/ruta del artefacto en cuarentena (si aplica).
      */
     public function __construct(
         public readonly string $path,
-        public readonly ?string $checksum = null,
-        public readonly array $metadata = [],
+        public readonly int $size,
+        public readonly UploadMetadata $metadata,
+        public readonly ?string $quarantineId = null,
     ) {
     }
 }
