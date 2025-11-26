@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Services\Optimizer\Adapters;
 
-use App\Services\Optimizer\Adapters\RemoteDownloader;
+use App\Infrastructure\Media\Optimizer\Adapters\RemoteDownloader;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;

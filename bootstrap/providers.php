@@ -1,10 +1,10 @@
 <?php
 
 return [
-    App\Providers\AppServiceProvider::class,
-    App\Providers\AuthServiceProvider::class,
-    App\Providers\EventServiceProvider::class,
-    App\Providers\HtmlPurifierServiceProvider::class,
-    App\Providers\MediaLibraryBindingsServiceProvider::class,
-    App\Providers\ImagePipelineServiceProvider::class,
+    App\Infrastructure\Providers\AppServiceProvider::class,
+    App\Infrastructure\Providers\AuthServiceProvider::class,
+    App\Infrastructure\Providers\EventServiceProvider::class,
+    App\Infrastructure\Providers\HtmlPurifierServiceProvider::class,
+    App\Infrastructure\Media\Providers\MediaLibraryBindingsServiceProvider::class,
+    App\Infrastructure\Media\Providers\ImagePipelineServiceProvider::class,
 ];

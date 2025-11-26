@@ -38,6 +38,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | IP Hashing
+    |--------------------------------------------------------------------------
+    |
+    | Controla cómo se genera el hash de IP usado para logging de seguridad.
+    | Opción A (modo masked, longitud 12) mantiene el comportamiento actual.
+    | Opción B permite extender la longitud o usar HMAC para mayor unicidad.
+    |
+    */
+    'hash_ip' => [
+        'length' => (int) env('IP_HASH_LENGTH', 12),
+        'mode' => env('IP_HASH_MODE', 'masked'),
+        'hmac_secret' => env('IP_HASH_HMAC_SECRET'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Security Configuration
     |--------------------------------------------------------------------------
     |

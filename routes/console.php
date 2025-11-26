@@ -1,6 +1,6 @@
 <?php
 
-use App\Support\Media\Services\MediaCleanupScheduler;
+use App\Application\Media\Services\MediaCleanupScheduler;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 

@@ -26,7 +26,7 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 
 ### Backend, media y seguridad endurecida
 - `app/Http/Controllers`, `Middleware` y `Requests` definen controladores Inertia, autenticación, ajustes y los middlewares (`SecurityHeaders`, `RateLimitUploads`, `SanitizeInput`, `UserAudit`) que corren en cada petición.
-- `app/Services` agrupa el pipeline de imágenes (workflows Imagick/Fallback, configuraciones, OptimizerService) y el módulo de uploads (`UploadPipeline`, `DefaultUploadService`, `LocalQuarantineRepository`, excepciones dedicadas) que coordinan Spatie Media Library con el pipeline endurecido y la cuarentena verificable.
+- `app/Services` agrupa el pipeline de imágenes (workflows Imagick/Fallback, configuraciones, OptimizerService) y el módulo de uploads (`UploadPipeline`, `DefaultUploadService`, `LocalQuarantineRepository`, `Upload/Support`, `Upload/Scanning`, excepciones dedicadas) que coordinan Spatie Media Library con el pipeline endurecido y la cuarentena verificable.
 - `app/Support/Media` reúne contratos, DTOs, perfiles (`AvatarProfile`, `GalleryProfile`), el recolector de artefactos, el coordinador de lifecycle y los jobs/listeners que limpian artefactos después de conversions.
 - `app/Support/Media/Security` contiene `PayloadScanner`, `ImageMetadataReader`, `ImageNormalizer`, `MimeNormalizer` y `UploadValidationLogger`, que amplifican `SecureImageValidation` y el `ImageUploadService` con detección de payloads, normalización y auditoría anónima.
 - `app/Rules/SecureImageValidation` es la puerta única para los uploads, y se combina con `config/image-pipeline.php`, `config/security.php` y `ImagePipelineServiceProvider` para proteger márgenes de error y habilitar `rate.uploads`.
@@ -121,7 +121,7 @@ Variables de entorno clave:
 Este proyecto implementa una arquitectura de subida de imágenes reutilizable basada en perfiles:
 
 - `app/Services/ImageUploadService::upload(HasMedia $owner, UploadedFile $file, ImageProfile $profile)`
-    - Centraliza el adjuntado a Spatie Media Library tras normalizar con `ImagePipeline`.
+    - Centraliza el adjuntado a Spatie Media Library tras normalizar con `ImagePipeline` y delega la cuarentena, el escaneo y el logging en `QuarantineManager`, `ScanCoordinator` e `ImageUploadReporter`.
     - Nombra los archivos como `{collection}-{sha1}.{ext}` y guarda props (`version`, `mime`, `width`, `height`).
 - Perfiles (`app/Support/Media`):
     - `ImageProfile` (contrato): define `collection()`, `disk()`, `conversions()`, `fieldName()`, `requiresSquare()` y `applyConversions()`.

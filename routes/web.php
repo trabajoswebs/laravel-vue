@@ -2,8 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Http\Controllers\LanguageController;
-use App\Http\Controllers\Media\ShowAvatar;
+use App\Infrastructure\Http\Controllers\LanguageController;
+use App\Infrastructure\Http\Controllers\Media\ShowAvatar;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
