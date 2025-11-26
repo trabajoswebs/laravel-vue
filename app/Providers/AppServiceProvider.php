@@ -3,13 +3,13 @@
 namespace App\Providers;
 
 use App\Observers\MediaObserver;
-use App\Services\ImagePipeline;
-use App\Services\Upload\Contracts\UploadPipeline;
-use App\Services\Upload\Contracts\UploadService;
-use App\Services\Upload\Core\LocalQuarantineRepository;
-use App\Services\Upload\Core\QuarantineRepository;
-use App\Services\Upload\DefaultUploadService;
-use App\Services\Upload\ImageUploadPipelineAdapter;
+use App\Infrastructure\Media\ImagePipeline;
+use App\Infrastructure\Media\Upload\Contracts\UploadPipeline;
+use App\Infrastructure\Media\Upload\Contracts\UploadService;
+use App\Infrastructure\Media\Upload\Core\LocalQuarantineRepository;
+use App\Infrastructure\Media\Upload\Core\QuarantineRepository;
+use App\Infrastructure\Media\Upload\DefaultUploadService;
+use App\Infrastructure\Media\Upload\ImageUploadPipelineAdapter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Log;
