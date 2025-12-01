@@ -3,7 +3,7 @@
 namespace App\Infrastructure\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Domain\Security\SecurityHelper;
+use App\Infrastructure\Security\SecurityHelper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Log;

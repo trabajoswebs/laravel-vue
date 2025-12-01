@@ -8,7 +8,9 @@ namespace App\Infrastructure\Media\Upload\Scanning;
 use App\Infrastructure\Media\Security\Scanners\ClamAvScanner; // Escáner de antivirus ClamAV
 use App\Infrastructure\Media\Security\Scanners\YaraScanner; // Escáner de firmas YARA
 use App\Infrastructure\Media\Upload\Exceptions\ScanFailedException; // Excepción para fallo de escaneo
+use App\Infrastructure\Media\Upload\Exceptions\UploadValidationException;
 use App\Infrastructure\Media\Upload\Exceptions\VirusDetectedException; // Excepción para detección de virus
+use App\Infrastructure\Security\Exceptions\AntivirusException;
 use Illuminate\Cache\RedisStore; // Store de Redis para cache
 use Illuminate\Contracts\Cache\LockTimeoutException; // Excepción para timeout de lock
 use Illuminate\Http\UploadedFile; // Clase para manejar archivos subidos
@@ -69,10 +71,11 @@ final class ScanCoordinator
      *
      * @param UploadedFile $file Archivo a escanear
      * @param string $path Ruta del archivo en cuarentena
+     * @param array<string,mixed> $context Contexto para logging/trazabilidad.
      * @throws ScanFailedException Si falla el escaneo
      * @throws VirusDetectedException Si se detecta malware
      */
-    public function scan(UploadedFile $file, string $path): void
+    public function scan(UploadedFile $file, string $path, array $context = []): void
     {
         // Si el escaneo no está habilitado, salimos
         if (!$this->enabled()) {
@@ -82,14 +85,14 @@ final class ScanCoordinator
         // Verificamos que el escaneo esté disponible (circuito cerrado)
         $this->assertAvailable();
         // Ejecutamos los escáneres
-        $this->runScanners($file, $path);
+        $this->runScanners($file, $path, $context);
         // Reiniciamos el contador de fallos
         $this->resetScanFailures();
 
         // Registramos que el escaneo pasó
-        Log::info('image_upload.scan_passed', [
+        Log::info('image_upload.scan_passed', array_merge([
             'scanners' => $this->activeScannerKeys(),
-        ]);
+        ], $context));
     }
 
     /**
@@ -206,49 +209,74 @@ final class ScanCoordinator
      *
      * @param UploadedFile $file Archivo a escanear
      * @param string $path Ruta del archivo en cuarentena
+     * @param array<string,mixed> $context Contexto adicional (p.ej. correlation_id).
      * @throws ScanFailedException Si falla el escaneo
      * @throws VirusDetectedException Si se detecta malware
      */
-    private function runScanners(UploadedFile $file, string $path): void
+    private function runScanners(UploadedFile $file, string $path, array $context = []): void
     {
+        static $skipLogged = false;
+
+        if (! config('uploads.virus_scanning.enabled', true)) {
+            if (! $skipLogged) {
+                Log::info('image_upload.scan_skipped', array_merge([
+                    'reason' => 'scan_disabled',
+                    'env' => app()->environment(),
+                ], $context));
+                $skipLogged = true;
+            }
+            return;
+        }
+
         $scanners = $this->resolveScanners();
 
         if ($scanners === []) {
             // Si no hay escáneres configurados, es un fallo técnico
             $this->recordScanFailure();
-            Log::error('image_upload.scan_missing_handlers');
+            Log::error('image_upload.scan_missing_handlers', $context);
             throw new ScanFailedException(__('media.uploads.scan_unavailable'));
         }
 
         // Contexto para los escáneres
         /** @var array<string,mixed> $context */
-        $context = [
+        $context = array_merge([
             'path'           => $path,
             'is_first_chunk' => true,
             'timeout_ms'     => (int) ($this->scanConfig['timeout_ms'] ?? 5000),
-        ];
+        ], $context);
 
         foreach ($scanners as $scanner) {
             try {
                 // Ejecutamos el escáner
                 $clean = $scanner($file, $context);
+            } catch (AntivirusException $exception) {
+                // Fallo crítico de antivirus (fail-closed)
+                $this->recordScanFailure();
+
+                Log::error('image_upload.scanner_unavailable', array_merge([
+                    'scanner' => $this->scannerName($scanner),
+                    'reason' => $exception->reason(),
+                    'fail_closed' => true,
+                ], $context));
+
+                throw new UploadValidationException(__('media.uploads.scan_unavailable'), $exception);
             } catch (\Throwable $exception) {
                 // Si el escáner falla técnicamente, registramos el fallo
                 $this->recordScanFailure();
 
-                Log::error('image_upload.scanner_failure', [
+                Log::error('image_upload.scanner_failure', array_merge([
                     'scanner' => $this->scannerName($scanner),
                     'error'   => $exception->getMessage(),
-                ]);
+                ], $context));
 
                 throw new ScanFailedException(__('media.uploads.scan_unavailable'));
             }
 
             // Si el escáner devuelve false, hay malware
             if (!$clean) {
-                Log::warning('image_upload.scan_blocked', [
+                Log::warning('image_upload.scan_blocked', array_merge([
                     'scanner' => $this->scannerName($scanner),
-                ]);
+                ], $context));
 
                 throw new VirusDetectedException(__('media.uploads.scan_blocked'));
             }

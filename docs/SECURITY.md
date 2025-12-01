@@ -85,7 +85,7 @@ max_execution_time=30
 
 ## 8. Validación reforzada de subidas
 
-`app/Rules/SecureImageValidation` es la entrada única para archivos de imagen (avatares, ajustes de perfil, etc.) y se ejecuta desde `UpdateAvatarRequest` antes de que el controlador invoque a `ImageUploadService`. La regla combina los límites compartidos de `FileConstraints` con los helpers de `app/Support/Media/Security` para detectar MIMEs falsos, payloads sospechosos y normalizar el binario sin exponer los nombres originales. Cada advertencia se registra con `file_hash` y `user_id` mediante `UploadValidationLogger`, manteniendo trazabilidad sin revelar datos sensibles.
+`app/Rules/SecureImageValidation` es la entrada única para archivos de imagen (avatares, ajustes de perfil, etc.) y se ejecuta desde `UpdateAvatarRequest` antes de que el controlador invoque a `DefaultUploadService`. La regla combina los límites compartidos de `FileConstraints` con los helpers de `app/Support/Media/Security` para detectar MIMEs falsos, payloads sospechosos y normalizar el binario sin exponer los nombres originales. Cada advertencia se registra con `file_hash` y `user_id` mediante `UploadValidationLogger`, manteniendo trazabilidad sin revelar datos sensibles.
 
 - `ImageMetadataReader` reúne `getimagesize`, `finfo` y heurísticas de animación para resolver un MIME confiable.
 - `MimeNormalizer` convierte alias (`image/jpg`, `image/pjpeg`, etc.) a su forma canónica antes de validar contra la lista blanca.
@@ -93,7 +93,7 @@ max_execution_time=30
 - `ImageNormalizer` reencodea imágenes sospechosas y sobrescribe el archivo en bloque atómico respetando `FileConstraints::maxBytes`.
 - `UploadValidationLogger` anexa contexto (`event`, `file_hash`, `user_id`) a las advertencias (`image_suspicious_payload`, `image_mime_detector_mismatch`, `image_normalizer_max_bytes_exceeded`, etc.).
 
-`ImageUploadService` ejecuta después la fachada `ImagePipeline`, adjunta los metadatos (`version`, `mime`, `width`, `height`) y delega en `MediaReplacementService`/`MediaCleanupScheduler` para que la base de datos y los artefactos queden sincronizados. Mantén sincronizados los valores clave (`image-pipeline.allowed_mime_types`, `allowed_extensions`, `max_bytes`, `suspicious_payload_patterns`, `scan_bytes`, `normalize`) entre `.env`, `config/image-pipeline.php` y `SecureImageValidation` si cambias colecciones o formatos. Las clases de `app/Support/Media/Security` son extensibles: puedes ampliar los patrones, ajustar el logger o reutilizar `ImageMetadataReader` en otros endpoints que procesen binarios.
+`DefaultUploadService` ejecuta después la fachada `ImagePipeline`, adjunta los metadatos (`version`, `mime`, `width`, `height`) y delega en `MediaReplacementService`/`MediaCleanupScheduler` para que la base de datos y los artefactos queden sincronizados. Mantén sincronizados los valores clave (`image-pipeline.allowed_mime_types`, `allowed_extensions`, `max_bytes`, `suspicious_payload_patterns`, `scan_bytes`, `normalize`) entre `.env`, `config/image-pipeline.php` y `SecureImageValidation` si cambias colecciones o formatos. Las clases de `app/Support/Media/Security` son extensibles: puedes ampliar los patrones, ajustar el logger o reutilizar `ImageMetadataReader` en otros endpoints que procesen binarios.
 
 ## 9. Migración a discos privados
 

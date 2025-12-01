@@ -1,14 +1,17 @@
 <?php
 
 // Importaciones de clases y namespaces necesarios para la configuración de la aplicación.
-use App\Domain\Security\SecurityHelper;
+use App\Infrastructure\Security\SecurityHelper;
 use App\Infrastructure\Http\Middleware\HandleAppearance;
 use App\Infrastructure\Http\Middleware\HandleInertiaRequests;
 use App\Infrastructure\Http\Middleware\PreventBruteForce;
+use App\Infrastructure\Http\Middleware\RateLimitUploads;
 use App\Infrastructure\Http\Middleware\SanitizeInput;
 use App\Infrastructure\Http\Middleware\SecurityHeaders;
 use App\Infrastructure\Http\Middleware\UserAudit;
 use App\Infrastructure\Http\Middleware\TrustProxies;
+use Illuminate\Auth\Middleware\Authenticate;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -57,6 +60,13 @@ return Application::configure(basePath: dirname(__DIR__))
             SecurityHeaders::class,               // Aplica encabezados de seguridad HTTP.
             PreventBruteForce::class,             // Prevención de ataques de fuerza bruta.
             UserAudit::class,                     // Registra auditoría de usuario al final del ciclo.
+        ]);
+
+        // Aliases de middleware usados en rutas.
+        $middleware->alias([
+            'auth' => Authenticate::class,
+            'throttle' => ThrottleRequests::class,
+            'rate.uploads' => RateLimitUploads::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

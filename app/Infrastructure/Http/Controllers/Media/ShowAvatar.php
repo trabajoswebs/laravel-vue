@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Http\Controllers\Media;
 
 use App\Infrastructure\Http\Controllers\Controller;
-use App\Domain\User\Profiles\AvatarProfile;
+use App\Infrastructure\Media\Profiles\AvatarProfile;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;

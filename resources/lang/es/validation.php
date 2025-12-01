@@ -208,6 +208,7 @@ return [
             'max' => 'La imagen no puede pesar más de :max KB.',
             'dimensions' => 'La imagen debe medir entre 128×128 y 2048×2048 píxeles.',
             'uploaded' => 'No hemos podido subir esta imagen. Prueba con otra.',
+            'scan_unavailable' => 'No hemos podido analizar tu imagen por antivirus. Inténtalo de nuevo en unos minutos.',
         ],
     ],
 

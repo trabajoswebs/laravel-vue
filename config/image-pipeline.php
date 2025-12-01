@@ -13,18 +13,23 @@ declare(strict_types=1);
  */
 
 return [
-    // Selección explícita de driver de Intervention (gd por defecto).
-    'driver' => env('IMG_DRIVER', 'gd'),
+    // Selección explícita de driver de Intervention (compatibilidad con IMAGE_DRIVER legado).
+    'driver' => env('IMG_DRIVER', env('IMAGE_DRIVER', 'gd')),
 
     'imagick' => [
+        // Requiere confirmación de política de seguridad para Imagick
         'require_policy_confirmation' => (bool) env('IMG_IMAGICK_REQUIRE_POLICY', true),
+
+        // Ruta al archivo policy.xml endurecido para seguridad
         'policy_path' => env('IMG_IMAGICK_POLICY_PATH'), // Debe apuntar al policy.xml endurecido
+
+        // Límites de recursos para Imagick para prevenir DoS
         'resource_limits' => [
-            'memory' => (int) env('IMG_IMAGICK_MEMORY_LIMIT', 256 * 1024 * 1024),
-            'map' => (int) env('IMG_IMAGICK_MAP_LIMIT', 512 * 1024 * 1024),
-            'area' => (int) env('IMG_IMAGICK_AREA_LIMIT', 128 * 1024 * 1024),
-            'file' => (int) env('IMG_IMAGICK_FILE_HANDLES', 32),
-            'time' => (int) env('IMG_IMAGICK_TIME_LIMIT', 60),
+            'memory' => (int) env('IMG_IMAGICK_MEMORY_LIMIT', 256 * 1024 * 1024), // Límite de memoria en bytes
+            'map' => (int) env('IMG_IMAGICK_MAP_LIMIT', 512 * 1024 * 1024),       // Límite de mapeo de memoria
+            'area' => (int) env('IMG_IMAGICK_AREA_LIMIT', 128 * 1024 * 1024),     // Límite de área de imagen
+            'file' => (int) env('IMG_IMAGICK_FILE_HANDLES', 32),                 // Límite de handles de archivo
+            'time' => (int) env('IMG_IMAGICK_TIME_LIMIT', 60),                   // Límite de tiempo en segundos
         ],
     ],
 
@@ -49,7 +54,7 @@ return [
     |
     | 2) max_upload_size
     |    - Límite lógico de la subida de imagen en dominio.
-    |    - Lo usa ImageUploadService::createQuarantinedFile() para rechazar
+    |    - Lo usa DefaultUploadService (MediaUploader) para rechazar
     |      el archivo ANTES de copiar a cuarentena / pipeline.
     |    - Es el tamaño máximo que tu aplicación promete aceptar.
     |
@@ -71,16 +76,32 @@ return [
     // Protege la decodificación / normalización a bajo nivel.
     'max_bytes' => (int) env('IMG_MAX_BYTES', 25 * 1024 * 1024), // 25MB
 
-    // Bomb ratio threshold (decompression vs disk size)
+    // Validación estricta de magic bytes y polyglots
+    'enforce_strict_magic_bytes' => env('IMG_ENFORCE_MAGIC_BYTES', true),
+    'allowed_magic_signatures' => [
+        'ffd8ff' => 'image/jpeg',
+        '89504e470d0a1a0a' => 'image/png',
+        '47494638' => 'image/gif',
+        '000000206674797061766966' => 'image/avif',
+        '0000001c6674797061766966' => 'image/avif',
+        '52494646' => 'riff',
+        '57454250' => 'image/webp',
+        '25504446' => 'application/pdf',
+        '504b0304' => 'zip',
+    ],
+    'prevent_polyglot_files' => env('IMG_PREVENT_POLYGLOT', true),
+    'max_decompression_ratio' => env('IMG_MAX_DECOMPRESSION_RATIO', 500.0),
+
+    // Ratio de descompresión para detección de bombas de imagen
     'bomb_ratio_threshold' => env('IMG_BOMB_RATIO', 100),
 
-    // Minimum required dimension (width and height) in pixels
+    // Dimensiones mínimas requeridas (ancho y alto) en píxeles
     'min_dimension' => env('IMG_MIN_DIMENSION', 128),
 
-    // Maximum megapixels allowed (DoS protection)
+    // Máximo de megapíxeles permitidos (protección contra DoS)
     'max_megapixels' => env('IMG_MAX_MEGAPIXELS', 48.0),
 
-    // Maximum edge length for output (maintains aspect ratio)
+    // Máxima longitud de borde para salida (mantiene proporción de aspecto)
     'max_edge' => env('IMG_MAX_EDGE', 16384),
 
     /*
@@ -91,7 +112,7 @@ return [
     | Límite de tamaño para la subida de imágenes en la capa de dominio.
     |
     | - Unidad: bytes.
-    | - Lo utiliza ImageUploadService::createQuarantinedFile() para validar
+    | - Lo utiliza DefaultUploadService (MediaUploader) para validar
     |   el tamaño ANTES de copiar el archivo a la cuarentena.
     | - Si se supera, lanza UploadValidationException('max_size_exceeded').
     |
@@ -138,7 +159,14 @@ return [
         env('IMG_MAX_UPLOAD_SIZE', 25 * 1024 * 1024),
     ),
 
-    // Maximum seconds allowed for image decode operations
+    // TTLs por defecto para artefactos en cuarentena (horas)
+    'quarantine_pending_ttl_hours' => (int) env('IMG_QUARANTINE_TTL_HOURS', 24),
+    'quarantine_failed_ttl_hours' => (int) env('IMG_QUARANTINE_FAILED_TTL_HOURS', 4),
+
+    // Timeout máximo para persistir streams en cuarentena (segundos)
+    'quarantine_stream_timeout_seconds' => (float) env('IMG_QUARANTINE_STREAM_TIMEOUT_SECONDS', 15.0),
+
+    // Máximo de segundos permitidos para operaciones de decodificación de imagen
     'decode_timeout_seconds' => (float) env('IMG_DECODE_TIMEOUT_SECONDS', 5),
 
     /*
@@ -150,7 +178,7 @@ return [
     |
     */
 
-    // Allowed image extensions (normalized to lowercase)
+    // Extensiones de imagen permitidas (normalizadas a minúsculas)
     'allowed_extensions' => [
         'jpg',
         'jpeg',
@@ -160,7 +188,7 @@ return [
         'gif',
     ],
 
-    // Allowed MIME types (map mime => suggested extension)
+    // Tipos MIME permitidos (mapa mime => extensión sugerida)
     'allowed_mimes' => [
         'image/jpeg' => 'jpg',
         'image/png'  => 'png',
@@ -169,18 +197,18 @@ return [
         'image/gif'  => 'gif',
     ],
 
-    // Explicitly prohibited file extensions
+    // Extensiones de archivo explícitamente prohibidas
     'disallowed_extensions' => [
-        'svg',  // May contain malicious code
-        'svgz', // Compressed SVG version
-        'zip',  // Compressed archive
+        'svg',  // Puede contener código malicioso
+        'svgz', // Versión comprimida de SVG
+        'zip',  // Archivo comprimido
     ],
 
-    // Explicitly prohibited MIME types
+    // Tipos MIME explícitamente prohibidos
     'disallowed_mimes' => [
-        'image/svg+xml',                // May contain malicious code
-        'application/zip',              // Compressed archive
-        'application/x-zip-compressed', // Compressed archive
+        'image/svg+xml',                // Puede contener código malicioso
+        'application/zip',              // Archivo comprimido
+        'application/x-zip-compressed', // Archivo comprimido
     ],
 
     // =========================================================================
@@ -197,7 +225,7 @@ return [
     */
 
     'normalization' => [
-        // Enable input image normalization
+        // Habilitar normalización de imagen de entrada
         'enabled' => env('IMG_NORMALIZE', true),
     ],
 
@@ -210,7 +238,7 @@ return [
     |
     */
 
-    // Number of bytes to scan when analyzing payloads (defaults to 50 KB)
+    // Número de bytes a escanear al analizar payloads (por defecto 50 KB)
     'scan_bytes' => env('IMG_SCAN_BYTES', 50 * 1024),
 
     /*
@@ -223,19 +251,19 @@ return [
     |
     */
 
-    // JPEG quality 0-100 (82 recommended)
+    // Calidad JPEG 0-100 (82 recomendado)
     'jpeg_quality' => env('IMG_JPEG_QUALITY', 82),
 
-    // Force WebP for images with transparency?
+    // Forzar WebP para imágenes con transparencia?
     'alpha_to_webp' => env('IMG_ALPHA_TO_WEBP', true),
 
-    // Threshold to activate progressive JPEG (in pixels, longer side)
+    // Umbral para activar JPEG progresivo (en píxeles, lado más largo)
     'jpeg_progressive_min' => env('IMG_JPEG_PROGRESSIVE_MIN', 1200),
 
-    // WebP method (0-6). 6 = more quality/time
+    // Método WebP (0-6). 6 = más calidad/tiempo
     'webp_method' => env('IMG_WEBP_METHOD', 6),
 
-    // Recommended WebP quality (0-100)
+    // Calidad WebP recomendada (0-100)
     'webp_quality' => env('IMG_WEBP_QUALITY', env('IMG_WEBP_QUALITY', 75)),
 
     /*
@@ -244,16 +272,16 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    // PNG compression level (0-9)
+    // Nivel de compresión PNG (0-9)
     'png_compression_level' => env('IMG_PNG_COMPRESSION_LEVEL', 9),
 
-    // PNG compression strategy (0-4)
+    // Estrategia de compresión PNG (0-4)
     'png_compression_strategy' => env('IMG_PNG_COMPRESSION_STRATEGY', 1),
 
-    // PNG compression filter (0-5)
+    // Filtro de compresión PNG (0-5)
     'png_compression_filter' => env('IMG_PNG_COMPRESSION_FILTER', 5),
 
-    // Exclude unnecessary PNG chunks (reduces metadata)
+    // Excluir chunks PNG innecesarios (reduce metadatos)
     'png_exclude_chunk' => env('IMG_PNG_EXCLUDE_CHUNK', 'all'),
 
     /*
@@ -266,14 +294,14 @@ return [
     |
     */
 
-    // Preserve GIF animation?
+    // ¿Preservar animación GIF?
     'preserve_gif_animation' => env('IMG_PRESERVE_GIF_ANIMATION', false),
 
-    // Frame limit when preserve_gif_animation=true
+    // Límite de frames cuando preserve_gif_animation=true
     'max_gif_frames' => env('IMG_MAX_GIF_FRAMES', 60),
 
-    // Resize filter for animated GIF (Imagick filter constant)
-    'gif_resize_filter' => env('IMG_GIF_RESIZE_FILTER', 8), // TRIANGLE for performance
+    // Filtro de redimensión para GIF animados (constante de filtro Imagick)
+    'gif_resize_filter' => env('IMG_GIF_RESIZE_FILTER', 8), // TRIANGLE para rendimiento
 
     // =========================================================================
     // 🔹 SECURITY & SCANNING
@@ -289,45 +317,104 @@ return [
     */
 
     'scan' => [
-        // Enable security scanning
-        'enabled' => true,
+        // Habilitar escaneo de seguridad
+        'enabled' => value(function () {
+            // Leemos el entorno directamente del APP_ENV
+            $appEnv = env('APP_ENV', 'production');
 
-        // Security handlers to use
-        'handlers' => [
-            App\Infrastructure\Media\Security\Scanners\ClamAvScanner::class,
-            App\Infrastructure\Media\Security\Scanners\YaraScanner::class,
-        ],
+            // En local/testing se permite desactivar escaneo vía VIRUS_SCANNERS (vacío/none).
+            if (in_array($appEnv, ['local', 'testing'], true)) {
+                $configured = trim((string) env('VIRUS_SCANNERS', 'clamav'));
+                return $configured !== '' && strtolower($configured) !== 'none';
+            }
 
-        // Scanning timeout in milliseconds
+            // En otros entornos, siempre activado (fail-closed por defecto).
+            return true;
+        }),
+
+
+        // Handlers de seguridad a usar
+        'handlers' => value(function () {
+            $aliases = [
+                'clamav'   => App\Infrastructure\Media\Security\Scanners\ClamAvScanner::class,
+                'clamdscan' => App\Infrastructure\Media\Security\Scanners\ClamAvScanner::class,
+                'yara'     => App\Infrastructure\Media\Security\Scanners\YaraScanner::class,
+            ];
+
+            $raw = env('VIRUS_SCANNERS', 'clamav,yara');
+
+            // En entornos no locales forzamos al menos ClamAV si se intenta vaciar la lista.
+            $appEnv = env('APP_ENV', 'production');
+            if (! in_array($appEnv, ['local', 'testing'], true)) {
+                $trimmed = trim((string) $raw);
+                if ($trimmed === '' || strtolower($trimmed) === 'none') {
+                    $raw = 'clamav,yara';
+                }
+            }
+
+            $tokens = preg_split('/[\\s,;|]+/', (string) $raw) ?: [];
+            $handlers = [];
+
+            foreach ($tokens as $token) {
+                $key = strtolower(trim((string) $token));
+                if ($key === '' || ! isset($aliases[$key])) {
+                    continue;
+                }
+
+                $handlers[] = $aliases[$key];
+            }
+
+            $handlers = array_values(array_unique($handlers));
+
+            return $handlers === []
+                ? [App\Infrastructure\Media\Security\Scanners\ClamAvScanner::class]
+                : $handlers;
+        }),
+
+
+        // Tiempo de espera para escaneo en milisegundos
         'timeout_ms' => 5000,
 
-        // Timeout in seconds (calculated from milliseconds)
+        // Tiempo de espera en segundos (calculado desde milisegundos)
         'timeout' => value(function () {
             $ms = (int) env('IMG_SCAN_TIMEOUT_MS', 5000);
             $ms = $ms > 0 ? $ms : 5000;
             return max(1, (int) ceil($ms / 1000));
         }),
 
-        // Chunk size for partial scanning (bytes)
+        // Tamaño de bloque para escaneo parcial (bytes)
         'chunk_bytes' => env('IMG_SCAN_CHUNK_BYTES', 256 * 1024),
 
-        // Maximum file size for scanning (bytes)
+        // Tamaño máximo de archivo para escaneo (bytes)
         'max_bytes'   => env('IMG_SCAN_MAX_BYTES', 4 * 1024 * 1024),
 
-        // Strict scanning mode (may reject more files)
-        'strict'      => filter_var(env('IMG_SCAN_STRICT', false), FILTER_VALIDATE_BOOLEAN),
+        // Modo estricto de escaneo (puede rechazar más archivos)
+        'strict'      => value(function () {
+            $envValue = env('IMG_SCAN_STRICT');
 
-        // Debug strict mode for scanning debugging
+            // Si la variable está definida, manda ella.
+            if ($envValue !== null) {
+                return filter_var($envValue, FILTER_VALIDATE_BOOLEAN);
+            }
+
+            // Fail-closed por defecto fuera de local/testing.
+            $appEnv = env('APP_ENV', 'production');
+
+            return ! in_array($appEnv, ['local', 'testing'], true);
+        }),
+
+
+        // Modo de depuración estricto para debugging de escaneo
         'debug_strict' => filter_var(env('IMG_SCAN_DEBUG_STRICT', false), FILTER_VALIDATE_BOOLEAN),
 
-        // Circuit breaker configuration
+        // Configuración del circuit breaker
         'circuit_breaker' => [
-            'max_failures'   => max(1, (int) env('IMG_SCAN_CIRCUIT_MAX_FAILS', 5)),
-            'cache_key'      => env('IMG_SCAN_CIRCUIT_CACHE_KEY', 'image_scan:circuit_failures'),
-            'decay_seconds'  => (int) env('IMG_SCAN_CIRCUIT_TTL', 900),
+            'max_failures'   => max(1, (int) env('IMG_SCAN_CIRCUIT_MAX_FAILS', 5)), // Máximo de fallos antes de abrir el circuito
+            'cache_key'      => env('IMG_SCAN_CIRCUIT_CACHE_KEY', 'image_scan:circuit_failures'), // Clave de caché para el circuito
+            'decay_seconds'  => (int) env('IMG_SCAN_CIRCUIT_TTL', 900), // Tiempo de expiración del circuito en segundos
         ],
 
-        // Allowed base directory for scanning (prevents path traversal)
+        // Directorio base permitido para escaneo (previene path traversal)
         'allowed_base_path' => value(function () {
             $fallback = sys_get_temp_dir();
             $default = storage_path('app/private/quarantine');
@@ -377,7 +464,7 @@ return [
             return $normalized;
         }),
 
-        // Base directory for scanning rules (YARA)
+        // Directorio base para reglas de escaneo (YARA)
         'allowed_rules_base_path' => value(function () {
             $default = base_path('security/yara');
             $envPath = env('IMG_SCAN_RULES_BASE', $default);
@@ -394,19 +481,28 @@ return [
             return rtrim($envPath, DIRECTORY_SEPARATOR);
         }),
 
-        // Allowlist of permitted executable binaries for scanning
+        // Allowlist de binarios ejecutables permitidos para escaneo
         'bin_allowlist' => value(function () {
-            $candidates = [
-                env('IMG_SCAN_CLAMAV_BIN', '/usr/bin/clamdscan'),
-                env('IMG_SCAN_YARA_BIN', '/usr/bin/yara'),
-            ];
-
+            $normalized = [];
             $envList = env('IMG_SCAN_BIN_ALLOWLIST');
+
             if (is_string($envList) && $envList !== '') {
-                $candidates = array_merge($candidates, preg_split('/[,\s;]+/', $envList) ?: []);
+                $candidates = preg_split('/[,\s;]+/', $envList) ?: [];
+            } else {
+                $candidates = [
+                    '/usr/bin/clamdscan',
+                    '/usr/local/bin/clamdscan',
+                    '/usr/local/bin/clamdscan-wrapper.sh',
+                    '/usr/bin/clamscan',
+                    '/usr/local/bin/clamscan',
+                ];
             }
 
-            $normalized = [];
+            $configuredBinary = env('IMG_SCAN_CLAMAV_BIN');
+            if (is_string($configuredBinary) && $configuredBinary !== '') {
+                $candidates[] = $configuredBinary;
+            }
+
             foreach ($candidates as $candidate) {
                 if (!is_string($candidate)) {
                     continue;
@@ -423,37 +519,62 @@ return [
             return array_values(array_unique($normalized));
         }),
 
-        // Maximum file size for individual scanning (bytes)
+        // Tamaño máximo de archivo para escaneo individual (bytes)
         'max_file_size_bytes' => env('IMG_SCAN_MAX_FILE_SIZE', 20 * 1024 * 1024),
 
-        // Idle timeout for scanning (seconds)
+        // Tiempo de espera inactivo para escaneo (segundos)
         'idle_timeout' => env('IMG_SCAN_IDLE_TIMEOUT', 10),
 
-        // Maximum size for scanning rules (bytes)
+        // Tamaño máximo para reglas de escaneo (bytes)
         'rules_max_bytes' => env('IMG_SCAN_RULES_MAX_BYTES', 2 * 1024 * 1024),
 
-        // ClamAV specific configuration
+        // Configuración específica de ClamAV
         'clamav' => [
-            'binary'   => env('IMG_SCAN_CLAMAV_BIN', '/usr/bin/clamdscan'),
-            'timeout'  => env('IMG_SCAN_CLAMAV_TIMEOUT', 10),
-            'arguments' => env('IMG_SCAN_CLAMAV_ARGS', '--no-summary --fdpass'),
+            'binary'   => env('IMG_SCAN_CLAMAV_BIN', '/usr/bin/clamdscan'), // Ruta al binario de ClamAV
+            'binary_fallbacks' => value(function () {
+                $fallbacks = [
+                    '/usr/bin/clamdscan',
+                    '/usr/local/bin/clamdscan',
+                    '/usr/local/bin/clamdscan-wrapper.sh',
+                    '/usr/bin/clamscan',
+                    '/usr/local/bin/clamscan',
+                ];
+
+                $normalized = [];
+                foreach ($fallbacks as $candidate) {
+                    if (! is_string($candidate)) {
+                        continue;
+                    }
+
+                    $trimmed = trim($candidate);
+                    if ($trimmed === '') {
+                        continue;
+                    }
+
+                    $normalized[] = $trimmed;
+                }
+
+                return array_values(array_unique($normalized));
+            }),
+            'timeout'  => env('IMG_SCAN_CLAMAV_TIMEOUT', 10), // Tiempo de espera en segundos
+            'arguments' => env('IMG_SCAN_CLAMAV_ARGS', '--no-summary --fdpass'), // Argumentos para el comando
         ],
 
-        // YARA specific configuration
+        // Configuración específica de YARA
         'yara' => [
-            'binary'    => env('IMG_SCAN_YARA_BIN', '/usr/bin/yara'),
-            'rules_path' => env('IMG_SCAN_YARA_RULES', base_path('security/yara/images.yar')),
-            'timeout'   => env('IMG_SCAN_YARA_TIMEOUT', 5),
-            'arguments' => env('IMG_SCAN_YARA_ARGS', '--fail-on-warnings --nothreads'),
+            'binary'    => env('IMG_SCAN_YARA_BIN', '/usr/bin/yara'), // Ruta al binario de YARA
+            'rules_path' => env('IMG_SCAN_YARA_RULES', base_path('security/yara/images.yar')), // Ruta a las reglas YARA
+            'timeout'   => env('IMG_SCAN_YARA_TIMEOUT', 5), // Tiempo de espera en segundos
+            'arguments' => env('IMG_SCAN_YARA_ARGS', '--fail-on-warnings --nothreads'), // Argumentos para el comando
         ],
     ],
 
-    // Suspicious payload patterns within image binaries (regex)
+    // Patrones de payload sospechosos dentro de binarios de imagen (regex)
     'suspicious_payload_patterns' => [
-        '/<\?php/i', // PHP code
-        '/<\?=/i',  // Short PHP code
-        '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i', // Dangerous functions
-        '/base64_decode\s*\(/i', // Base64 decoding
+        '/<\?php/i', // Código PHP
+        '/<\?=/i',  // Código PHP corto
+        '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s*\(/i', // Funciones peligrosas
+        '/base64_decode\s*\(/i', // Decodificación base64
     ],
 
     // =========================================================================
@@ -471,16 +592,16 @@ return [
 
     'resource_limits' => [
         'imagick' => [
-            // Maximum memory in MB for Imagick
+            // Memoria máxima en MB para Imagick
             'memory_mb' => env('IMG_IMAGICK_MEMORY_MB', 128),
-            // Maximum virtual memory in MB for Imagick
+            // Memoria virtual máxima en MB para Imagick
             'map_mb'    => env('IMG_IMAGICK_MAP_MB', 256),
-            // Maximum execution time in ms for Imagick operations
+            // Tiempo máximo de ejecución en ms para operaciones de Imagick
             'time_ms'   => env('IMG_IMAGICK_TIME_MS', 750),
-            // Maximum worker threads per Imagick operation
+            // Máximo de hilos de trabajo por operación de Imagick
             'threads'   => env('IMG_IMAGICK_THREADS', 2),
         ],
-        // Maximum memory in MB for GD operations (0 = unlimited)
+        // Memoria máxima en MB para operaciones GD (0 = ilimitado)
         'gd_memory_mb' => env('IMG_GD_MEMORY_MB', 0),
     ],
 
@@ -494,8 +615,8 @@ return [
     */
 
     'rate_limit' => [
-        'max_attempts' => env('IMG_RATE_MAX', 10),
-        'decay_seconds' => env('IMG_RATE_DECAY', 60),
+        'max_attempts' => env('IMG_RATE_MAX', 10), // Máximo de intentos
+        'decay_seconds' => env('IMG_RATE_DECAY', 60), // Tiempo de expiración en segundos
     ],
 
     /*
@@ -507,7 +628,7 @@ return [
     |
     */
 
-    // Default preference for queueing conversions (true = queued, false = sync)
+    // Preferencia por defecto para encolar conversiones (true = encolado, false = síncrono)
     'queue_conversions_default' => env('IMG_QUEUE_CONVERSIONS_DEFAULT', true),
 
     // =========================================================================
@@ -523,21 +644,33 @@ return [
     |
     */
 
-    // Predefined sizes for avatar collection
+    // Tamaños predefinidos para la colección de avatar
     'avatar_sizes' => [
-        'thumb'  => 128,
-        'medium' => 256,
-        'large'  => 512,
+        'thumb'  => 128, // Miniatura
+        'medium' => 256, // Tamaño medio
+        'large'  => 512, // Tamaño grande
     ],
 
-    // Specific preference for avatar collection (null = use queue_conversions_default)
+    // Preferencia específica para la colección de avatar (null = usar queue_conversions_default)
     'avatar_queue_conversions' => env('IMG_AVATAR_QUEUE_CONVERSIONS', null),
 
-    // Disk for avatar collection storage
+    // Disco para almacenamiento de la colección de avatar
     'avatar_disk' => env('AVATAR_DISK', env('FILESYSTEM_DISK', 'local')),
 
-    // Avatar collection name
+    // Nombre de la colección de avatar
     'avatar_collection' => env('AVATAR_COLLECTION', 'avatar'),
+
+    // TTL en horas para archivos en cuarentena de avatar
+    'avatar_quarantine_ttl_hours' => (int) env(
+        'IMG_AVATAR_QUARANTINE_TTL',
+        env('IMG_QUARANTINE_TTL_HOURS', 24),
+    ),
+
+    // TTL en horas para archivos fallidos de avatar
+    'avatar_failed_ttl_hours' => (int) env(
+        'IMG_AVATAR_FAILED_TTL',
+        env('IMG_QUARANTINE_FAILED_TTL_HOURS', 4),
+    ),
 
     /*
     |--------------------------------------------------------------------------
@@ -549,18 +682,30 @@ return [
     |
     */
 
-    // Disk for gallery collection storage
+    // Disco para almacenamiento de la colección de galería
     'gallery_disk' => env('GALLERY_DISK', env('FILESYSTEM_DISK', 'local')),
 
-    // Gallery collection name
+    // Nombre de la colección de galería
     'gallery_collection' => env('GALLERY_COLLECTION', 'gallery'),
 
-    // Predefined sizes for gallery collection
+    // Tamaños predefinidos para la colección de galería
     'gallery_sizes' => [
-        'thumb'  => 320,
-        'medium' => 1280,
-        'large'  => 2048,
+        'thumb'  => 320,  // Miniatura
+        'medium' => 1280, // Tamaño medio
+        'large'  => 2048, // Tamaño grande
     ],
+
+    // TTL en horas para archivos en cuarentena de galería
+    'gallery_quarantine_ttl_hours' => (int) env(
+        'IMG_GALLERY_QUARANTINE_TTL',
+        env('IMG_QUARANTINE_TTL_HOURS', 24),
+    ),
+
+    // TTL en horas para archivos fallidos de galería
+    'gallery_failed_ttl_hours' => (int) env(
+        'IMG_GALLERY_FAILED_TTL',
+        env('IMG_QUARANTINE_FAILED_TTL_HOURS', 4),
+    ),
 
     /*
     |--------------------------------------------------------------------------
@@ -572,7 +717,7 @@ return [
     |
     */
 
-    // Collections list for post-processing optimization
+    // Lista de colecciones para post-procesamiento de optimización
     'postprocess_collections' => env('IMG_POSTPROCESS_COLLECTIONS', 'avatar,gallery'),
 
     // =========================================================================
@@ -588,9 +733,9 @@ return [
     |
     */
 
-    // Log channel or stack (use null for default)
+    // Canal de log o stack (usar null para valor por defecto)
     'log_channel' => env('IMG_LOG_CHANNEL', null),
 
-    // Detail level for internal debug logs
+    // Nivel de detalle para logs de depuración internos
     'debug' => env('IMG_DEBUG', false),
 ];

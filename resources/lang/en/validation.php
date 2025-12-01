@@ -212,6 +212,7 @@ return [
             'max' => 'Your avatar may not exceed :max kilobytes.',
             'dimensions' => 'The image must be between 128x128 and 2048x2048 pixels.',
             'uploaded' => 'We could not process that image. Please try another file.',
+            'scan_unavailable' => 'We could not scan your avatar for viruses. Please try again in a few minutes.',
         ],
     ],
 

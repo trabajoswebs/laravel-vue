@@ -13,12 +13,12 @@ use Illuminate\Support\Str;
 use Intervention\Image\ImageManager;
 use RuntimeException;
 use Throwable;
-use App\Domain\User\ConversionProfiles\FileConstraints;
+use App\Application\Media\Contracts\FileConstraints;
 use App\Infrastructure\Media\Security\ImageMetadataReader;
 use App\Infrastructure\Media\Security\ImageNormalizer;
 use App\Infrastructure\Media\Security\MimeNormalizer;
 use App\Infrastructure\Media\Security\PayloadScanner;
-use App\Infrastructure\Media\Security\UploadValidationLogger;
+use App\Infrastructure\Media\Security\Upload\UploadValidationLogger;
 
 /**
  * Regla de validación endurecida para archivos de imagen.

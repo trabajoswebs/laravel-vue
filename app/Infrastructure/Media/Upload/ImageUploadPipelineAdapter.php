@@ -10,6 +10,7 @@ use App\Infrastructure\Media\Upload\Contracts\UploadMetadata;
 use App\Infrastructure\Media\Upload\Contracts\UploadPipeline;
 use App\Infrastructure\Media\Upload\Contracts\UploadResult;
 use App\Infrastructure\Media\Upload\Exceptions\UploadException;
+use App\Application\Media\Contracts\MediaProfile;
 use Illuminate\Http\UploadedFile;
 use SplFileObject;
 
@@ -52,8 +53,11 @@ final class ImageUploadPipelineAdapter implements UploadPipeline
      * @return UploadResult El resultado del proceso de subida.
      * @throws UploadException Si ocurre un error durante el proceso.
      */
-    public function process(UploadedFile|SplFileObject|string $source): UploadResult
-    {
+    public function process(
+        UploadedFile|SplFileObject|string $source,
+        MediaProfile $profile,
+        string $correlationId
+    ): UploadResult {
         // Convierte SplFileObject o string a UploadedFile
         if ($source instanceof SplFileObject) {
             $source = $this->uploadedFileFromSpl($source);

@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace App\Application\User\Events;
 
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-
 /**
  * Evento de dominio disparado cuando se elimina el avatar de un usuario.
  *
@@ -17,9 +14,6 @@ use Illuminate\Queue\SerializesModels;
  */
 class AvatarDeleted
 {
-    use Dispatchable;
-    use SerializesModels;
-
     /**
      * ID del usuario afectado.
      */

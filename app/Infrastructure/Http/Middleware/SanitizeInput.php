@@ -2,9 +2,9 @@
 
 namespace App\Infrastructure\Http\Middleware;
 
-use App\Domain\Security\SecurityHelper;
-use App\Application\Http\Requests\Concerns\SanitizesInputs;
-use App\Domain\Sanitization\DisplayName;
+use App\Infrastructure\Security\SecurityHelper;
+use App\Infrastructure\Http\Requests\Concerns\SanitizesInputs;
+use App\Infrastructure\Sanitization\DisplayName;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;

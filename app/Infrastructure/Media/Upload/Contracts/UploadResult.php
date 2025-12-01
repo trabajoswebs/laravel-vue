@@ -16,13 +16,13 @@ final class UploadResult
      * @param string               $path          Ruta o identificador final del archivo aceptado.
      * @param int                  $size          Tamaño del archivo en bytes después de la normalización.
      * @param UploadMetadata       $metadata      Metadata bien tipada del artefacto.
-     * @param string|null          $quarantineId  Identificador/ruta del artefacto en cuarentena (si aplica).
+     * @param \App\Infrastructure\Media\Upload\Core\QuarantineToken|null $quarantineId  Token del artefacto en cuarentena (si aplica).
      */
     public function __construct(
         public readonly string $path,
         public readonly int $size,
         public readonly UploadMetadata $metadata,
-        public readonly ?string $quarantineId = null,
+        public readonly ?\App\Infrastructure\Media\Upload\Core\QuarantineToken $quarantineId = null,
     ) {
     }
 }

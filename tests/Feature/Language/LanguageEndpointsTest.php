@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Language;
 
-use App\Domain\User\User;
+use App\Infrastructure\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Config;

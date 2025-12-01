@@ -11,12 +11,14 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media; // Ej.: "App\Infrastructure\Media"
 
-use App\Domain\User\Contracts\MediaOwner; // Interfaz que expone getMedia() // Ej.: $owner->getMedia('avatar') => Collection<Media>
+use App\Application\Media\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract;
+use App\Application\Media\Contracts\MediaOwner; // Interfaz que expone getMedia() // Ej.: $owner->getMedia('avatar') => Collection<Media>
 use Illuminate\Contracts\Filesystem\Factory as StorageFactory; // Acceso a discos Laravel // Ej.: app('filesystem')->disk('s3')
 use Illuminate\Filesystem\FilesystemAdapter; // Adapter de Laravel (envoltorio de Flysystem) // Ej.: Storage::disk('s3') devuelve FilesystemAdapter
 use League\Flysystem\FilesystemOperator; // Driver nativo Flysystem v3 // Ej.: $adapter->getDriver()
 use Psr\Log\LoggerInterface; // PSR-3 logger // Ej.: $logger->info('msg')
 use Psr\Log\LogLevel; // Niveles estándar PSR-3 // Ej.: LogLevel::DEBUG
+use App\Infrastructure\Media\Adapters\SpatieMediaResource;
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media de Spatie // Ej.: Media::find(1)
 use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator; // Generador de rutas v10/v11 // Ej.: $paths->getPath($media)
 
@@ -35,7 +37,7 @@ use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator; // Generador de rut
  * - Filtros por tipo de artefacto (original/conversions/responsive)
  * - Opción para asumir existencia por disco (p.ej., S3) vía config
  */
-final class MediaArtifactCollector // Final: evita herencia accidental
+final class MediaArtifactCollector implements MediaArtifactCollectorContract // Final: evita herencia accidental
 {
     // Tipos de artefactos soportados
     private const TYPE_ORIGINAL    = 'original';    // Directorio del original // Ej.: "1/2"
@@ -89,17 +91,18 @@ final class MediaArtifactCollector // Final: evita herencia accidental
      *   ]
      * ]
      */
-    public function collect(MediaOwner $owner, string $collection, array $types = self::ALL_TYPES): array
+    public function collect(MediaOwner $owner, string $collection, array $types = []): array
     {
         // Lee flags una sola vez
         [$shouldCheck, $logMissingAsDebug, $assumeExistForDisks] = $this->configFlags(); // Ej.: [true,true,['s3']]
 
         $items = []; // Resultado
         $mediaItems = $owner->getMedia($collection); // Collection<Media> // Ej.: $user->getMedia('avatar')
+        $types = $types === [] ? self::ALL_TYPES : $types;
 
         foreach ($mediaItems as $media) {
             $items[] = [
-                'media'     => $media,
+                'media'     => new SpatieMediaResource($media),
                 'artifacts' => $this->directoriesMapForMedia(
                     $media,
                     $types,
@@ -135,7 +138,7 @@ final class MediaArtifactCollector // Final: evita herencia accidental
 
         foreach ($mediaItems as $media) {
             $items[] = [
-                'media' => $media,
+                'media' => new SpatieMediaResource($media),
                 'disks' => $this->directoriesDetailedForMedia(
                     $media,
                     $types,

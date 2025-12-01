@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media\Security;
 
+use App\Infrastructure\Media\Security\Upload\UploadValidationLogger;
 use RuntimeException;
 
 /**
@@ -47,18 +48,26 @@ final class PayloadScanner
         if ($defaultScanBytes <= 0) {
             $defaultScanBytes = 50 * 1024;
         }
-        $explicitScanBytes = $scanBytes ?? $defaultScanBytes;
-        $this->scanBytes = max(1, $explicitScanBytes);
-        // Sanitiza y establece los patrones de búsqueda
-        $this->patterns = $this->sanitizePatterns($patterns ?? config('image-pipeline.suspicious_payload_patterns'));
 
-        // Si no hay patrones válidos, establece los patrones por defecto
+        $explicitScanBytes = $scanBytes ?? $defaultScanBytes;
+
+        // Tope de seguridad para evitar configuraciones absurdas (p.ej. 100MB)
+        $maxScanBytes = 5 * 1024 * 1024; // 5 MB
+        $this->scanBytes = min(max(1, $explicitScanBytes), $maxScanBytes);
+
+        // Sanitiza y establece los patrones de búsqueda
+        $this->patterns = $this->sanitizePatterns(
+            $patterns ?? config('image-pipeline.suspicious_payload_patterns')
+        );
+
+        // Si no hay patrones válidos, establece los patrones por defecto (ligeramente ajustados)
         if ($this->patterns === []) {
             $this->patterns = [
                 '/<\?php/i', // Detecta apertura de PHP
-                '/<\?=/i', // Detecta apertura corta de PHP con echo
-                '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s{0,100}\(/i', // Detecta funciones de ejecución de comandos
-                '/base64_decode\s{0,100}\(/i', // Detecta base64_decode que puede usarse para ofuscar código
+                '/<\?=/i',   // Detecta apertura corta de PHP con echo
+                // Reducimos el rango de espacios para evitar cuantificadores demasiado amplios
+                '/(eval|assert|system|exec|passthru|shell_exec|proc_open)\s{0,32}\(/i',
+                '/base64_decode\s{0,32}\(/i',
             ];
         }
     }
@@ -88,10 +97,19 @@ final class PayloadScanner
         try {
             // Lee la cantidad especificada de bytes del archivo
             $bytes = fread($handle, $this->scanBytes);
-            // Si no se pudieron leer bytes o están vacíos, devuelve false
-            if ($bytes === false || $bytes === '') {
+
+            // Si la lectura falla, registra y devuelve false
+            if ($bytes === false) {
+                $this->logger->warning('image_scan_read_failed', $originalName, ['reason' => 'read_failed'], $userId);
                 return false;
             }
+
+            // Si el archivo está vacío, lo registramos y se considera no válido
+            if ($bytes === '') {
+                $this->logger->warning('image_scan_empty_file', $originalName, [], $userId);
+                return false;
+            }
+
             // Evalúa el contenido leído contra los patrones sospechosos
             return $this->contentIsClean($bytes, $originalName, $userId);
         } finally {
@@ -116,6 +134,7 @@ final class PayloadScanner
     {
         // Extrae un fragmento del contenido para escanear (hasta el límite de bytes)
         $snippet = substr($content, 0, $this->scanBytes);
+        unset($content); // Liberar memoria si el contenido original es grande
 
         // Itera sobre cada patrón sospechoso
         foreach ($this->patterns as $pattern) {
@@ -145,6 +164,8 @@ final class PayloadScanner
      *
      * Toma una variable de entrada que puede ser un array de cadenas o un array
      * de arrays con claves 'pattern', y devuelve un array plano de cadenas no vacías.
+     * Además, valida que cada patrón sea un regex válido; si no lo es, se registra
+     * un warning y se descarta.
      *
      * @param mixed $value El valor a sanitizar. Espera un array.
      * @return array<string> Un array de patrones válidos (cadenas no vacías).
@@ -159,19 +180,34 @@ final class PayloadScanner
         $patterns = [];
         // Itera sobre cada elemento del array de entrada
         foreach ($value as $pattern) {
-            // Si es una cadena no vacía, agrégala
+            $candidate = null;
+
+            // Si es una cadena no vacía, úsala directamente
             if (is_string($pattern) && $pattern !== '') {
-                $patterns[] = $pattern;
-                continue;
+                $candidate = $pattern;
             }
 
             // Si es un array con una clave 'pattern' que es una cadena, úsala
-            if (is_array($pattern) && isset($pattern['pattern']) && is_string($pattern['pattern'])) {
-                $patterns[] = $pattern['pattern'];
+            if ($candidate === null && is_array($pattern) && isset($pattern['pattern']) && is_string($pattern['pattern'])) {
+                $candidate = $pattern['pattern'];
             }
+
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            // Validar el patrón en construcción: si es inválido, se registra y se descarta
+            if (@preg_match($candidate, '') === false) {
+                $this->logger->warning('image_payload_pattern_invalid_config', '', ['pattern' => $candidate], null);
+                continue;
+            }
+
+            $patterns[] = $candidate;
         }
 
         // Filtra cadenas vacías y reindexa el array
-        return array_values(array_filter($patterns, static fn(string $p): bool => $p !== ''));
+        return array_values(
+            array_filter($patterns, static fn(string $p): bool => $p !== '')
+        );
     }
 }

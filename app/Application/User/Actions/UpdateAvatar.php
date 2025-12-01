@@ -4,162 +4,57 @@ declare(strict_types=1);
 
 namespace App\Application\User\Actions;
 
-use App\Application\User\Events\AvatarUpdated;
-use App\Domain\User\User;
-use App\Domain\User\Profiles\AvatarProfile;
-use App\Application\Media\Services\MediaReplacementService;
-use Illuminate\Http\UploadedFile;
-use App\Infrastructure\Security\AvatarHeaderInspector;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use App\Application\Media\Contracts\MediaUploader;
+use App\Application\Media\Contracts\MediaOwner;
+use App\Application\Media\Contracts\MediaProfile;
+use App\Application\Media\Contracts\UploadedMedia;
+use App\Application\Shared\Contracts\LoggerInterface;
 use Illuminate\Support\Str;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * Acción invocable para actualizar el avatar de un usuario.
  *
- * Esta clase encapsula toda la lógica necesaria para reemplazar el avatar de un usuario,
- * incluyendo la validación, procesamiento, conversión, registro de logs y emisión de eventos.
- * Utiliza una transacción de base de datos para asegurar la consistencia de los datos.
+ * Esta clase encapsula la orquestación ligera para encolar el procesamiento de avatar.
+ * La normalización/AV/persistencia se ejecuta en segundo plano vía job.
  */
 final class UpdateAvatar
 {
     /**
      * Constructor que inyecta las dependencias necesarias.
      *
-     * @param MediaReplacementService $replacement Servicio encargado del reemplazo y conversión de medios.
-     * @param AvatarProfile           $profile     Perfil específico para el avatar que define las conversiones y la colección.
+     * @param MediaProfile         $profile  Perfil específico para el avatar que define las conversiones y la colección.
      */
     public function __construct(
-        private readonly MediaReplacementService $replacement,
-        private readonly AvatarProfile $profile,
+        private readonly MediaUploader $uploader,
+        private readonly MediaProfile $profile,
+        private readonly LoggerInterface $logger,
     ) {}
 
     /**
      * Actualiza el avatar del usuario con el archivo proporcionado.
      *
      * Esta acción:
-     * 1. Bloquea la fila del usuario para evitar concurrencia.
-     * 2. Obtiene el medio actual (avatar anterior).
-     * 3. Reemplaza el avatar con el nuevo archivo.
-     * 4. Actualiza el campo de versión del usuario si aplica.
-     * 5. Registra un evento de log de la operación.
-     * 6. Dispara un evento `AvatarUpdated` *después* del commit de la transacción.
+     * 1. Valida/duplica el archivo en la fase HTTP (vía uploader).
+     * 2. Encola el job que procesará AV + normalización + persistencia.
+     * 3. Devuelve un ticket de procesamiento para seguimiento en cliente.
      *
-     * @param User           $user El modelo de usuario cuyo avatar se va a actualizar.
-     * @param UploadedFile   $file El archivo de imagen subido por el usuario.
+     * @param MediaOwner     $user Modelo que posee el avatar.
+     * @param UploadedMedia   $file El archivo de imagen subido por el usuario.
      *
-     * @return Media El modelo de medio recién creado y procesado que representa el nuevo avatar.
      */
-    public function __invoke(User $user, UploadedFile $file, ?string $uploadUuid = null): Media
+    public function __invoke(MediaOwner $user, UploadedMedia $file, ?string $uploadUuid = null)
     {
-        $collection = $this->profile->collection();
-        $disk = $this->profile->disk();
         $uuid = $uploadUuid ?? (string) Str::uuid();
-        $remoteDisk = $this->isRemoteDisk($disk);
+        $ticket = $this->uploader->upload($user, $file, $this->profile, $uuid);
 
-        return DB::transaction(function () use ($user, $file, $collection, $uuid, $disk, $remoteDisk): Media {
-            // Bloquea la fila del usuario para evitar operaciones concurrentes.
-            $locked = User::query()->lockForUpdate()->findOrFail($user->getKey());
-            // Obtiene el avatar anterior (si existe).
-            $oldMedia = $locked->getFirstMedia($collection);
+        $this->logger->info('avatar.upload.enqueued', [
+            'user_id' => $user->getKey(),
+            'collection' => $this->profile->collection(),
+            'upload_uuid' => $uuid,
+            'quarantine_id' => $ticket->quarantineId,
+            'correlation_id' => $ticket->correlationId,
+        ]);
 
-            // Reemplaza el avatar y obtiene el resultado (nuevo medio y snapshot).
-            $result = $this->replacement->replaceWithSnapshot($locked, $file, $this->profile);
-            $media = tap($result->media)->refresh(); // Refresca el modelo para asegurar consistencia.
-
-            // Persiste identificador idempotente.
-            $media->setCustomProperty('upload_uuid', $uuid);
-            $media->save();
-
-            // Intenta obtener la versión del medio desde una propiedad personalizada.
-            $version = rescue(
-                fn () => filled($value = $media->getCustomProperty('version')) ? (string) $value : null,
-                null
-            );
-
-            // Si el modelo de usuario define un campo de versión para esta colección, lo actualiza.
-            if (method_exists($locked, 'getMediaVersionColumn') && ($column = $locked->getMediaVersionColumn($collection))) {
-                $locked->{$column} = $version;
-                $locked->save();
-            }
-
-            // Registra un log de la operación de actualización del avatar.
-            $headers = (array) $media->getCustomProperty('headers', []);
-            foreach (AvatarHeaderInspector::detectIssues($headers) as $issue) {
-                $context = [
-                    'user_id' => $locked->getKey(),
-                    'media_id' => $media->id,
-                ];
-
-                if ($issue['type'] === 'acl_unexpected') {
-                    Log::warning('avatar.headers.acl_unexpected', array_merge($context, [
-                        'expected' => $issue['expected'],
-                        'received' => $issue['received'],
-                    ]));
-                    continue;
-                }
-
-                if ($issue['type'] === 'content_type_missing') {
-                    Log::warning('avatar.headers.content_type_missing', $context);
-                }
-            }
-
-            Log::info('avatar.updated', [
-                'user_id'      => $locked->getKey(),
-                'collection'   => $collection,
-                'media_id'     => $media->id,
-                'replaced_id'  => $oldMedia?->id,
-                'version'      => $version,
-                'upload_uuid'  => $uuid,
-                'disk'         => $disk,
-                'headers_acl'  => $headers['ACL'] ?? null,
-                'content_type' => $headers['ContentType'] ?? null,
-            ]);
-
-            if ($remoteDisk) {
-                Log::notice('avatar.remote_disk_detected', [
-                    'user_id'    => $locked->getKey(),
-                    'media_id'   => $media->id,
-                    'disk'       => $disk,
-                    'upload_uuid'=> $uuid,
-                ]);
-            }
-
-            // Dispara el evento AvatarUpdated *después* de que la transacción se haya confirmado.
-            DB::afterCommit(function () use ($locked, $media, $oldMedia, $collection, $version) {
-                if (!class_exists(AvatarUpdated::class)) {
-                    return; // Evita errores si el evento no está definido (por ejemplo, en tests).
-                }
-
-                event(new AvatarUpdated(
-                    user: $locked,
-                    newMedia: $media,
-                    oldMedia: $oldMedia,
-                    version: $version,
-                    collection: $collection,
-                    url: $media->getUrl()
-                ));
-            });
-
-            return $media;
-        });
-    }
-
-    private function isRemoteDisk(?string $disk): bool
-    {
-        if ($disk === null || $disk === '') {
-            return false;
-        }
-
-        $driver = config("filesystems.disks.{$disk}.driver");
-        if (!is_string($driver) || $driver === '') {
-            return false;
-        }
-
-        $driver = strtolower($driver);
-
-        return str_contains($driver, 's3')
-            || in_array($driver, ['ftp', 'sftp', 's3', 's3-compatible'], true);
+        return $ticket;
     }
 }

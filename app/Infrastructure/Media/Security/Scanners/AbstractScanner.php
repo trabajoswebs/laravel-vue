@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media\Security\Scanners;
 
+use App\Infrastructure\Security\Exceptions\AntivirusException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
@@ -88,7 +89,7 @@ abstract class AbstractScanner
         $build = $this->buildCommand($binary, $arguments, $target, $scanConfig, $scannerConfig);
         if ($build === null) {
             $this->closeHandle($target['handle'] ?? null);
-            return false;
+            return $this->failOpen($strictMode, 'build_failed');
         }
 
         // Maneja casos especiales devueltos por buildCommand.
@@ -153,7 +154,7 @@ abstract class AbstractScanner
                 ['tmp_path' => $target['display_name']]
             );
 
-            return false;
+            return $this->failOpen($strictMode, 'process_timeout');
         } catch (Throwable $exception) {
             Log::error(
                 sprintf('image_scan.%s_exception', $this->scannerKey()),
@@ -163,7 +164,7 @@ abstract class AbstractScanner
                 ]
             );
 
-            return false;
+            return $this->failOpen($strictMode, 'process_exception');
         } finally {
             // Cierra handles y ejecuta limpieza en el bloque finally.
             if (! $usesTargetHandle) {
@@ -212,7 +213,7 @@ abstract class AbstractScanner
             ]
         );
 
-        return false;
+        return $this->failOpen($strictMode, 'process_failed');
     }
 
     /**
@@ -561,7 +562,7 @@ abstract class AbstractScanner
     {
         if ($strictMode) {
             Log::alert(sprintf('image_scan.%s_fail_closed', $this->scannerKey()), ['reason' => $reason]);
-            return false;
+            throw new AntivirusException($this->scannerKey(), $reason);
         }
 
         Log::warning(sprintf('image_scan.%s_fail_open', $this->scannerKey()), ['reason' => $reason]);

@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Media\Observers;
 
 // 3. Importaciones de clases necesarias.
-use App\Application\Media\Services\MediaCleanupScheduler;
+use App\Application\Media\Contracts\MediaCleanupScheduler;
 use Illuminate\Support\Facades\Log;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 

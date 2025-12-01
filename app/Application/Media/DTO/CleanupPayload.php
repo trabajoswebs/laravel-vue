@@ -6,10 +6,9 @@ declare(strict_types=1);
 // 2. Espacio de nombres para el DTO (Data Transfer Object) de limpieza de medios.
 namespace App\Application\Media\DTO;
 
-// 3. Importación de la clase Media de la librería Spatie.
 use App\Domain\Media\DTO\ConversionExpectations;
-use App\Domain\Media\DTO\ReplacementSnapshot;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;
+use App\Domain\Media\DTO\MediaReplacementItemSnapshot;
+use App\Domain\Media\DTO\MediaReplacementSnapshot;
 
 /**
  * Payload listo para programar cleanup tras conversions.
@@ -21,14 +20,14 @@ final class CleanupPayload
     /**
      * Constructor privado para evitar instanciación directa desde fuera de la clase.
      *
-     * @param Media $triggerMedia      Media que disparará el cleanup cuando termine conversions.
+     * @param MediaReplacementItemSnapshot $triggerMedia Datos del media que disparará el cleanup cuando termine conversions.
      * @param array<string,list<array{dir:string,mediaId:string}>> $artifacts Agrupados por disco.
      * @param array<int,string> $preserveIds IDs de medias que no deben eliminarse.
      * @param ConversionExpectations $expectations Conversions esperadas del media nuevo.
      * @param array<int,string> $originMediaIds IDs de medias reemplazadas.
      */
     private function __construct(
-        public readonly Media $triggerMedia,
+        public readonly MediaReplacementItemSnapshot $triggerMedia,
         public readonly array $artifacts,
         public readonly array $preserveIds,
         public readonly ConversionExpectations $expectations,
@@ -39,15 +38,15 @@ final class CleanupPayload
      * Crea una instancia vacía de CleanupPayload.
      * Útil cuando no hay artefactos antiguos que limpiar, pero se necesita un payload para el proceso.
      *
-     * @param Media $triggerMedia El modelo Media que activa la limpieza.
+     * @param MediaReplacementItemSnapshot $triggerMedia El media que activa la limpieza.
      * @return self Nueva instancia vacía.
      */
-    public static function empty(Media $triggerMedia): self
+    public static function empty(MediaReplacementItemSnapshot $triggerMedia): self
     {
         return new self(
             $triggerMedia,
             [], // No hay artefactos.
-            [(string) $triggerMedia->getKey()], // El triggerMedia no se debe limpiar.
+            [$triggerMedia->getKey()], // El triggerMedia no se debe limpiar.
             ConversionExpectations::empty(), // No hay conversiones esperadas.
             [] // No hay medias de origen.
         );
@@ -56,14 +55,14 @@ final class CleanupPayload
     /**
      * Crea una instancia de CleanupPayload a partir de una instantánea de reemplazo.
      *
-     * @param ReplacementSnapshot $snapshot Instantánea que contiene información de los medios reemplazados y sus artefactos.
-     * @param Media $triggerMedia El modelo Media que activa la limpieza.
+     * @param MediaReplacementSnapshot $snapshot Instantánea que contiene información de los medios reemplazados y sus artefactos.
+     * @param MediaReplacementItemSnapshot $triggerMedia El media que activa la limpieza.
      * @param ConversionExpectations $expectations Las conversiones esperadas del nuevo medio.
      * @return self Nueva instancia con los datos de la instantánea.
      */
     public static function fromSnapshot(
-        ReplacementSnapshot $snapshot,
-        Media $triggerMedia,
+        MediaReplacementSnapshot $snapshot,
+        MediaReplacementItemSnapshot $triggerMedia,
         ConversionExpectations $expectations
     ): self {
         $aggregated = []; // Array para agrupar artefactos por disco.
@@ -77,12 +76,12 @@ final class CleanupPayload
             }
 
             // Obtiene el ID del modelo Media del ítem actual.
-            $mediaId = (string) $item->media->getKey();
+            $mediaId = (string) $item->getKey();
             // Registra el ID como una media de origen.
             $origins[$mediaId] = true;
 
             // Itera sobre los artefactos del ítem, agrupados por disco.
-            foreach ($item->artifacts as $disk => $paths) {
+            foreach ($item->artifacts() as $disk => $paths) {
                 // Itera sobre las rutas de los artefactos en el disco actual.
                 foreach ($paths as $path) {
                     // Agrega el directorio y el ID del medio a la agrupación por disco.
@@ -95,7 +94,7 @@ final class CleanupPayload
         }
 
         // El ID del triggerMedia se debe preservar, ya que es el nuevo archivo.
-        $preserve = [(string) $triggerMedia->getKey()];
+        $preserve = [$triggerMedia->getKey()];
 
         // Retorna una nueva instancia con los datos procesados.
         return new self(

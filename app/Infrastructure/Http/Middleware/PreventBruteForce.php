@@ -2,7 +2,7 @@
 
 namespace App\Infrastructure\Http\Middleware;
 
-use App\Domain\Security\RateLimitSignatureFactory;
+use App\Infrastructure\Security\RateLimitSignatureFactory;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;

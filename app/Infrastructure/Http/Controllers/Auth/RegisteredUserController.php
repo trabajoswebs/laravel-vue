@@ -2,9 +2,9 @@
 
 namespace App\Infrastructure\Http\Controllers\Auth;
 
-use App\Domain\Security\SecurityHelper;
+use App\Infrastructure\Security\SecurityHelper;
 use App\Infrastructure\Http\Controllers\Controller;
-use App\Domain\User\User;
+use App\Infrastructure\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,10 +17,18 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Controlador para el registro de nuevos usuarios.
+ * 
+ * Maneja la creación de nuevos usuarios con validación, sanitización
+ * y seguridad adecuadas para proteger contra ataques comunes.
+ */
 class RegisteredUserController extends Controller
 {
     /**
      * Mostrar la página de registro.
+     *
+     * @return Response Vista de registro de usuario
      */
     public function create(): Response
     {
@@ -30,7 +38,9 @@ class RegisteredUserController extends Controller
     /**
      * Manejar una solicitud de registro.
      *
-     * @throws \Illuminate\Validation\ValidationException
+     * @param Request $request Solicitud HTTP con datos de registro
+     * @return RedirectResponse Redirección después del registro exitoso
+     * @throws ValidationException Si los datos no son válidos
      */
     public function store(Request $request): RedirectResponse
     {
@@ -90,6 +100,7 @@ class RegisteredUserController extends Controller
             }
 
             // Crear usuario
+            $user = null;
             DB::transaction(function () use ($userData, &$user) {
                 $user = User::create($userData); // rellena solo name,email,password
             });
@@ -107,7 +118,7 @@ class RegisteredUserController extends Controller
             Auth::login($user);
 
             return redirect()->route('dashboard')
-                ->with('success', SecurityHelper::sanitizeOutput(__('auth.registration_successful'))); 
+                ->with('success', SecurityHelper::sanitizeOutput(__('auth.registration_successful')));
         } catch (\Exception $e) {
             // Log del error sin exponer información sensible
             Log::error('Error en registro de usuario', [
@@ -126,10 +137,10 @@ class RegisteredUserController extends Controller
 
     /**
      * Preparar datos del usuario para la creación usando SecurityHelper
-     * @param array $validated
-     * @return array
-    */
-    // Prepare user data for creation using SecurityHelper
+     * 
+     * @param array $validated Datos validados del formulario
+     * @return array Datos preparados para la creación del usuario
+     */
     private function prepareUserData(array $validated): array
     {
         return [
@@ -140,9 +151,10 @@ class RegisteredUserController extends Controller
     }
 
     /**
-     * @param array $userData
-     * @return bool
      * Verificar que los datos sanitizados son seguros
+     * 
+     * @param array $userData Datos del usuario ya sanitizados
+     * @return bool True si los datos son seguros, false en caso contrario
      */
     private function isDataSecure(array $userData): bool
     {
@@ -166,8 +178,9 @@ class RegisteredUserController extends Controller
 
     /**
      * Obtener el dominio del email para logging (sin exponer el email completo)
-     * @param string $email
-     * @return string
+     * 
+     * @param string $email Email completo
+     * @return string Dominio del email
      */
     private function getEmailDomain(string $email): string
     {

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+if [ "$SUPERVISOR_PHP_USER" != "root" ] && [ "$SUPERVISOR_PHP_USER" != "sail" ]; then
+    echo "You should set SUPERVISOR_PHP_USER to either 'sail' or 'root'."
+    exit 1
+fi
+
+if [ ! -z "$WWWUSER" ]; then
+    usermod -u $WWWUSER sail
+fi
+
+if [ ! -d /.composer ]; then
+    mkdir /.composer
+fi
+
+chmod -R ugo+rw /.composer
+
+if [ ! -d /run/clamav ]; then
+    mkdir -p /run/clamav
+fi
+if [ ! -d /var/log/clamav ]; then
+    mkdir -p /var/log/clamav
+fi
+chown -R clamav:clamav /run/clamav /var/log/clamav
+
+if command -v ensure-clamav-db >/dev/null 2>&1; then
+    if ! /usr/local/bin/ensure-clamav-db --quiet; then
+        echo "Failed to prepare ClamAV virus definitions. Check your network connection or disable IMG_SCAN_ENABLED." >&2
+        exit 1
+    fi
+fi
+
+if command -v wait-for-clamd >/dev/null 2>&1; then
+    if [[ ${SUPERVISOR_PHP_COMMAND} != /usr/local/bin/wait-for-clamd* ]]; then
+        export SUPERVISOR_PHP_COMMAND="/usr/local/bin/wait-for-clamd ${SUPERVISOR_PHP_COMMAND}"
+    fi
+fi
+
+if [ $# -gt 0 ]; then
+    if [ "$SUPERVISOR_PHP_USER" = "root" ]; then
+        exec "$@"
+    else
+        exec gosu $WWWUSER "$@"
+    fi
+else
+    exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+fi

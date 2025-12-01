@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Media\Security;
 
 use App\Infrastructure\Media\Security\MimeNormalizer;
+use App\Infrastructure\Media\Security\Upload\UploadValidationLogger;
 
 /**
  * Clase encargada de leer y validar metadatos de imágenes.

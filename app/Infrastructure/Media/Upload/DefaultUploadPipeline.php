@@ -4,91 +4,140 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media\Upload;
 
+use App\Application\Media\Contracts\FileConstraints;
+use App\Application\Media\Contracts\MediaProfile;
+use App\Infrastructure\Media\Security\MagicBytesValidator;
+use App\Infrastructure\Media\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Media\Upload\Contracts\UploadMetadata;
 use App\Infrastructure\Media\Upload\Contracts\UploadPipeline;
 use App\Infrastructure\Media\Upload\Contracts\UploadResult;
 use App\Infrastructure\Media\Upload\Exceptions\UnexpectedUploadException;
 use App\Infrastructure\Media\Upload\Exceptions\UploadException;
 use App\Infrastructure\Media\Upload\Exceptions\UploadValidationException;
+use App\Infrastructure\Media\Upload\ImageUploadPipelineAdapter;
 use Illuminate\Http\UploadedFile;
 use SplFileObject;
 use Throwable;
 
 /**
  * Pipeline de ejemplo que analiza y normaliza archivos sin cargarlos completamente en memoria.
+ * 
+ * Esta clase implementa un pipeline de subida de archivos que procesa los archivos
+ * en bloques pequeños para evitar el uso excesivo de memoria y realizar validaciones
+ * de seguridad sin cargar todo el archivo en memoria.
  */
 final class DefaultUploadPipeline implements UploadPipeline
 {
-    private const CHUNK_SIZE = 131_072; // 128KB
-    private const SCAN_OVERLAP = 64;
-    private const MAX_DIMENSION = 10_000;
-    private const MAX_MEGAPIXELS = 40_000_000;
+    // Tamaño del bloque para leer archivos (128KB)
+    private const CHUNK_SIZE = 131_072;
+
+    // Número de bytes para solapamiento en escaneo de bloques
+    private const SCAN_OVERLAP = 512;
 
     /**
      * Buffer utilizada para buscar patrones entre chunks.
+     * 
+     * Permite detectar patrones peligrosos que podrían estar divididos
+     * entre bloques consecutivos.
      */
     private string $scanBuffer = '';
 
     /**
-     * @param array<int, string> $allowedMimeTypes Tipos MIME permitidos.
-     * @param array<int, string> $allowedExtensions Extensiones permitidas.
+     * Constructor del pipeline de subida.
+     * 
+     * @param string $workingDirectory Directorio temporal para archivos de trabajo
+     * @param ImageUploadPipelineAdapter $imagePipeline Adaptador para procesamiento de imágenes
+     * @param MagicBytesValidator $magicBytes Validador de firmas/magic bytes
+     * @param UploadSecurityLogger $securityLogger Logger de eventos de seguridad
      */
     public function __construct(
         private readonly string $workingDirectory,
-        private readonly array $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'],
-        private readonly array $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'],
-        private readonly int $maxFileSize = 25 * 1024 * 1024, // 25MB
+        private readonly ImageUploadPipelineAdapter $imagePipeline,
+        private readonly MagicBytesValidator $magicBytes,
+        private readonly UploadSecurityLogger $securityLogger,
     ) {
         $this->ensureWorkingDirectory();
     }
 
     /**
      * @inheritDoc
+     * 
+     * Procesa un archivo de subida aplicando validaciones y normalización.
+     * 
+     * Si el perfil requiere normalización de imagen, delega al adaptador de imagen.
+     * De lo contrario, procesa el archivo en bloques para análisis de seguridad,
+     * valida las firmas dentro del lock y registra eventos en el logger.
      */
-    public function process(UploadedFile|SplFileObject|string $source): UploadResult
-    {
+    public function process(
+        UploadedFile|SplFileObject|string $source,
+        MediaProfile $profile,
+        string $correlationId
+    ): UploadResult {
+        if ($profile->requiresImageNormalization()) {
+            // Delegamos a ImagePipeline cuando el perfil exige normalización completa.
+            return $this->imagePipeline->process($source, $profile, $correlationId);
+        }
+
         $normalizedPath = null;
         $originalFilename = $this->resolveOriginalFilename($source);
+        $securityContext = [
+            'correlation_id' => $correlationId,
+            'profile' => $profile->collection(),
+            'filename' => $this->sanitizeFilenameForLog($originalFilename),
+        ];
 
         try {
+            $constraints = $profile->fileConstraints();
+
             // Resuelve el archivo como un SplFileObject
             $file = $this->resolveFileObject($source);
-            // Valida propiedades del archivo (tamaño, tipo, etc.)
-            $baselineHash = $this->validateFileProperties($file, $originalFilename);
 
-            // Analiza el archivo en bloques para seguridad
-            $this->analyze($file);
-            // Verifica que el archivo no haya cambiado durante el proceso
-            $this->ensureChecksumUnchanged($file, $baselineHash);
+            $this->withSharedFileLock($file, function (SplFileObject $lockedFile) use ($originalFilename, $constraints): void {
+                $baselineHash = $this->validateFileProperties($lockedFile, $originalFilename, $constraints);
+                $this->analyze($lockedFile);
+                $this->ensureChecksumUnchanged($lockedFile, $baselineHash);
+            });
+            // Valida magic bytes/anti-polyglot sobre la copia a procesar dentro del lock.
+            $realPath = $file->getRealPath();
+            if (!is_string($realPath) || $realPath === '') {
+                throw new UploadValidationException('Unable to resolve upload path for magic bytes validation.');
+            }
+            $this->magicBytes->validate($realPath, $constraints, $securityContext);
+
             // Normaliza el archivo (limpieza, metadata, etc.)
             $normalizedPath = $this->normalize($file);
             $normalizedFile = new SplFileObject($normalizedPath, 'rb');
             $normalizedFile->rewind();
-            $this->validateFileProperties($normalizedFile, $originalFilename);
+            $this->validateFileProperties($normalizedFile, $originalFilename, $constraints);
 
             // Extrae información del archivo normalizado
             $size = $this->safeFilesize($normalizedPath);
             $mime = $this->detectMime($normalizedPath);
             // Si es una imagen, intenta leer dimensiones
             $dimensions = $this->isImageMime($mime) ? $this->tryReadDimensions($normalizedPath) : null;
+            $this->enforceDecompressionRatio($mime, $dimensions, $size, $constraints);
 
             // Crea metadatos del archivo
             $metadata = new UploadMetadata(
                 mime: $mime,
-                extension: $this->guessExtension($normalizedPath, $originalFilename, $mime),
+                extension: $this->guessExtension($normalizedPath, $originalFilename, $mime, $constraints),
                 hash: hash_file('sha256', $normalizedPath),
                 dimensions: $dimensions,
                 originalFilename: $originalFilename,
             );
+            $this->securityLogger->normalized($securityContext + [
+                'mime' => $mime,
+                'size' => $size,
+            ]);
 
             // Retorna el resultado del proceso de subida
             return new UploadResult(
                 path: $normalizedPath,
                 size: $size,
                 metadata: $metadata,
-                quarantineId: $this->resolveQuarantineReference($source),
             );
         } catch (Throwable $exception) {
+            $this->securityLogger->validationFailed($securityContext + ['error' => $exception->getMessage()]);
             // Elimina el archivo temporal si fue creado
             if (is_string($normalizedPath)) {
                 $this->deleteFileSilently($normalizedPath);
@@ -134,6 +183,9 @@ final class DefaultUploadPipeline implements UploadPipeline
     /**
      * Analiza el archivo en bloques para detectar código malicioso.
      *
+     * Lee el archivo en bloques pequeños y busca patrones peligrosos
+     * como código PHP, scripts o funciones peligrosas.
+     *
      * @param SplFileObject $file Archivo a analizar.
      */
     private function analyze(SplFileObject $file): void
@@ -157,6 +209,9 @@ final class DefaultUploadPipeline implements UploadPipeline
 
     /**
      * Normaliza el archivo copiando su contenido bloque a bloque.
+     *
+     * Crea un archivo temporal y copia el contenido original aplicando
+     * pasos de normalización si es necesario.
      *
      * @param SplFileObject $file Archivo a normalizar.
      * @return string Ruta del archivo normalizado.
@@ -195,24 +250,31 @@ final class DefaultUploadPipeline implements UploadPipeline
     /**
      * Ejecuta verificaciones defensivas en un bloque de archivo.
      *
+     * Busca patrones peligrosos como código PHP, scripts o funciones
+     * potencialmente peligrosas.
+     *
      * @param string $chunk Bloque del archivo.
      */
     private function runDefensiveChecks(string $chunk): void
     {
         $window = $this->scanBuffer . $chunk;
 
-        if (preg_match('/<\?(?:php|=)?/i', $window) === 1) {
+        // Verifica si hay código PHP malicioso
+        if (preg_match('/<\?[\s\x00]*(?:php|=)?/i', $window) === 1) {
             throw new UploadValidationException('Executable code detected inside the upload.');
         }
 
+        // Verifica si hay etiquetas de script HTML
         if (preg_match('/<script\b/i', $window) === 1) {
             throw new UploadValidationException('HTML script tags are not allowed inside binary uploads.');
         }
 
-        if (preg_match('/\b(?:eval|system|exec|passthru|shell_exec)\s*\(/i', $window) === 1) {
+        // Verifica si hay funciones peligrosas parcialmente ofuscadas
+        if (preg_match('/\b(?:eval|system|exec|passthru|shell_exec|proc_open|popen|assert)\b(?:[\s\/\*\x00]+|\R)*\(/i', $window) === 1) {
             throw new UploadValidationException('Dangerous functions detected inside the upload.');
         }
 
+        // Mantiene una ventana de solapamiento para detectar patrones que cruzan bloques
         $tailLength = min(self::SCAN_OVERLAP, strlen($window));
         $this->scanBuffer = $tailLength > 0 ? substr($window, -$tailLength) : '';
     }
@@ -220,12 +282,14 @@ final class DefaultUploadPipeline implements UploadPipeline
     /**
      * Aplica pasos de normalización a un bloque del archivo.
      *
+     * En el pipeline genérico no se transforman los bytes, sólo se copian para
+     * mantener la estructura. Las validaciones previas/seguros sanearán los datos.
+     *
      * @param string $chunk Bloque del archivo.
-     * @return string Bloque normalizado.
+     * @return string Bloque normalizado (igual al original).
      */
     private function applyNormalizationSteps(string $chunk): string
     {
-        // Punto de extensión para limpiar metadata binaria, EXIF, etc.
         return $chunk;
     }
 
@@ -317,29 +381,6 @@ final class DefaultUploadPipeline implements UploadPipeline
     }
 
     /**
-     * Resuelve una referencia de cuarentena para el archivo.
-     *
-     * @param UploadedFile|SplFileObject|string $source Origen del archivo.
-     * @return string|null Ruta original o null si no se puede resolver.
-     */
-    private function resolveQuarantineReference(UploadedFile|SplFileObject|string $source): ?string
-    {
-        if ($source instanceof UploadedFile) {
-            return $source->getRealPath() ?: null;
-        }
-
-        if ($source instanceof SplFileObject) {
-            return $source->getRealPath() ?: null;
-        }
-
-        if (is_string($source) && str_contains($source, DIRECTORY_SEPARATOR)) {
-            return $source;
-        }
-
-        return null;
-    }
-
-    /**
      * Obtiene el tamaño del archivo de forma segura.
      *
      * @param string $path Ruta del archivo.
@@ -382,14 +423,38 @@ final class DefaultUploadPipeline implements UploadPipeline
     }
 
     /**
+     * Obtiene un bloqueo compartido sobre el archivo para evitar TOCTOU.
+     *
+     * @param SplFileObject $file Archivo que se bloqueará en modo compartido.
+     * @param callable(SplFileObject):void $callback Lógica que se ejecutará mientras está bloqueado.
+     */
+    private function withSharedFileLock(SplFileObject $file, callable $callback): void
+    {
+        if (!$file->flock(LOCK_SH)) {
+            throw new UploadException('Unable to obtain shared lock on upload source.');
+        }
+
+        try {
+            $callback($file);
+        } finally {
+            $file->flock(LOCK_UN);
+            $file->rewind();
+        }
+    }
+
+    /**
      * Valida las propiedades del archivo (tamaño, tipo, etc.).
      *
      * @param SplFileObject $file Archivo a validar.
      * @param string|null $originalFilename Nombre original del archivo.
+     * @param FileConstraints $constraints Restricciones del perfil
      * @return string Hash SHA256 del archivo original.
      */
-    private function validateFileProperties(SplFileObject $file, ?string $originalFilename): string
-    {
+    private function validateFileProperties(
+        SplFileObject $file,
+        ?string $originalFilename,
+        FileConstraints $constraints
+    ): string {
         $path = $file->getRealPath();
         if ($path === false || $path === '') {
             throw new UploadValidationException('Unable to resolve upload path.');
@@ -400,12 +465,12 @@ final class DefaultUploadPipeline implements UploadPipeline
             throw new UploadValidationException('Uploaded file is empty.');
         }
 
-        if ($size > $this->maxFileSize) {
+        if ($size > $constraints->maxBytes) {
             throw new UploadValidationException('Uploaded file exceeds the allowed size.');
         }
 
         $mime = $this->detectMime($path);
-        if ($this->allowedMimeTypes !== [] && !in_array($mime, $this->allowedMimeTypes, true)) {
+        if ($constraints->allowedMimeTypes() !== [] && !in_array($mime, $constraints->allowedMimeTypes(), true)) {
             throw new UploadValidationException("MIME type {$mime} is not allowed.");
         }
 
@@ -413,13 +478,13 @@ final class DefaultUploadPipeline implements UploadPipeline
         $this->validateMagicBytes($file, $mime);
 
         $extension = strtolower((string) pathinfo($originalFilename ?? $path, PATHINFO_EXTENSION));
-        if ($extension !== '' && $this->allowedExtensions !== [] && !in_array($extension, $this->allowedExtensions, true)) {
+        if ($extension !== '' && $constraints->allowedExtensions !== [] && !in_array($extension, $constraints->allowedExtensions, true)) {
             throw new UploadValidationException("Extension .{$extension} is not permitted.");
         }
 
         if ($this->isImageMime($mime)) {
             // Protege contra imágenes con dimensiones excesivas
-            $this->guardImageDimensions($path);
+            $this->guardImageDimensions($path, $constraints);
         }
 
         $hash = hash_file('sha256', $path);
@@ -447,26 +512,30 @@ final class DefaultUploadPipeline implements UploadPipeline
      * @param string $path Ruta del archivo normalizado.
      * @param string|null $originalFilename Nombre original del archivo.
      * @param string $mime Tipo MIME detectado.
+     * @param FileConstraints $constraints Restricciones del perfil
      * @return string|null Extensión o null si no se puede determinar.
      */
-    private function guessExtension(string $path, ?string $originalFilename, string $mime): ?string
-    {
+    private function guessExtension(
+        string $path,
+        ?string $originalFilename,
+        string $mime,
+        FileConstraints $constraints
+    ): ?string {
         $candidate = strtolower((string) pathinfo($originalFilename ?? $path, PATHINFO_EXTENSION));
         if ($candidate !== '') {
             return $candidate;
         }
 
-        $map = [
-            'image/jpeg' => 'jpg',
-            'image/png' => 'png',
-            'image/webp' => 'webp',
-        ];
+        $map = $constraints->allowedMimeMap();
 
         return $map[$mime] ?? null;
     }
 
     /**
      * Valida la firma binaria del archivo.
+     *
+     * Comprueba que el archivo tenga la firma binaria correcta
+     * según su tipo MIME para evitar falsificaciones.
      *
      * @param SplFileObject $file Archivo a validar.
      * @param string $mime Tipo MIME del archivo.
@@ -476,22 +545,26 @@ final class DefaultUploadPipeline implements UploadPipeline
         $signatures = [
             'image/jpeg' => ["\xFF\xD8\xFF"],
             'image/png' => ["\x89PNG\r\n\x1a\n"],
-            'image/webp' => ["RIFF"],
+            'image/gif' => ['GIF87a', 'GIF89a'],
         ];
 
-        if (!isset($signatures[$mime])) {
-            return;
-        }
-
         $file->rewind();
-        $prefix = $file->fread(12);
+        $prefix = $file->fread(64);
         $file->rewind();
 
         if ($mime === 'image/webp') {
-            if (!str_starts_with($prefix, 'RIFF') || substr($prefix, 8, 4) !== 'WEBP') {
+            if (!$this->isWebpSignature($prefix)) {
                 throw new UploadValidationException('Unexpected binary signature for WebP file.');
             }
 
+            return;
+        }
+
+        if ($mime === 'image/avif' && $this->isAvifSignature($prefix)) {
+            return;
+        }
+
+        if (!isset($signatures[$mime])) {
             return;
         }
 
@@ -505,11 +578,49 @@ final class DefaultUploadPipeline implements UploadPipeline
     }
 
     /**
+     * Valida la cabecera WebP.
+     */
+    private function isWebpSignature(string $prefix): bool
+    {
+        if (!str_starts_with($prefix, 'RIFF')) {
+            return false;
+        }
+
+        if (substr($prefix, 8, 4) !== 'WEBP') {
+            return false;
+        }
+
+        $chunk = substr($prefix, 12, 4);
+        return in_array($chunk, ['VP8 ', 'VP8L', 'VP8X'], true);
+    }
+
+    /**
+     * Valida la cabecera AVIF.
+     */
+    private function isAvifSignature(string $prefix): bool
+    {
+        if (strlen($prefix) < 12) {
+            return false;
+        }
+
+        if (substr($prefix, 4, 4) !== 'ftyp') {
+            return false;
+        }
+
+        $brand = substr($prefix, 8, 4);
+        return in_array($brand, ['avif', 'avis', 'mif1'], true);
+    }
+
+    /**
      * Protege contra imágenes con dimensiones excesivas.
      *
+     * Verifica que las dimensiones de la imagen estén dentro de los límites
+     * permitidos por las restricciones.
+     *
      * @param string $path Ruta del archivo de imagen.
+     * @param FileConstraints $constraints Restricciones de dimensiones
      */
-    private function guardImageDimensions(string $path): void
+    private function guardImageDimensions(string $path, FileConstraints $constraints): void
     {
         $dimensions = $this->tryReadDimensions($path);
         if (!$dimensions) {
@@ -520,13 +631,75 @@ final class DefaultUploadPipeline implements UploadPipeline
         $height = $dimensions['height'];
         $megapixels = $width * $height;
 
-        if ($width > self::MAX_DIMENSION || $height > self::MAX_DIMENSION || $megapixels > self::MAX_MEGAPIXELS) {
+        if (
+            $width < $constraints->minDimension ||
+            $height < $constraints->minDimension ||
+            $width > $constraints->maxDimension ||
+            $height > $constraints->maxDimension ||
+            $megapixels > ($constraints->maxMegapixels * 1_000_000)
+        ) {
             throw new UploadValidationException('Image dimensions exceed the allowed limits.');
         }
     }
 
     /**
+     * Aplica ratio de descompresión máximo para prevenir bombs.
+     *
+     * @param string $mime Mime detectado
+     * @param array|null $dimensions Dimensiones si es imagen
+     * @param int $size Bytes en disco
+     * @param FileConstraints $constraints Restricciones configuradas
+     */
+    private function enforceDecompressionRatio(
+        string $mime,
+        ?array $dimensions,
+        int $size,
+        FileConstraints $constraints
+    ): void {
+        if ($constraints->maxDecompressionRatio === null || $size <= 0) {
+            return;
+        }
+
+        if ($dimensions === null || !isset($dimensions['width'], $dimensions['height'])) {
+            return;
+        }
+
+        $pixels = (int) $dimensions['width'] * (int) $dimensions['height'];
+        if ($pixels <= 0) {
+            return;
+        }
+
+        // Aproximamos bytes descomprimidos como RGBA por píxel.
+        $estimatedBytes = $pixels * 4;
+        $ratio = $estimatedBytes / max(1, $size);
+
+        if ($ratio > $constraints->maxDecompressionRatio) {
+            throw new UploadValidationException(sprintf(
+                'Decompression ratio exceeds allowed limit (ratio: %.2f, limit: %.2f)',
+                $ratio,
+                $constraints->maxDecompressionRatio
+            ));
+        }
+    }
+
+    /**
+     * Sanitiza nombres de archivo antes de loguear para evitar caracteres extraños.
+     */
+    private function sanitizeFilenameForLog(?string $name): ?string
+    {
+        if (!is_string($name) || $name === '') {
+            return null;
+        }
+
+        $clean = preg_replace('/[^A-Za-z0-9._-]+/', '-', $name) ?? $name;
+        return substr($clean, 0, 200);
+    }
+
+    /**
      * Asegura que el archivo no haya cambiado durante el procesamiento.
+     *
+     * Compara el hash del archivo antes y después del procesamiento
+     * para detectar modificaciones.
      *
      * @param SplFileObject $file Archivo original.
      * @param string $expectedHash Hash SHA256 esperado.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Media\DTO;
 
+use App\Application\Shared\Contracts\ClockInterface;
 use Carbon\CarbonImmutable;
 
 /**
@@ -53,7 +54,7 @@ final class CleanupStatePayload
             $preserve,
             $conversions,
             $origins,
-            $queuedAt ?? now()->toImmutable(),
+            $queuedAt ?? self::clock()->now(),
         );
     }
 
@@ -76,7 +77,7 @@ final class CleanupStatePayload
             self::stringifyList($payload['origins'] ?? []),
             isset($payload['queued_at'])
                 ? CarbonImmutable::parse((string) $payload['queued_at'])
-                : now()->toImmutable(),
+                : self::clock()->now(),
         );
     }
 
@@ -133,5 +134,10 @@ final class CleanupStatePayload
         }
 
         return array_values(array_unique($normalized));
+    }
+
+    private static function clock(): ClockInterface
+    {
+        return app(ClockInterface::class);
     }
 }

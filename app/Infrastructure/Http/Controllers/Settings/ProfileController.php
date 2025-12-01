@@ -2,9 +2,9 @@
 
 namespace App\Infrastructure\Http\Controllers\Settings;
 
-use App\Domain\Security\SecurityHelper;
+use App\Infrastructure\Security\SecurityHelper;
 use App\Infrastructure\Http\Controllers\Controller;
-use App\Application\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Infrastructure\Http\Requests\Settings\ProfileUpdateRequest;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;

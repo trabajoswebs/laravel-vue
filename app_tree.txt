@@ -1,30 +1,213 @@
 app/
-- **Domain/** – Reglas puras sin depender de Laravel.
-  - **User/**: `User.php`; `Contracts/MediaOwner.php`; perfiles `Profiles/AvatarProfile.php`, `Profiles/GalleryProfile.php`; conversión `ConversionProfiles/AvatarConversionProfile.php`, `ConversionProfiles/FileConstraints.php`.
-  - **Media/**: `ImageProfile.php`; DTO `ConversionExpectations.php`, `ReplacementResult.php`, `ReplacementSnapshot.php`, `ReplacementSnapshotItem.php`.
-  - **Security/**: `SecurityHelper.php`, `RateLimitSignatureFactory.php`.
-  - **Sanitization/**: `DisplayName.php`.
-
-- **Application/** – Casos de uso y orquestación.
-  - **Http/Requests/**: `Auth/LoginRequest.php`; `Concerns/SanitizesInputs.php`; `Settings/{DeleteAvatarRequest,ProfileUpdateRequest,UpdateAvatarRequest}.php`; `UploadImageRequest.php`.
-  - **Media/**: Coordinador `Coordinators/MediaLifecycleCoordinator.php`; servicios `Services/{MediaCleanupScheduler,MediaReplacementService}.php`; DTO `DTO/{CleanupPayload,CleanupStatePayload}.php`.
-  - **User/**: Actions `{DeleteAvatar,UpdateAvatar}.php`; Events `{AvatarDeleted,AvatarUpdated}.php`; Jobs `{CleanupMediaArtifactsJob,PerformConversionsJob,PostProcessAvatarMedia}.php`; Listeners `{QueueAvatarPostProcessing,RunPendingMediaCleanup}.php`; Policies `Policies/UserPolicy.php` y `Policies/Concerns/HandlesMediaOwnership.php`.
-
-- **Infrastructure/** – Adaptadores técnicos y framework.
-  - **Console/**: `Kernel.php`; Commands `{CleanAuditLogs,QuarantineCleanupSidecarsCommand,QuarantinePruneCommand}.php`.
-  - **Http/**: Controladores Auth/Settings/Media/Language y base `Controller.php`; Middleware `{HandleAppearance,HandleInertiaRequests,PreventBruteForce,RateLimitUploads,SanitizeInput,SecurityHeaders,TrustProxies,UserAudit}.php`; Rules `Http/Rules/SecureImageValidation.php`.
-  - **Localization/**: `TranslationService.php`.
-  - **Media/**:
-    - Concerns `Concerns/GuardsUploadedImage.php`.
-    - Pipeline `ImagePipeline.php` + `ImagePipeline/{FallbackWorkflow,ImagickWorkflow,PipelineArtifacts,PipelineConfig,PipelineLogger,ImageProcessingException}.php`; `ImagePipelineResult.php`.
-    - Upload `Upload/Contracts/*`, `Upload/Core/LocalQuarantineRepository.php`, `Upload/Core/QuarantineRepository.php`, `Upload/DefaultUploadPipeline.php`, `Upload/DefaultUploadService.php`, `Upload/Scanning/ScanCoordinator.php`, `Upload/Support/{ImageUploadReporter,QuarantineManager}.php`, `Upload/Exceptions/*.php`, `ImageUploadPipelineAdapter.php`.
-    - Optimizer `OptimizerService.php`, adapters `Optimizer/Adapters/{LocalOptimizationAdapter,RemoteDownloader,RemoteUploader}.php`.
-    - Security `Security/{ImageMetadataReader,ImageNormalizer,MimeNormalizer,PayloadScanner,UploadValidationLogger}.php`; scanners `{AbstractScanner,ClamAvScanner,YaraScanner}.php`.
-    - Providers `{ImagePipelineServiceProvider,MediaLibraryBindingsServiceProvider}.php`.
-    - Models `Models/MediaCleanupState.php`; util `MediaArtifactCollector.php`; Concerns `Models/Concerns/TracksMediaVersions.php`; Observers `Observers/MediaObserver.php`.
-  - **Providers/**: `AppServiceProvider.php`, `AuthServiceProvider.php`, `EventServiceProvider.php`, `HtmlPurifierServiceProvider.php`.
-  - **Security/**: `AvatarHeaderInspector.php`.
-
-- **Shared (root)**:
-  - `Console/Kernel.php` (alias al Kernel de Infrastructure).
-  - `README.md`.
+├── README.md                        # Guía de arquitectura de app/, capas y dependencias permitidas
+├── Console/
+│   └── Kernel.php                   # Alias del Kernel de Infrastructure para comandos Artisan
+├── Domain/                          # Lógica de negocio pura (sin dependencias de framework)
+│   ├── Media/
+│   │   ├── Contracts/
+│   │   │   └── MediaResource.php    # Representa medios persistidos sin exponer detalles de Spatie
+│   │   └── DTO/
+│   │       ├── ConversionExpectations.php          # Define dimensiones y formatos esperados tras procesamiento
+│   │       ├── MediaReplacementItemSnapshot.php    # Snapshot de cada ítem antes de un reemplazo
+│   │       └── MediaReplacementSnapshot.php        # Snapshot completo del estado previo a un reemplazo
+│   └── Security/
+│       └── Rules/
+│           ├── AvatarHeaderRules.php               # Reglas inmutables para validar headers seguros de avatares
+│           └── RateLimitSignatureRules.php         # Normaliza y valida firmas de rate limiting
+├── Application/                     # Casos de uso y orquestación de la lógica de negocio
+│   ├── Media/
+│   │   ├── Contracts/                       # Puertos de aplicación para lifecycle de media
+│   │   │   ├── FileConstraints.php          # VO centralizado con límites (peso, dimensiones, mimes)
+│   │   │   ├── MediaProfile.php             # Contrato único para perfiles de media (colección, disco, conversions, flags)
+│   │   │   ├── MediaArtifactCollector.php   # Interfaz para recolección de archivos derivados
+│   │   │   ├── MediaCleanupScheduler.php    # Interfaz para programar limpiezas de artefactos
+│   │   │   ├── MediaOwner.php               # Contrato para modelos propietarios de media (Spatie v11)
+│   │   │   ├── MediaProfile.php             # Describe colecciones (disk, conversions, reglas) a nivel app
+│   │   │   ├── MediaUploader.php            # Interfaz para subida de archivos multimedia
+│   │   │   └── UploadedMedia.php            # Representa un archivo subido de forma agnóstica
+│   │   ├── Coordinators/
+│   │   │   └── MediaLifecycleCoordinator.php # Gestiona el ciclo de vida completo de archivos multimedia
+│   │   ├── DTO/
+│   │   │   ├── CleanupPayload.php            # Datos para programar limpiezas
+│   │   │   ├── CleanupStatePayload.php       # Estado de limpiezas pendientes/persistidas
+│   │   │   └── MediaReplacementResult.php    # Resultado estructurado de reemplazos
+│   │   └── Handlers/
+│   │       └── MediaReplacementService.php   # Handler que maneja la lógica de reemplazo de archivos multimedia
+│   ├── User/
+│   │   ├── Actions/
+│   │   │   ├── DeleteAvatar.php              # Acción para eliminar el avatar del usuario
+│   │   │   └── UpdateAvatar.php              # Acción para actualizar el avatar del usuario
+│   │   ├── Contracts/
+│   │   │   ├── UserAvatarRepository.php      # Puerto para repositorio de avatares
+│   │   │   └── UserRepository.php            # Puerto para repositorio de usuarios
+│   │   ├── DTO/
+│   │   │   ├── AvatarDeletionResult.php      # Resultado tras eliminar avatar
+│   │   │   └── AvatarUpdateResult.php        # Resultado tras actualizar avatar
+│   │   ├── Events/
+│   │   │   ├── AvatarDeleted.php             # Evento que se dispara tras eliminar avatar
+│   │   │   └── AvatarUpdated.php             # Evento que se dispara tras actualizar avatar
+│   │   └── Jobs/
+│   │       ├── CleanupMediaArtifacts.php     # Mensaje para limpiar artefactos de media
+│   │       └── Enums/
+│   │           └── ConversionReadyState.php  # Enum de estados de alistamiento de conversions
+│   └── Shared/
+│       └── Contracts/ {AsyncJobDispatcherInterface.php,ClockInterface.php,EventBusInterface.php,LoggerInterface.php,TransactionManagerInterface.php} # Puertos genéricos para colas, reloj, eventos, logs y transacciones
+└── Infrastructure/                   # Implementaciones técnicas y adaptadores del framework
+    ├── Auth/Policies/
+    │   ├── Concerns/HandlesMediaOwnership.php # Lógica compartida para verificar propiedad de archivos multimedia
+    │   └── UserPolicy.php               # Reglas de autorización para operaciones sobre usuarios
+    ├── Console/
+    │   ├── Kernel.php                   # Kernel de comandos Artisan (registro y programación)
+    │   └── Commands/
+    │       ├── CleanAuditLogs.php               # Comando para eliminar logs de auditoría antiguos
+    │       ├── QuarantineCleanupSidecarsCommand.php # Elimina archivos auxiliares huérfanos de cuarentena
+    │       └── QuarantinePruneCommand.php       # Elimina archivos en cuarentena expirados
+    ├── Http/
+    │   ├── Controllers/
+    │   │   ├── Controller.php                   # Controlador base con helpers comunes para Inertia/API
+    │   │   ├── LanguageController.php           # Gestiona cambio de idioma y detección automática
+    │   │   ├── Auth/
+    │   │   │   ├── AuthenticatedSessionController.php # Login y logout
+    │   │   │   ├── ConfirmablePasswordController.php  # Confirmación de contraseña
+    │   │   │   ├── EmailVerificationNotificationController.php # Enviar notificación de verificación
+    │   │   │   ├── EmailVerificationPromptController.php # Mostrar prompt de verificación
+    │   │   │   ├── NewPasswordController.php    # Formulario de nueva contraseña
+    │   │   │   ├── PasswordResetLinkController.php # Enviar enlace de reset
+    │   │   │   ├── RegisteredUserController.php # Registro de nuevos usuarios
+    │   │   │   └── VerifyEmailController.php    # Verificación de email
+    │   │   ├── Media/
+    │   │   │   ├── .gitkeep                     # Marcador para mantener el directorio en control de versiones
+    │   │   │   └── ShowAvatar.php               # Sirve avatares con cabeceras de seguridad
+    │   │   └── Settings/
+    │   │       ├── PasswordController.php       # Cambio de contraseña de usuario autenticado
+    │   │       ├── ProfileAvatarController.php  # Subida y eliminación de avatar desde interfaz
+    │   │       └── ProfileController.php        # Actualización de datos de perfil (nombre, idioma)
+    │   ├── Middleware/
+    │   │   ├── HandleAppearance.php             # Inyecta preferencia visual del usuario
+    │   │   ├── HandleInertiaRequests.php        # Proporciona datos comunes a vistas Inertia
+    │   │   ├── PreventBruteForce.php            # Prevención avanzada de fuerza bruta
+    │   │   ├── RateLimitUploads.php             # Limitación dinámica de velocidad para subidas
+    │   │   ├── SanitizeInput.php                # Limpieza de datos entrantes antes de validación
+    │   │   ├── SecurityHeaders.php              # Aplica cabeceras de seguridad HTTP
+    │   │   ├── TrustProxies.php                 # Configuración para detección correcta de IPs tras proxies
+    │   │   └── UserAudit.php                    # Añade contexto de auditoría a operaciones
+    │   ├── Requests/
+    │   │   ├── Auth/LoginRequest.php
+    │   │   ├── Concerns/SanitizesInputs.php
+    │   │   ├── Settings/DeleteAvatarRequest.php
+    │   │   ├── Settings/ProfileUpdateRequest.php
+    │   │   ├── Settings/UpdateAvatarRequest.php
+    │   │   └── UploadImageRequest.php
+    │   └── Rules/
+    │       └── SecureImageValidation.php        # Regla de validación reforzada para archivos de imagen
+    ├── Localization/
+    │   └── TranslationService.php               # Servicio para carga, cacheo y sanitización de traducciones
+    ├── Media/                                   # Implementación completa de subida y procesamiento de medios
+    │   ├── Adapters/                            # Adaptadores entre Laravel/Spatie y la capa de aplicación
+    │   │   ├── HttpUploadedMedia.php            # Envuelve UploadedFile como UploadedMedia agnóstico
+    │   │   └── SpatieMediaResource.php          # Envuelve Media de Spatie como recurso de dominio
+    │   ├── Concerns/GuardsUploadedImage.php     # Métodos de validación defensiva para subidas de imagen
+    │   ├── Contracts/                           # Contratos específicos de infraestructura (placeholder)
+    │   ├── ConversionProfiles/
+    │   │   └── AvatarConversionProfile.php      # Configuración específica de transformaciones para avatares
+    │   ├── DTO/
+    │   │   ├── ReplacementResult.php            # Resultado de operaciones de reemplazo de archivos multimedia
+    │   │   ├── ReplacementSnapshot.php          # Copia de seguridad del estado anterior a un reemplazo
+    │   │   └── ReplacementSnapshotItem.php      # Elemento individual dentro de un snapshot de reemplazo
+    │   ├── ImagePipeline.php                    # Motor principal que orquesta procesamiento de imágenes
+    │   ├── ImagePipeline/
+    │   │   ├── FallbackWorkflow.php             # Workflow alternativo usando GD como respaldo
+    │   │   ├── ImagickWorkflow.php              # Workflow principal usando Imagick para procesamiento
+    │   │   ├── ImageProcessingException.php     # Excepción específica para errores de procesamiento
+    │   │   ├── PipelineArtifacts.php            # Gestiona archivos temporales generados durante procesamiento
+    │   │   ├── PipelineConfig.php               # Configuración derivada de FileConstraints para pipeline
+    │   │   └── PipelineLogger.php               # Logger específico para depuración de pipeline
+    │   ├── ImagePipelineResult.php              # DTO que encapsula resultado de operación de pipeline
+    │   ├── MediaProfile.php                     # Implementación principal de perfil de media
+    │   ├── Upload/DefaultUploadService.php      # Servicio de subida unificado (quarantine + pipeline)
+    │   ├── Jobs/
+    │   │   ├── CleanupMediaArtifactsJob.php     # Job que limpia artefactos residuales de media
+    │   │   ├── PerformConversionsJob.php        # Ejecuta conversions de media en cola
+    │   │   └── PostProcessAvatarMedia.php       # Post-procesa avatares tras conversions
+    │   ├── Listeners/
+    │   │   ├── QueueAvatarPostProcessing.php    # Encola post-procesamiento por colección configurada
+    │   │   └── RunPendingMediaCleanup.php       # Dispara scheduler tras conversions completadas o fallidas
+    │   ├── MediaArtifactCollector.php           # Recolector que identifica archivos derivados de medios
+    │   ├── Models/
+    │   │   ├── Concerns/TracksMediaVersions.php # Mapea colecciones a columnas de versión en modelos
+    │   │   └── MediaCleanupState.php            # Modelo Eloquent para persistir estado de limpieza de medios
+    │   ├── Observers/MediaObserver.php          # Observador que limpia artefactos cuando se eliminan medios
+    │   ├── Optimizer/                           # Adaptadores para optimización externa
+    │   │   ├── Adapters/LocalOptimizationAdapter.php # Optimiza en servidor local
+    │   │   ├── Adapters/RemoteDownloader.php    # Descarga optimizaciones remotas por streaming
+    │   │   └── Adapters/RemoteUploader.php      # Sube archivos a servicios de optimización
+    │   ├── OptimizerService.php                 # Servicio que orquesta optimización de imágenes externa
+    │   ├── Profiles/
+    │   │   ├── AvatarProfile.php                # Configuración de colección de medios para avatares (disco, conversiones, reglas)
+    │   │   └── GalleryProfile.php               # Configuración alternativa para colecciones de galería
+    │   ├── Providers/
+    │   │   ├── ImagePipelineServiceProvider.php       # Registra bindings y servicios del pipeline
+    │   │   └── MediaLibraryBindingsServiceProvider.php # Configura bindings de Spatie Media Library
+    │   ├── Security/
+    │   │   ├── ImageMetadataReader.php          # Lector seguro de metadatos EXIF/ICC de imágenes
+    │   │   ├── ImageNormalizer.php              # Normaliza orientación y limpia metadatos peligrosos
+    │   │   ├── MimeNormalizer.php               # Verifica y corrige correspondencia entre MIME real y declarado
+    │   │   ├── PayloadScanner.php               # Orquestador que coordina escaneo de archivos
+    │   │   ├── Scanners/
+    │   │   │   ├── AbstractScanner.php
+    │   │   │   ├── ClamAvScanner.php
+    │   │   │   └── YaraScanner.php
+    │   │   └── Upload/
+    │   │       └── UploadValidationLogger.php   # Logger centralizado para eventos de validación y seguridad
+    │   ├── Services/
+    │   │   └── MediaCleanupScheduler.php        # Programa tareas de limpieza asociadas a conversiones
+    │   └── Upload/
+    │       ├── Contracts/
+    │       │   ├── UploadMetadata.php           # Interfaz para metadatos de subida
+    │       │   ├── UploadPipeline.php           # Interfaz para pipeline de subida
+    │       │   ├── UploadResult.php             # Interfaz para resultado de subida
+    │       │   └── UploadService.php            # Interfaz para servicio de subida
+    │       ├── Core/
+    │       │   ├── LocalQuarantineRepository.php # Repositorio para manejo de cuarentena local
+    │       │   └── QuarantineRepository.php      # Interfaz para operaciones de cuarentena
+    │       ├── DefaultUploadPipeline.php         # Pipeline estándar: normaliza, escanea y almacena
+    │       ├── DefaultUploadService.php          # Servicio agnóstico que orquesta cuarentena, validación y guardado
+    │       ├── Exceptions/
+    │       │   ├── NormalizationFailedException.php
+    │       │   ├── QuarantineException.php
+    │       │   ├── QuarantineIntegrityException.php
+    │       │   ├── ScanFailedException.php
+    │       │   ├── UnexpectedUploadException.php
+    │       │   ├── UploadException.php
+    │       │   ├── UploadValidationException.php
+    │       │   └── VirusDetectedException.php
+    │       ├── ImageUploadPipelineAdapter.php    # Adaptador entre pipeline general y funcionalidad de imágenes
+    │       ├── Scanning/ScanCoordinator.php      # Coordina ejecución de escáneres antivirus
+    │       └── Support/
+    │           ├── ImageUploadReporter.php       # Sistema de logging y reporting de problemas de subida
+    │           └── QuarantineManager.php         # Gestor para validación y limpieza de archivos en cuarentena
+    ├── Models/User.php                           # Modelo Eloquent de usuario con relaciones y lógica de acceso
+    ├── Providers/
+    │   ├── AppServiceProvider.php                # Proveedor principal para bindings globales
+    │   ├── AuthServiceProvider.php               # Configura gates y políticas de autorización
+    │   ├── EventServiceProvider.php              # Mapea eventos de dominio a sus listeners
+    │   └── HtmlPurifierServiceProvider.php       # Configura servicio de sanitización HTML
+    ├── Sanitization/DisplayName.php              # Value object que encapsula y sanitiza nombres mostrables
+    ├── Security/
+    │   ├── AvatarHeaderInspector.php             # Inspector de cabeceras HTTP para detectar riesgos en avatares
+    │   ├── Exceptions/AntivirusException.php     # Excepción para fallos al ejecutar escáneres antivirus
+    │   ├── RateLimitSignatureFactory.php         # Genera firmas estables para sistemas de limitación de velocidad
+    │   └── SecurityHelper.php                    # Utilidades de seguridad que dependen de componentes de framework
+    ├── Shared/Adapters/
+    │   ├── LaravelAsyncJobDispatcher.php
+    │   ├── LaravelClock.php
+    │   ├── LaravelEventBus.php
+    │   ├── LaravelLogger.php
+    │   └── LaravelTransactionManager.php         # Implementaciones Laravel de los puertos compartidos de Application
+    └── User/
+        ├── Adapters/
+        │   ├── EloquentUserAvatarRepository.php  # Implementación de repositorio de avatares usando Eloquent + Spatie
+        │   └── EloquentUserRepository.php        # Implementación de repositorio de usuarios
+        └── Events/
+            ├── AvatarDeleted.php                 # Evento Laravel que envuelve AvatarDeleted de aplicación
+            └── AvatarUpdated.php                 # Evento Laravel que envuelve AvatarUpdated de aplicación

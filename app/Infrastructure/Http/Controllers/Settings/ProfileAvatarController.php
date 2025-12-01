@@ -6,15 +6,18 @@ namespace App\Infrastructure\Http\Controllers\Settings;
 
 use App\Application\User\Actions\DeleteAvatar;       // Ej. clase invocable para eliminar el avatar
 use App\Application\User\Actions\UpdateAvatar;       // Ej. clase invocable para actualizar el avatar
-use App\Domain\Security\SecurityHelper;
+use App\Infrastructure\Security\SecurityHelper;
 use App\Infrastructure\Http\Controllers\Controller;                  // Ej. base Controller de Laravel
-use App\Application\Http\Requests\Settings\UpdateAvatarRequest;   // Ej. valida imagen (mimes, tamaño, dimensiones)
-use App\Domain\User\User;                                  // Ej. modelo User
+use App\Infrastructure\Http\Requests\Settings\UpdateAvatarRequest;   // Ej. valida imagen (mimes, tamaño, dimensiones)
+use App\Infrastructure\Media\Adapters\HttpUploadedMedia;
+use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Infrastructure\Models\User;                                  // Ej. modelo User
 use App\Infrastructure\Media\Upload\Exceptions\NormalizationFailedException;
 use App\Infrastructure\Media\Upload\Exceptions\QuarantineException;
 use App\Infrastructure\Media\Upload\Exceptions\ScanFailedException;
 use App\Infrastructure\Media\Upload\Exceptions\UploadValidationException;
 use App\Infrastructure\Media\Upload\Exceptions\VirusDetectedException;
+use App\Infrastructure\Media\Upload\Support\QuarantineManager;
 use Illuminate\Auth\Access\AuthorizationException;    // Ej. excepciones de autorización
 use Illuminate\Http\JsonResponse;                     // Ej. respuesta JSON
 use Illuminate\Http\RedirectResponse;                 // Ej. respuesta redirect
@@ -70,18 +73,17 @@ class ProfileAvatarController extends Controller
         ]);
 
         try {
-            // Ejecuta la acción de actualización del avatar
-            $media = $action($authUser, $request->file('avatar'));
+            // Encola el procesamiento completo de avatar
+            $ticket = $action($authUser, new HttpUploadedMedia($request->file('avatar')));
 
-            // Prepara la respuesta con información del avatar actualizado
+            // Prepara respuesta ligera indicando procesamiento en curso
             $payload = [
                 'message' => __('settings.profile.avatar.updated'),
-                'media_id' => $media->id,
-                'version' => $media->getCustomProperty('version'),
-                'avatar_version' => $authUser->avatar_version ?? null,
+                'status' => $ticket->status,
+                'correlation_id' => $ticket->correlationId,
+                'quarantine_id' => $ticket->quarantineId,
             ];
 
-            // Genera retroalimentación para el cliente
             $feedback = $this->buildAvatarUploadFeedback($request->file('avatar'), $payload['message']);
 
             return $this->respondWithSuccess(
@@ -98,12 +100,19 @@ class ProfileAvatarController extends Controller
 
             return $this->respondValidationFailure($request, __('media.uploads.scan_blocked'));
         } catch (UploadValidationException $e) {
+            $isAntivirusFailure = $e->getPrevious() instanceof AntivirusException;
+
             Log::warning('Avatar upload rejected (validation failed)', [
                 'user_id' => $authUser->getKey(),
                 'error' => $e->getMessage(),
+                'antivirus_fail_closed' => $isAntivirusFailure,
             ]);
 
-            return $this->respondValidationFailure($request, __('media.uploads.invalid_image'));
+            $message = $isAntivirusFailure
+                ? __('media.uploads.scan_unavailable')
+                : __('media.uploads.invalid_image');
+
+            return $this->respondValidationFailure($request, $message);
         } catch (NormalizationFailedException $e) {
             Log::error('Avatar upload normalization failed', [
                 'user_id' => $authUser->getKey(),
@@ -129,6 +138,68 @@ class ProfileAvatarController extends Controller
 
             return $this->respondServerFailure($request);
         }
+    }
+
+    /**
+     * Devuelve el estado del último upload de avatar para el usuario autenticado.
+     * Permite polling en cliente usando correlation_id y/o quarantine_id.
+     */
+    public function status(Request $request, QuarantineManager $quarantine): JsonResponse
+    {
+        /** @var User $authUser */
+        $authUser = $request->user();
+
+        if (!$authUser) {
+            throw new AuthorizationException('Authenticated user required to query avatar status.');
+        }
+
+        $correlationId = trim((string) $request->query('correlation_id', ''));
+        $quarantineId = trim((string) $request->query('quarantine_id', ''));
+
+        $collection = app(\App\Infrastructure\Media\Profiles\AvatarProfile::class)->collection();
+
+        // Busca media ya persistido con correlación o quarantine_id.
+        $media = $authUser->getMedia($collection)
+            ->first(function ($item) use ($correlationId, $quarantineId) {
+                $corr = (string) ($item->getCustomProperty('correlation_id') ?? '');
+                $qId = (string) ($item->getCustomProperty('quarantine_id') ?? '');
+
+                return ($correlationId !== '' && $corr === $correlationId)
+                    || ($quarantineId !== '' && $qId === $quarantineId);
+            });
+
+        if ($media) {
+            return response()->json([
+                'status' => 'completed',
+                'media_id' => (string) $media->getKey(),
+                'version' => $media->getCustomProperty('version'),
+                'url' => $media->getUrl(),
+            ]);
+        }
+
+        if ($quarantineId !== '') {
+            $token = $quarantine->resolveToken($quarantineId);
+            if ($token) {
+                try {
+                    $state = $quarantine->getState($token);
+                    $status = match ($state) {
+                        \App\Infrastructure\Media\Upload\Core\QuarantineState::INFECTED => 'infected',
+                        \App\Infrastructure\Media\Upload\Core\QuarantineState::FAILED => 'failed',
+                        default => 'processing',
+                    };
+
+                    return response()->json(['status' => $status]);
+                } catch (\Throwable $e) {
+                    Log::warning('avatar.status.quarantine_lookup_failed', [
+                        'user_id' => $authUser->getKey(),
+                        'quarantine_id' => $quarantineId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        return response()->json(['status' => 'processing']);
     }
 
     /**

@@ -1,35 +1,12 @@
 <?php
 
 return [
-
-    /*
-    |--------------------------------------------------------------------------
-    | File Constraints Language Lines
-    |--------------------------------------------------------------------------
-    |
-    | Error messages used by the FileConstraints value object.
-    |
-    */
-
-    'upload' => [
-        'invalid_file' => 'The uploaded file is not valid.',
-        'unreadable_temp' => 'The temporary file could not be read.',
-        'mime_detection_failed' => 'Could not determine the file’s MIME type.',
-        'mime_not_allowed' => 'The MIME type ":mime" is not permitted. Allowed types: :allowed.',
-        'size_exceeded' => 'The file exceeds the maximum allowed size of :max bytes.',
-        'unknown_mime' => 'unknown',
-    ],
-
-    'dimensions' => [
-        'too_small' => 'The image does not meet the minimum required dimensions (:min x :min pixels).',
-        'too_large' => 'The image exceeds the maximum permitted dimensions (:max pixels).',
-        'megapixels_exceeded' => 'The image exceeds the allowed limit of :max megapixels.',
-    ],
-
-    'probe' => [
-        'read_error' => 'Error reading the image: :error.',
-        'invalid_dimensions' => 'Invalid image dimensions or the file is corrupted.',
-        'image_bomb' => 'Possible “image bomb” detected (potentially malicious file).',
-    ],
-
+    'invalid_file'      => 'The uploaded file is not valid.',
+    'too_heavy'         => 'The file exceeds the maximum allowed size of :max bytes.',
+    'mime_not_allowed'  => 'The MIME type :mime is not allowed.',
+    'file_not_readable' => 'The uploaded file cannot be read.',
+    'invalid_image'     => 'The file does not appear to be a valid image.',
+    'dimensions_too_small' => 'The image is too small. Minimum size is :min pixels on each side.',
+    'dimensions_too_large' => 'The image exceeds the maximum allowed size of :max pixels per side.',
+    'megapixels_exceeded'  => 'The image exceeds the allowed limit of :max megapixels.',
 ];

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media\ImagePipeline;
 
-use App\Domain\User\ConversionProfiles\FileConstraints;
+use App\Application\Media\Contracts\FileConstraints;
 
 /**
  * Encapsula los parámetros configurables del pipeline para facilitar su reutilización.

@@ -7,14 +7,15 @@ declare(strict_types=1);
 namespace App\Application\Media\Coordinators;
 
 // 3. Importaciones de interfaces, DTOs, clases y facades necesarios.
-use App\Domain\User\Contracts\MediaOwner;
 use App\Application\Media\DTO\CleanupPayload;
-use App\Domain\Media\DTO\ReplacementResult;
-use App\Domain\Media\ImageProfile;
-use App\Application\Media\Services\MediaCleanupScheduler;
-use App\Application\Media\Services\MediaReplacementService;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
+use App\Application\Media\DTO\MediaReplacementResult;
+use App\Application\Media\Contracts\MediaProfile;
+use App\Application\Media\Contracts\UploadedMedia;
+use App\Application\Shared\Contracts\LoggerInterface;
+use App\Domain\Media\DTO\MediaReplacementItemSnapshot;
+use App\Application\Media\Contracts\MediaOwner;
+use App\Application\Media\Contracts\MediaCleanupScheduler;
+use App\Application\Media\Handlers\MediaReplacementService;
 
 /**
  * Coordina el ciclo de vida completo de un archivo multimedia: reemplazo, conversión y limpieza.
@@ -36,6 +37,7 @@ final class MediaLifecycleCoordinator
     public function __construct(
         private readonly MediaReplacementService $replacementService, // 4. Servicio para reemplazar medios.
         private readonly MediaCleanupScheduler $cleanupScheduler,    // 5. Servicio para programar la limpieza de archivos huérfanos.
+        private readonly LoggerInterface $logger,
     ) {}
 
     /**
@@ -45,12 +47,12 @@ final class MediaLifecycleCoordinator
      * delegando la lógica de procesamiento, validación y conversión al servicio de reemplazo.
      *
      * @param MediaOwner   $owner   El modelo que posee el medio (por ejemplo, un usuario).
-     * @param UploadedFile $file    El archivo subido por el usuario.
-     * @param ImageProfile $profile Perfil de imagen que define las conversiones a aplicar.
+     * @param UploadedMedia $file   El archivo subido por el usuario.
+     * @param MediaProfile $profile Perfil de imagen que define las conversiones a aplicar.
      *
-     * @return ReplacementResult Resultado del reemplazo, incluyendo el nuevo medio y una instantánea de los artefactos anteriores.
+     * @return MediaReplacementResult Resultado del reemplazo, incluyendo el nuevo medio y una instantánea de los artefactos anteriores.
      */
-    public function replace(MediaOwner $owner, UploadedFile $file, ImageProfile $profile): ReplacementResult
+    public function replace(MediaOwner $owner, UploadedMedia $file, MediaProfile $profile): MediaReplacementResult
     {
         // Llama al servicio de reemplazo para ejecutar la lógica de reemplazo y conversión.
         return $this->replacementService->replaceWithSnapshot($owner, $file, $profile);
@@ -73,7 +75,7 @@ final class MediaLifecycleCoordinator
             $this->cleanupScheduler->flushExpired($mediaId);
         } catch (\Throwable $e) {
             // Si ocurre un error, lo registra como una advertencia para monitoreo.
-            Log::warning('media.lifecycle.flush_failed', [
+            $this->logger->warning('media.lifecycle.flush_failed', [
                 'media_id' => $mediaId,
                 'error'    => $e->getMessage(),
             ]);
@@ -90,9 +92,24 @@ final class MediaLifecycleCoordinator
      *
      * @return CleanupPayload DTO listo para programar la limpieza de artefactos antiguos.
      */
-    public function buildCleanupPayload(ReplacementResult $result): CleanupPayload
+    public function buildCleanupPayload(MediaReplacementResult $result): CleanupPayload
     {
         // Construye un DTO de limpieza a partir del resultado del reemplazo.
-        return CleanupPayload::fromSnapshot($result->snapshot, $result->media, $result->expectations);
+        return CleanupPayload::fromSnapshot(
+            $result->snapshot,
+            $this->toDomainSnapshotItem($result->media),
+            $result->expectations
+        );
+    }
+
+    private function toDomainSnapshotItem(\App\Domain\Media\Contracts\MediaResource $media): MediaReplacementItemSnapshot
+    {
+        return MediaReplacementItemSnapshot::make(
+            (string) $media->getKey(),
+            $media->collectionName(),
+            $media->disk(),
+            $media->fileName(),
+            []
+        );
     }
 }

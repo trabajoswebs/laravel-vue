@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Infrastructure\Http\Controllers\Settings\PasswordController;
 use App\Infrastructure\Http\Controllers\Settings\ProfileController;
 use App\Infrastructure\Http\Controllers\Settings\ProfileAvatarController;
@@ -19,6 +21,8 @@ Route::middleware('auth')->group(function () {
         ->name('settings.avatar.update');
     Route::delete('settings/avatar', [ProfileAvatarController::class, 'destroy'])
         ->name('settings.avatar.destroy');
+    Route::get('settings/avatar/status', [ProfileAvatarController::class, 'status'])
+        ->name('settings.avatar.status');
 
     Route::get('settings/password', [PasswordController::class, 'edit'])->name('password.edit');
 

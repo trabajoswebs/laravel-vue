@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media\Concerns;
 
-use App\Domain\User\ConversionProfiles\FileConstraints;
+use App\Application\Media\Contracts\FileConstraints;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;

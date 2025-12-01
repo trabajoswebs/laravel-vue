@@ -4,92 +4,55 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Security;
 
+use App\Domain\Security\Rules\AvatarHeaderRules;
+use Illuminate\Http\Request;
+
 /**
- * Valida cabeceras asociadas a la entrega de avatares (S3 u otros discos).
- *
- * Espera:
- * - `ACL`: debe existir y ser `private` para evitar accesos públicos inesperados.
- * - `ContentType`: debe estar presente para que el navegador renderice la imagen correctamente.
- *
- * Todos los métodos son estáticos para facilitar su reutilización sin necesidad de inyectar dependencias.
+ * Inspector de headers para validación de seguridad de avatares.
+ * 
+ * Utiliza las reglas de dominio para verificar que los headers de respuesta
+ * cumplan con los requisitos de seguridad establecidos para avatares.
  */
 final class AvatarHeaderInspector
 {
-    private const EXPECTED_ACL = 'private';
-    private const HEADER_ACL = 'ACL';
-    private const HEADER_CONTENT_TYPE = 'ContentType';
-    private const ISSUE_ACL_UNEXPECTED = 'acl_unexpected';
-    private const ISSUE_ACL_MISSING = 'acl_missing';
-    private const ISSUE_CONTENT_TYPE_MISSING = 'content_type_missing';
+    public function __construct(
+        private readonly AvatarHeaderRules $rules,  // Reglas de seguridad para validar headers
+    ) {}
 
-    private function __construct()
+    /**
+     * Inspecciona las cabeceras de un array o de un Request y devuelve issues detectados.
+     *
+     * @param array<string,mixed>|Request $source Origen de los headers (array o Request)
+     * @return array<int,array<string,mixed>> Lista de problemas detectados con detalles
+     */
+    public function detectIssues(array|Request $source): array
     {
+        return $this->rules->detectIssues($this->extractHeaders($source));
     }
 
     /**
-     * Inspecciona las cabeceras y devuelve issues detectados.
+     * Verifica si las cabeceras contienen problemas de seguridad.
      *
-     * @param array<string,mixed> $headers Cabeceras emitidas por el almacenamiento (S3, disk, etc.).
-     * @return array<int,array<string,string>> Lista de issues detectados con metadata.
+     * @param array<string,mixed>|Request $source Origen de los headers (array o Request)
+     * @return bool True si hay problemas de seguridad, false en caso contrario
      */
-    public static function detectIssues(array $headers): array
+    public function hasIssues(array|Request $source): bool
     {
-        $issues = [];
-
-        $acl = self::extractHeader($headers, self::HEADER_ACL);
-        if ($acl === null) {
-            $issues[] = [
-                'type' => self::ISSUE_ACL_MISSING,
-            ];
-        } elseif (strtolower($acl) !== self::EXPECTED_ACL) {
-            $issues[] = [
-                'type' => self::ISSUE_ACL_UNEXPECTED,
-                'expected' => self::EXPECTED_ACL,
-                'received' => $acl,
-            ];
-        }
-
-        $contentType = self::extractHeader($headers, self::HEADER_CONTENT_TYPE);
-        if ($contentType === null) {
-            $issues[] = [
-                'type' => self::ISSUE_CONTENT_TYPE_MISSING,
-            ];
-        }
-
-        return $issues;
+        return $this->rules->hasIssues($this->extractHeaders($source));
     }
 
     /**
-     * Resumen rápido para saber si existen issues detectadas.
+     * Extrae los headers de un Request o array.
      *
-     * @param array<string,mixed> $headers
-     * @return bool
+     * @param array<string,mixed>|Request $source Origen de los headers
+     * @return array<string,mixed> Headers extraídos
      */
-    public static function hasIssues(array $headers): bool
+    private function extractHeaders(array|Request $source): array
     {
-        $acl = self::extractHeader($headers, self::HEADER_ACL);
-        if ($acl === null || strtolower($acl) !== self::EXPECTED_ACL) {
-            return true;
+        if ($source instanceof Request) {
+            return $source->headers->all();
         }
 
-        return self::extractHeader($headers, self::HEADER_CONTENT_TYPE) === null;
-    }
-
-    /**
-     * Normaliza el valor de una cabecera buscando en mayúsculas o minúsculas.
-     *
-     * @param array<string,mixed> $headers
-     * @param string $key
-     * @return string|null
-     */
-    private static function extractHeader(array $headers, string $key): ?string
-    {
-        foreach ($headers as $headerKey => $value) {
-            if (is_string($headerKey) && strcasecmp($headerKey, $key) === 0) {
-                return is_string($value) && $value !== '' ? $value : null;
-            }
-        }
-
-        return null;
+        return $source;
     }
 }

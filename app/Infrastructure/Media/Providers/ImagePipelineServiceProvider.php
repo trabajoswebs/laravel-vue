@@ -160,39 +160,121 @@ final class ImagePipelineServiceProvider extends ServiceProvider
      */
     private function validateAllowlistedBinaries(array $scanConfig, array &$failures): void
     {
+        static $loggedInvalid = false;
+
         $allowlist = $scanConfig['bin_allowlist'] ?? [];
         if (! is_array($allowlist)) {
             $allowlist = [];
         }
 
+        // Si no hay entradas configuradas, no hacemos nada y evitamos warnings.
+        if ($allowlist === []) {
+            config(['image-pipeline.scan.bin_allowlist' => []]);
+            return;
+        }
+
         $normalized = [];
-        $hadInput = $allowlist !== [];
-        $hadInvalid = false;
+        $invalidEntries = [];
+        $hadInput = false;
 
         foreach ($allowlist as $candidate) {
-            if (! is_string($candidate) || $candidate === '') {
+            if (! is_string($candidate)) {
                 continue;
             }
 
-            $resolved = realpath($candidate);
-            if ($resolved === false || $resolved === '' || ! is_executable($resolved)) {
-                $hadInvalid = true;
+            $trimmed = trim($candidate);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            $hadInput = true;
+
+            $resolved = realpath($trimmed);
+            if ($resolved === false || $resolved === '') {
+                $invalidEntries[] = [
+                    'binary' => $trimmed,
+                    'reason' => 'missing',
+                ];
+                continue;
+            }
+
+            if (! is_executable($resolved)) {
+                $invalidEntries[] = [
+                    'binary' => $this->normalizePath($resolved),
+                    'reason' => 'not_executable',
+                ];
                 continue;
             }
 
             $normalized[] = $this->normalizePath($resolved);
         }
 
-        if ($hadInvalid) {
-            Log::warning('image_pipeline.binary_allowlist_filtered', ['invalid' => true]);
+        $normalized = array_values(array_unique($normalized));
+        $customAllowlist = trim((string) env('IMG_SCAN_BIN_ALLOWLIST', '')) !== '';
+        $strict = (bool) ($scanConfig['strict'] ?? false);
+
+        if ($normalized === []) {
+            // Si toda la allowlist configurada es inválida, intenta un fallback seguro.
+            $fallbackCandidates = [
+                '/usr/bin/clamdscan',
+                '/usr/local/bin/clamdscan',
+                '/usr/bin/clamscan',
+                '/usr/local/bin/clamscan',
+            ];
+
+            foreach ($fallbackCandidates as $fallback) {
+                $real = realpath($fallback);
+                if ($real !== false && $real !== '' && is_executable($real)) {
+                    $normalized[] = $this->normalizePath($real);
+                }
+            }
+
+            $normalized = array_values(array_unique($normalized));
+
+            if ($normalized === []) {
+                config(['image-pipeline.scan.bin_allowlist' => []]);
+
+                // En local/testing silenciamos para evitar spam; simplemente deshabilita el escáner.
+                if (app()->environment(['local', 'testing'])) {
+                    return;
+                }
+
+                if ($strict && $hadInput) {
+                    $failures[] = 'bin_allowlist';
+                }
+
+                if ($hadInput && ! $loggedInvalid) {
+                    Log::warning('image_pipeline.binary_allowlist_invalid', [
+                        'custom' => $customAllowlist,
+                        'candidates' => $invalidEntries,
+                    ]);
+                    $loggedInvalid = true;
+                }
+
+                return;
+            }
+
+            Log::info('image_pipeline.binary_allowlist_fallback', [
+                'used_fallbacks' => $normalized,
+                'custom' => $customAllowlist,
+                'discarded' => $invalidEntries,
+            ]);
         }
 
         // Aplica la lista normalizada y filtrada.
-        config(['image-pipeline.scan.bin_allowlist' => array_values(array_unique($normalized))]);
+        config(['image-pipeline.scan.bin_allowlist' => $normalized]);
 
-        $strict = (bool) ($scanConfig['strict'] ?? false);
-        if ($strict && $hadInput && $normalized === []) {
-            $failures[] = 'bin_allowlist';
+        if ($invalidEntries !== []) {
+            $payload = [
+                'discarded_total' => count($invalidEntries),
+                'filtered' => array_slice($invalidEntries, 0, 5),
+            ];
+
+            if ($customAllowlist) {
+                Log::info('image_pipeline.binary_allowlist_filtered', $payload);
+            } else {
+                Log::debug('image_pipeline.binary_allowlist_filtered', $payload);
+            }
         }
     }
 

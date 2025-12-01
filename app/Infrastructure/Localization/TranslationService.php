@@ -3,7 +3,7 @@
 namespace App\Infrastructure\Localization;
 
 // Importamos las clases necesarias
-use App\Domain\Security\SecurityHelper; // Helper para sanitización de seguridad
+use App\Infrastructure\Security\SecurityHelper; // Helper para sanitización de seguridad
 use Illuminate\Support\Facades\Log; // Facade para registrar logs
 use Illuminate\Support\Facades\Cache; // Facade para manejar la cache
 use JsonException; // Excepción para errores JSON

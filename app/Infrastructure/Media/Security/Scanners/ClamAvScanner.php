@@ -132,6 +132,79 @@ final class ClamAvScanner extends AbstractScanner
 
     /**
      * {@inheritDoc}
+     */
+    protected function resolveExecutable(array $scannerConfig): ?string
+    {
+        static $loggedMissing = false;
+
+        if (! config('uploads.virus_scanning.enabled', true)) {
+            return null;
+        }
+
+        $allowlist = $this->allowedBinaries();
+        if ($allowlist === []) {
+            if (! $loggedMissing) {
+                Log::error('image_scan.clamav_binary_not_allowlisted', ['reason' => 'empty_allowlist']);
+                $loggedMissing = true;
+            }
+            return null;
+        }
+
+        $failures = [];
+
+        foreach ($this->binaryCandidates($scannerConfig) as $candidate) {
+            $path = trim($candidate['path']);
+            if ($path === '') {
+                continue;
+            }
+
+            $resolved = realpath($path);
+            if ($resolved === false || $resolved === '') {
+                $failures[] = [
+                    'binary' => $path,
+                    'reason' => 'missing',
+                    'source' => $candidate['source'],
+                ];
+                continue;
+            }
+
+            $normalized = $this->normalizePath($resolved);
+
+            if (! in_array($normalized, $allowlist, true)) {
+                $failures[] = [
+                    'binary' => $normalized,
+                    'reason' => 'not_allowlisted',
+                    'source' => $candidate['source'],
+                ];
+                continue;
+            }
+
+            if (! is_executable($resolved)) {
+                $failures[] = [
+                    'binary' => $normalized,
+                    'reason' => 'not_executable',
+                    'source' => $candidate['source'],
+                ];
+                continue;
+            }
+
+            if ($candidate['source'] !== 'primary') {
+                Log::info('image_scan.clamav_binary_selected', [
+                    'binary' => $normalized,
+                    'source' => $candidate['source'],
+                ]);
+            }
+
+            return $resolved;
+        }
+
+        Log::error('image_scan.clamav_binary_unavailable', ['candidates' => $failures]);
+
+        return null;
+    }
+
+    /**
+     * {@inheritDoc}
      *
      * Construye el comando específico de ClamAV.
      * Determina si usar `clamdscan` en modo stream o `clamscan` con una copia temporal del archivo.
@@ -456,6 +529,47 @@ final class ClamAvScanner extends AbstractScanner
             'error' => $lastOpenError,
         ]);
         return null;
+    }
+
+    /**
+     * Genera la lista priorizada de binarios candidatos para ClamAV.
+     *
+     * @param array<string, mixed> $scannerConfig
+     * @return list<array{path: string, source: string}>
+     */
+    private function binaryCandidates(array $scannerConfig): array
+    {
+        $candidates = [];
+        $seen = [];
+
+        $push = static function (string $path, string $source) use (&$candidates, &$seen): void {
+            $trimmed = trim($path);
+            if ($trimmed === '' || isset($seen[$trimmed])) {
+                return;
+            }
+
+            $seen[$trimmed] = true;
+            $candidates[] = ['path' => $trimmed, 'source' => $source];
+        };
+
+        $primary = (string) ($scannerConfig['binary'] ?? '');
+        if ($primary !== '') {
+            $push($primary, 'primary');
+        }
+
+        $fallbacks = $scannerConfig['binary_fallbacks'] ?? [];
+        if (is_array($fallbacks)) {
+            foreach ($fallbacks as $fallback) {
+                if (! is_string($fallback)) {
+                    continue;
+                }
+
+                $source = str_contains(strtolower($fallback), 'clamd') ? 'clamdscan' : 'fallback';
+                $push($fallback, $source);
+            }
+        }
+
+        return $candidates;
     }
 
     /**

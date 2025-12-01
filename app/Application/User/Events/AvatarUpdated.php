@@ -4,12 +4,6 @@ declare(strict_types=1);
 
 namespace App\Application\User\Events;
 
-use App\Domain\User\User;
-use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;
-
 /**
  * Evento de dominio disparado cuando un usuario actualiza su avatar.
  *
@@ -22,30 +16,26 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  */
 final class AvatarUpdated
 {
-    use Dispatchable;        // Permite disparar el evento con event(new AvatarUpdated(...))
-    use InteractsWithSockets; // Soporte para broadcasting por websockets (si se implementa en el futuro)
-    use SerializesModels;    // Serializa modelos de forma segura para colas (solo guarda IDs)
-
     /**
      * Usuario que actualizó su avatar.
      *
-     * @var User
+     * @var int|string
      */
-    public readonly User $user;
+    public readonly int|string $userId;
 
     /**
      * Nuevo registro Media asociado al avatar.
      *
-     * @var Media
+     * @var int|string
      */
-    public readonly Media $newMedia;
+    public readonly int|string $newMediaId;
 
     /**
      * Media previo si existía (null si es el primer avatar).
      *
-     * @var Media|null
+     * @var int|string|null
      */
-    public readonly ?Media $oldMedia;
+    public readonly int|string|null $oldMediaId;
 
     /**
      * Hash/versión calculado para cache-busting (puede vivir en custom properties o columna user).
@@ -78,28 +68,28 @@ final class AvatarUpdated
     /**
      * Crea un nuevo evento AvatarUpdated.
      *
-     * @param User       $user        Usuario afectado.
-     * @param Media      $newMedia    Media recién adjuntado.
-     * @param Media|null $oldMedia    Media anterior (o null).
+     * @param int|string  $userId      ID del usuario afectado.
+     * @param int|string  $newMediaId  ID del media recién adjuntado.
+     * @param int|string|null $oldMediaId ID del media anterior (o null).
      * @param string|null $version    Hash/versión de cache.
      * @param string      $collection Nombre de colección (por defecto "avatar").
      * @param string|null $url        URL absoluta sugerida del avatar.
      */
     public function __construct(
-        User $user,                  // Usuario que actualizó su avatar
-        Media $newMedia,             // Nuevo archivo adjunto
-        ?Media $oldMedia = null,     // Archivo anterior (si existía)
+        int|string $userId,                  // Usuario que actualizó su avatar
+        int|string $newMediaId,             // Nuevo archivo adjunto
+        int|string|null $oldMediaId = null,     // Archivo anterior (si existía)
         ?string $version = null,     // Versión/hash para cache busting
         string $collection = 'avatar', // Colección ML usada (por defecto 'avatar')
         ?string $url = null          // URL pública del avatar (opcional)
     ) {
-        $this->user = $user;               // Asigna el usuario afectado
-        $this->newMedia = $newMedia;       // Asigna el nuevo archivo adjunto
-        $this->oldMedia = $oldMedia;       // Asigna el archivo anterior (o null)
+        $this->userId = $userId;               // ID del usuario afectado
+        $this->newMediaId = $newMediaId;       // ID del nuevo archivo adjunto
+        $this->oldMediaId = $oldMediaId;       // ID del archivo anterior (o null)
         $this->version = $version;         // Asigna la versión/hash
         $this->collection = $collection;   // Asigna el nombre de la colección
         $this->url = $url;                 // Asigna la URL sugerida del avatar
-        $this->replaced = $oldMedia !== null; // Calcula si hubo reemplazo
+        $this->replaced = $oldMediaId !== null; // Calcula si hubo reemplazo
     }
 
     /**
@@ -114,16 +104,10 @@ final class AvatarUpdated
     public function toArray(): array
     {
         // Obtiene las claves primarias de los modelos
-        $userId = $this->user->getKey();
-        $newMediaId = $this->newMedia->getKey();
-        $oldMediaId = $this->oldMedia?->getKey();
-
-        // Convierte las claves a enteros si son numéricas, de lo contrario las deja como string
-        // Esto es útil si se espera que los IDs sean enteros en los logs o sistemas externos
         return [
-            'user_id'      => is_numeric($userId) ? (int) $userId : $userId, // ID del usuario afectado
-            'new_media_id' => is_numeric($newMediaId) ? (int) $newMediaId : $newMediaId, // ID del nuevo archivo adjunto
-            'old_media_id' => $oldMediaId === null ? null : (is_numeric($oldMediaId) ? (int) $oldMediaId : $oldMediaId), // ID del archivo anterior (o null)
+            'user_id'      => $this->userId, // ID del usuario afectado
+            'new_media_id' => $this->newMediaId, // ID del nuevo archivo adjunto
+            'old_media_id' => $this->oldMediaId, // ID del archivo anterior (o null)
             'collection'   => $this->collection, // Nombre de la colección ML
             'version'      => $this->version,   // Hash/versión del avatar
             'replaced'     => $this->replaced,  // Indica si hubo reemplazo

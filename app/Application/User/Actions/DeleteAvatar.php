@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace App\Application\User\Actions;
 
+use App\Application\User\Contracts\UserAvatarRepository;
+use App\Application\User\Contracts\UserRepository;
 use App\Application\User\Events\AvatarDeleted;
-use App\Application\User\Jobs\CleanupMediaArtifactsJob;
-use App\Domain\User\User;
-use App\Infrastructure\Media\MediaArtifactCollector;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use App\Application\User\Jobs\CleanupMediaArtifacts;
+use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
+use App\Application\Shared\Contracts\ClockInterface;
+use App\Application\Shared\Contracts\EventBusInterface;
+use App\Application\Shared\Contracts\LoggerInterface;
+use App\Application\Shared\Contracts\TransactionManagerInterface;
+use App\Application\Media\Contracts\MediaOwner;
 use Illuminate\Support\Facades\Schema;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * Acción encargada de eliminar el avatar de un usuario.
@@ -33,7 +36,13 @@ class DeleteAvatar
     private static ?bool $hasAvatarVersionColumn = null;
 
     public function __construct(
-        private readonly MediaArtifactCollector $artifactCollector,
+        private readonly UserRepository $users,
+        private readonly UserAvatarRepository $avatars,
+        private readonly LoggerInterface $logger,
+        private readonly ClockInterface $clock,
+        private readonly TransactionManagerInterface $transactions,
+        private readonly EventBusInterface $events,
+        private readonly AsyncJobDispatcherInterface $jobs,
     ) {}
 
     /**
@@ -45,49 +54,18 @@ class DeleteAvatar
      * limpia el campo avatar_version si existe, registra logs
      * y dispara un evento (AvatarDeleted) al finalizar exitosamente.
      *
-     * @param User $user El modelo de usuario cuyo avatar se eliminará.
+     * @param MediaOwner $user Modelo que posee el avatar.
      * @return bool true si había avatar y se eliminó, false si no había nada.
      */
-    public function __invoke(User $user): bool
+    public function __invoke(MediaOwner $user): bool
     {
         // Inicia una transacción de base de datos para garantizar atomicidad
-        return DB::transaction(function () use ($user): bool {
-            /** @var User $locked */
-            // Aplica un lock pesimista (SELECT ... FOR UPDATE) en el registro del usuario
-            // para evitar condiciones de carrera si múltiples solicitudes intentan
-            // eliminar el avatar simultáneamente.
-            $locked = User::query()->lockForUpdate()->findOrFail($user->getKey());
+        return $this->transactions->transactional(function () use ($user): bool {
+            $locked = $this->users->lockAndFindById((string) $user->getKey());
 
-            /** @var Media|null $media */
-            // Obtiene el primer archivo adjunto en la colección 'avatar'
-            // Si no hay archivo adjunto, retorna false inmediatamente.
-            $media = $locked->getFirstMedia('avatar');
-            if (! $media) {
+            $result = $this->avatars->deleteAvatar($locked);
+            if (!$result->deleted || $result->mediaId === null) {
                 return false; // Nada que borrar - idempotencia
-            }
-
-            // Construye payload de cleanup antes de eliminar
-            // para poder usarlo en el log posteriormente.
-            $mediaId = $media->id;
-            $cleanupArtifacts = $this->artifactsForCleanup($locked, $media);
-
-            // Bloque try...catch para manejar posibles errores al eliminar
-            // el archivo físico (por ejemplo, en S3).
-            try {
-                // Elimina el archivo de la base de datos y del sistema de archivos/disco.
-                // Spatie Media Library se encarga de eliminar también las conversiones
-                // generadas previamente (e.g., thumb, medium, large) y el archivo original
-                // en el disco configurado (en este caso, S3).
-                $media->delete();
-            } catch (\Throwable $e) {
-                // Registra un error si falla la eliminación del archivo físico
-                Log::error('Error eliminando media (S3/DB)', [
-                    'user_id'  => $locked->getKey(), // ID del usuario
-                    'media_id' => $mediaId,          // ID del archivo que falló al eliminar
-                    'error'    => $e->getMessage(),  // Mensaje de error
-                ]);
-                // Relanza la excepción para forzar un rollback de la transacción
-                throw $e;
             }
 
             // Si el modelo User tiene una columna 'avatar_version',
@@ -99,106 +77,36 @@ class DeleteAvatar
 
             if (self::$hasAvatarVersionColumn) {
                 $locked->avatar_version = null; // Limpia el campo
-                $locked->save(); // Guarda los cambios en la base de datos
+                $this->users->save($locked); // Guarda los cambios en la base de datos
             }
 
             // Registra un evento de información en los logs
-            Log::info('Avatar eliminado', [
+            $this->logger->info('Avatar eliminado', [
                 'user_id'  => $locked->getKey(), // ID del usuario
-                'media_id' => $mediaId,          // ID del archivo eliminado
+                'media_id' => $result->mediaId,          // ID del archivo eliminado
             ]);
 
             // Verifica si la clase del evento AvatarDeleted existe
             // antes de intentar crear y disparar una instancia del evento.
             if (class_exists(AvatarDeleted::class)) {
-                // Dispara el evento AvatarDeleted para notificar a otros componentes
-                // del sistema sobre la eliminación del avatar.
-                // Puede usarse para purgar CDN, métricas, webhooks, etc.
-                event(new AvatarDeleted(
+                $this->events->dispatch(new AvatarDeleted(
                     userId: $locked->getKey(), // ID del usuario
-                    mediaId: $mediaId          // ID del archivo eliminado
+                    mediaId: (int) $result->mediaId          // ID del archivo eliminado
                 ));
             }
 
-            if ($cleanupArtifacts !== []) {
-                DB::afterCommit(function () use ($cleanupArtifacts) {
-                    CleanupMediaArtifactsJob::dispatch($cleanupArtifacts)
-                        ->delay(now()->addSeconds(self::CLEANUP_DELAY_SECONDS));
+            if ($result->hasArtifacts()) {
+                $this->transactions->afterCommit(function () use ($result) {
+                    $delay = $this->clock->now()->addSeconds(self::CLEANUP_DELAY_SECONDS);
+                    $this->jobs->dispatch(
+                        new CleanupMediaArtifacts($result->cleanupArtifacts),
+                        $delay
+                    );
                 });
             }
 
             // Retorna true para indicar que se eliminó un avatar exitosamente.
             return true;
         });
-    }
-
-    /**
-     * Prepara el payload de artefactos para cleanup aun si las conversions todavía no existen.
-     *
-     * @return array<string,list<array{dir:string,mediaId:string}>>
-     */
-    private function artifactsForCleanup(User $owner, Media $media): array
-    {
-        $entries = $this->artifactCollector->collectDetailed($owner, $media->collection_name);
-        $targetId = (string) $media->getKey();
-        $artifacts = [];
-
-        foreach ($entries as $entry) {
-            if (
-                !isset($entry['media']) ||
-                !$entry['media'] instanceof Media ||
-                (string) $entry['media']->getKey() !== $targetId ||
-                !isset($entry['disks']) ||
-                !is_array($entry['disks'])
-            ) {
-                continue;
-            }
-
-            foreach ($entry['disks'] as $disk => $types) {
-                if (!is_string($disk) || $disk === '' || !is_array($types)) {
-                    continue;
-                }
-
-                foreach (['original', 'conversions', 'responsive'] as $type) {
-                    $path = $types[$type]['path'] ?? null;
-                    if (!is_string($path) || $path === '') {
-                        continue;
-                    }
-
-                    $artifacts[$disk][] = [
-                        'dir'     => $path,
-                        'mediaId' => $targetId,
-                    ];
-                }
-            }
-        }
-
-        foreach ($artifacts as $disk => $items) {
-            $seen = [];
-            $deduped = [];
-
-            foreach ($items as $item) {
-                if (!isset($item['dir']) || !is_string($item['dir'])) {
-                    continue;
-                }
-
-                $key = $item['dir'] . '|' . ($item['mediaId'] ?? '');
-                if (isset($seen[$key])) {
-                    continue;
-                }
-
-                $seen[$key] = true;
-                $deduped[] = $item;
-            }
-
-            if ($deduped === []) {
-                unset($artifacts[$disk]);
-                continue;
-            }
-
-            $artifacts[$disk] = $deduped;
-        }
-
-        return $artifacts;
     }
 }

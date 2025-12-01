@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media\Security;
 
-use App\Domain\User\ConversionProfiles\FileConstraints;
+use App\Application\Media\Contracts\FileConstraints;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Throwable;

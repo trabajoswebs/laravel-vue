@@ -4,12 +4,18 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Providers;
 
-use App\Application\User\Listeners\RunPendingMediaCleanup;
-use App\Application\User\Listeners\QueueAvatarPostProcessing;
+use App\Infrastructure\Media\Listeners\RunPendingMediaCleanup;
+use App\Infrastructure\Media\Listeners\QueueAvatarPostProcessing;
+use App\Infrastructure\User\Events\AvatarDeleted;
 use Spatie\MediaLibrary\Conversions\Events\ConversionHasBeenCompletedEvent;
-use App\Application\User\Events\AvatarDeleted;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
+/**
+ * Proveedor de servicios para la gestión de eventos de la aplicación.
+ * 
+ * Registra los listeners para eventos específicos de la aplicación,
+ * incluyendo eventos de medios y avatares.
+ */
 class EventServiceProvider extends ServiceProvider
 {
     /**
@@ -23,21 +29,29 @@ class EventServiceProvider extends ServiceProvider
             // \App\Listeners\User\PurgeCdnCache::class,
         ],
 
+        // Al completar conversiones de medios: procesamiento posterior y limpieza
         ConversionHasBeenCompletedEvent::class => [
-            QueueAvatarPostProcessing::class,
-            RunPendingMediaCleanup::class,
+            QueueAvatarPostProcessing::class,      // Cola procesamiento de avatares
+            RunPendingMediaCleanup::class,        // Ejecuta limpieza de artefactos pendientes
         ],
 
     ];
 
     /**
      * No usamos event discovery: todo queda registrado en $listen.
+     * 
+     * @return bool False para deshabilitar la detección automática de eventos
      */
     public function shouldDiscoverEvents(): bool
     {
         return false;
     }
 
+    /**
+     * Inicializa el proveedor de eventos.
+     * 
+     * No requiere lógica adicional ya que el mapeo en $listen es suficiente.
+     */
     public function boot(): void
     {
         // Nada más: el mapeo en $listen es suficiente.
