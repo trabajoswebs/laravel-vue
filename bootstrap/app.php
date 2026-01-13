@@ -8,6 +8,7 @@ use App\Infrastructure\Http\Middleware\PreventBruteForce;
 use App\Infrastructure\Http\Middleware\RateLimitUploads;
 use App\Infrastructure\Http\Middleware\SanitizeInput;
 use App\Infrastructure\Http\Middleware\SecurityHeaders;
+use App\Infrastructure\Http\Middleware\TrackMediaAccess;
 use App\Infrastructure\Http\Middleware\UserAudit;
 use App\Infrastructure\Http\Middleware\TrustProxies;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -67,6 +68,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth' => Authenticate::class,
             'throttle' => ThrottleRequests::class,
             'rate.uploads' => RateLimitUploads::class,
+            'media.access' => TrackMediaAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

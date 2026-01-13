@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Infrastructure\Http\Controllers\LanguageController;
 use App\Infrastructure\Http\Controllers\Media\ShowAvatar;
+use App\Infrastructure\Http\Controllers\Health\HealthController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
@@ -14,9 +15,13 @@ Route::get('dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::get('media/avatar/{media}', ShowAvatar::class)
-    ->middleware(['signed', 'throttle:60,1']) // firma + rate limit
+    ->middleware(['signed', 'throttle:60,1', 'media.access']) // firma + rate limit + auditoría
     ->name('media.avatar.show')
     ->whereNumber('media');
+
+Route::get('health/upload-pipeline', [HealthController::class, 'uploadPipeline'])
+    ->middleware(['auth', 'throttle:15,1'])
+    ->name('health.upload-pipeline');
 
 if (app()->environment('local')) {
     Route::get('test-flash-event', function () {

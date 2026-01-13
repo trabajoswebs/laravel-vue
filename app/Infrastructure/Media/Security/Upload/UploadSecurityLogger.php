@@ -112,4 +112,28 @@ final class UploadSecurityLogger
     {
         Log::warning('upload.validation_failed', $context);
     }
+
+    /**
+     * Registra accesos a media servido.
+     */
+    public function accessed(array $context): void
+    {
+        Log::info('media.accessed', $context);
+    }
+
+    /**
+     * Registra validación correcta de reglas YARA.
+     */
+    public function yaraRulesValidated(array $context): void
+    {
+        Log::info('upload.yara_rules_valid', $context);
+    }
+
+    /**
+     * Registra fallo de integridad en reglas YARA.
+     */
+    public function yaraRulesFailed(array $context): void
+    {
+        Log::critical('upload.yara_rules_failed', $context);
+    }
 }

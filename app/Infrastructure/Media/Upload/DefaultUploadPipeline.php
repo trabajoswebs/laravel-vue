@@ -6,6 +6,7 @@ namespace App\Infrastructure\Media\Upload;
 
 use App\Application\Media\Contracts\FileConstraints;
 use App\Application\Media\Contracts\MediaProfile;
+use App\Application\Shared\Contracts\MetricsInterface;
 use App\Infrastructure\Media\Security\MagicBytesValidator;
 use App\Infrastructure\Media\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Media\Upload\Contracts\UploadMetadata;
@@ -55,6 +56,7 @@ final class DefaultUploadPipeline implements UploadPipeline
         private readonly ImageUploadPipelineAdapter $imagePipeline,
         private readonly MagicBytesValidator $magicBytes,
         private readonly UploadSecurityLogger $securityLogger,
+        private readonly MetricsInterface $metrics,
     ) {
         $this->ensureWorkingDirectory();
     }
@@ -73,11 +75,8 @@ final class DefaultUploadPipeline implements UploadPipeline
         MediaProfile $profile,
         string $correlationId
     ): UploadResult {
-        if ($profile->requiresImageNormalization()) {
-            // Delegamos a ImagePipeline cuando el perfil exige normalización completa.
-            return $this->imagePipeline->process($source, $profile, $correlationId);
-        }
-
+        $startedAt = microtime(true);
+        $resultTag = 'success';
         $normalizedPath = null;
         $originalFilename = $this->resolveOriginalFilename($source);
         $securityContext = [
@@ -87,6 +86,13 @@ final class DefaultUploadPipeline implements UploadPipeline
         ];
 
         try {
+            if ($profile->requiresImageNormalization()) {
+                $result = $this->imagePipeline->process($source, $profile, $correlationId);
+                $this->metrics->increment('upload.pipeline.success', $this->metricTags($profile));
+
+                return $result;
+            }
+
             $constraints = $profile->fileConstraints();
 
             // Resuelve el archivo como un SplFileObject
@@ -130,13 +136,22 @@ final class DefaultUploadPipeline implements UploadPipeline
                 'size' => $size,
             ]);
 
-            // Retorna el resultado del proceso de subida
+            $this->metrics->increment('upload.pipeline.success', $this->metricTags($profile));
+
             return new UploadResult(
                 path: $normalizedPath,
                 size: $size,
                 metadata: $metadata,
             );
+        } catch (VirusDetectedException $exception) {
+            $resultTag = 'virus';
+            $this->metrics->increment('upload.pipeline.virus_detected', $this->metricTags($profile));
+            $this->securityLogger->validationFailed($securityContext + ['error' => $exception->getMessage()]);
+
+            throw $exception;
         } catch (Throwable $exception) {
+            $resultTag = 'failed';
+            $this->metrics->increment('upload.pipeline.failures', $this->metricTags($profile));
             $this->securityLogger->validationFailed($securityContext + ['error' => $exception->getMessage()]);
             // Elimina el archivo temporal si fue creado
             if (is_string($normalizedPath)) {
@@ -149,6 +164,11 @@ final class DefaultUploadPipeline implements UploadPipeline
             }
 
             throw UploadException::fromThrowable('Upload pipeline failed.', $exception);
+        } finally {
+            $this->metrics->timing('upload.pipeline.duration_ms', (microtime(true) - $startedAt) * 1000, [
+                'profile' => $profile->collection(),
+                'result' => $resultTag,
+            ]);
         }
     }
 
@@ -693,6 +713,18 @@ final class DefaultUploadPipeline implements UploadPipeline
 
         $clean = preg_replace('/[^A-Za-z0-9._-]+/', '-', $name) ?? $name;
         return substr($clean, 0, 200);
+    }
+
+    /**
+     * Etiquetas por defecto para métricas del pipeline.
+     *
+     * @return array<string,string>
+     */
+    private function metricTags(MediaProfile $profile): array
+    {
+        return [
+            'profile' => $profile->collection(),
+        ];
     }
 
     /**

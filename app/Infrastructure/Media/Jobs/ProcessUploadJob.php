@@ -10,6 +10,7 @@ use App\Infrastructure\Media\Upload\Core\QuarantineToken;
 use App\Infrastructure\Media\Upload\DefaultUploadService;
 use App\Infrastructure\Media\Upload\Exceptions\UploadValidationException;
 use App\Infrastructure\Media\Upload\Exceptions\VirusDetectedException;
+use App\Application\Shared\Contracts\MetricsInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -57,8 +58,10 @@ final class ProcessUploadJob implements ShouldQueue
     /**
      * Ejecuta el pipeline completo en cola.
      */
-    public function handle(DefaultUploadService $uploader, UserRepository $users): void
+    public function handle(DefaultUploadService $uploader, UserRepository $users, MetricsInterface $metrics): void
     {
+        $startedAt = microtime(true);
+        $resultTag = 'error';
         $profile = app($this->profileClass);
         if (!$profile instanceof MediaProfile) {
             Log::error('process_upload.invalid_profile', ['profile' => $this->profileClass]);
@@ -85,15 +88,36 @@ final class ProcessUploadJob implements ShouldQueue
 
         try {
             $uploader->processQuarantined($owner, $upload, $this->token, $profile, $this->correlationId);
+            $resultTag = 'success';
+            $metrics->increment('upload.jobs.success', $this->metricTags($profile));
         } catch (VirusDetectedException $exception) {
-            // No reintentamos si hay virus: marcamos fail() para evitar requeues.
+            $resultTag = 'virus';
+            $metrics->increment('upload.jobs.virus_detected', $this->metricTags($profile));
             $this->fail($exception);
+            return;
         } catch (UploadValidationException $exception) {
-            // Errores de validación tampoco se reintentan.
+            $resultTag = 'failed';
+            $metrics->increment('upload.jobs.validation_failed', $this->metricTags($profile));
             $this->fail($exception);
+            return;
         } catch (Throwable $exception) {
-            // Otros errores se reintentan según configuración de la cola.
+            $metrics->increment('upload.jobs.errors', $this->metricTags($profile));
             throw $exception;
+        } finally {
+            $metrics->timing('upload.jobs.duration_ms', (microtime(true) - $startedAt) * 1000, [
+                'result' => $resultTag,
+                'profile' => $profile->collection(),
+            ]);
         }
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function metricTags(MediaProfile $profile): array
+    {
+        return [
+            'profile' => $profile->collection(),
+        ];
     }
 }

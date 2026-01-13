@@ -566,6 +566,9 @@ return [
             'rules_path' => env('IMG_SCAN_YARA_RULES', base_path('security/yara/images.yar')), // Ruta a las reglas YARA
             'timeout'   => env('IMG_SCAN_YARA_TIMEOUT', 5), // Tiempo de espera en segundos
             'arguments' => env('IMG_SCAN_YARA_ARGS', '--fail-on-warnings --nothreads'), // Argumentos para el comando
+            'rules_hash_file' => env('IMG_SCAN_YARA_HASH_FILE', base_path('security/yara/rules.sha256')),
+            'version_file' => env('IMG_SCAN_YARA_VERSION_FILE', base_path('security/yara/VERSION')),
+            'expected_hash' => env('IMG_SCAN_YARA_EXPECTED_HASH'),
         ],
     ],
 

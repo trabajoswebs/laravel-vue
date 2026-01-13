@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Media\Security\Scanners;
 
+use App\Infrastructure\Media\Security\Exceptions\InvalidRuleException;
+use App\Infrastructure\Media\Security\Upload\UploadSecurityLogger;
+use App\Infrastructure\Media\Security\YaraRuleManager;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -37,6 +40,19 @@ final class YaraScanner extends AbstractScanner
     private const INTEGER_RANGES = [
         '--timeout' => ['min' => 1, 'max' => 30], // Segundos
     ];
+
+    private ?YaraRuleManager $ruleManager;
+    private UploadSecurityLogger $securityLogger;
+
+    public function __construct(
+        ?array $config = null,
+        ?YaraRuleManager $ruleManager = null,
+        ?UploadSecurityLogger $securityLogger = null,
+    ) {
+        parent::__construct($config);
+        $this->ruleManager = $ruleManager;
+        $this->securityLogger = $securityLogger ?? app(UploadSecurityLogger::class);
+    }
 
     /**
      * {@inheritDoc}
@@ -216,6 +232,10 @@ final class YaraScanner extends AbstractScanner
             ];
         }
 
+        if ($failure = $this->guardRulesIntegrity()) {
+            return $failure;
+        }
+
         $handle = $target['handle'];
         $rewindError = null;
         set_error_handler(static function (int $severity, string $message) use (&$rewindError): bool {
@@ -351,5 +371,39 @@ final class YaraScanner extends AbstractScanner
 
         $stringValue = (string) $value;
         return $stringValue !== '' && ctype_digit($stringValue);
+    }
+
+    /**
+     * Valida integridad de reglas y decide si debe cortar la ejecución.
+     *
+     * @return array{fail_open_reason:string}|null
+     */
+    private function guardRulesIntegrity(): ?array
+    {
+        if ($this->ruleManager === null) {
+            return null;
+        }
+
+        try {
+            $this->ruleManager->validateIntegrity();
+            $this->securityLogger->yaraRulesValidated([
+                'version' => $this->ruleManager->getCurrentVersion(),
+            ]);
+
+            return null;
+        } catch (InvalidRuleException $exception) {
+            $context = ['error' => $exception->getMessage()];
+            $this->securityLogger->yaraRulesFailed($context);
+            Log::critical('image_scan.yara_rules_invalid', $context);
+
+            if (app()->environment(['local', 'testing'])) {
+                Log::warning('image_scan.yara_rules_invalid_local', $context);
+                return null;
+            }
+
+            return [
+                'fail_open_reason' => 'rules_integrity_failed',
+            ];
+        }
     }
 }

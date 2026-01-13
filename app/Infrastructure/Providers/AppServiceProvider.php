@@ -9,6 +9,7 @@ use App\Application\Media\Contracts\MediaUploader as MediaUploaderContract;
 use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
 use App\Application\Shared\Contracts\ClockInterface;
 use App\Application\Shared\Contracts\EventBusInterface;
+use App\Application\Shared\Contracts\MetricsInterface;
 use App\Application\Shared\Contracts\LoggerInterface;
 use App\Application\Shared\Contracts\TransactionManagerInterface;
 use App\Domain\Security\Rules\AvatarHeaderRules;
@@ -21,6 +22,8 @@ use App\Infrastructure\Media\MediaArtifactCollector;
 use App\Infrastructure\Media\Profiles\AvatarProfile;
 use App\Infrastructure\Media\Services\MediaCleanupScheduler;
 use App\Infrastructure\Media\Security\MagicBytesValidator;
+use App\Infrastructure\Media\Security\YaraRuleManager;
+use App\Infrastructure\Media\Security\GitYaraRuleManager;
 use App\Infrastructure\Media\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Media\Upload\Contracts\UploadPipeline;
 use App\Infrastructure\Media\Upload\Contracts\UploadService;
@@ -34,6 +37,7 @@ use App\Infrastructure\Shared\Adapters\LaravelClock;
 use App\Infrastructure\Shared\Adapters\LaravelEventBus;
 use App\Infrastructure\Shared\Adapters\LaravelLogger;
 use App\Infrastructure\Shared\Adapters\LaravelTransactionManager;
+use App\Infrastructure\Shared\Metrics\LogMetrics;
 use App\Infrastructure\User\Adapters\EloquentUserAvatarRepository;
 use App\Infrastructure\User\Adapters\EloquentUserRepository;
 use Illuminate\Database\Eloquent\Model;
@@ -71,6 +75,16 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(AsyncJobDispatcherInterface::class, LaravelAsyncJobDispatcher::class);
         $this->app->singleton(AvatarHeaderRules::class, AvatarHeaderRules::class);
         $this->app->singleton(RateLimitSignatureRules::class, RateLimitSignatureRules::class);
+        $this->app->singleton(MetricsInterface::class, LogMetrics::class);
+        $this->app->singleton(YaraRuleManager::class, static function (): YaraRuleManager {
+            $config = (array) config('image-pipeline.scan.yara', []);
+
+            return new GitYaraRuleManager(
+                (string) ($config['rules_path'] ?? base_path('security/yara/images.yar')),
+                (string) ($config['rules_hash_file'] ?? base_path('security/yara/rules.sha256')),
+                is_string($config['version_file'] ?? null) ? $config['version_file'] : null,
+            );
+        });
 
         // Registra el repositorio de cuarentena como un singleton
         $this->app->singleton(QuarantineRepository::class, static function (): QuarantineRepository {
@@ -108,6 +122,7 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(ImageUploadPipelineAdapter::class),
                 $app->make(MagicBytesValidator::class),
                 $app->make(UploadSecurityLogger::class),
+                $app->make(MetricsInterface::class),
             );
         });
 
