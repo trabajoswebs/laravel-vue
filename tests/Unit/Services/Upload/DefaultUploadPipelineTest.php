@@ -5,8 +5,14 @@ declare(strict_types=1);
 namespace Tests\Unit\Services\Upload;
 
 // Importamos las clases necesarias para los tests
-use App\Infrastructure\Media\Upload\DefaultUploadPipeline; // Pipeline de subida por defecto
-use App\Infrastructure\Media\Upload\Exceptions\UploadValidationException; // Excepción para validación de subida
+use App\Infrastructure\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline de subida por defecto
+use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException; // Excepción para validación de subida
+use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
+use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
+use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
+use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
+use App\Application\Uploads\Media\Contracts\MediaProfile;
+use App\Application\Shared\Contracts\MetricsInterface;
 use Tests\TestCase; // Clase base para tests de Laravel
 
 final class DefaultUploadPipelineTest extends TestCase
@@ -20,10 +26,23 @@ final class DefaultUploadPipelineTest extends TestCase
     private array $tempDirectories = [];
 
     /**
+     * Copia de valores originales de configuración mutados durante las pruebas.
+     *
+     * @var array<string,mixed>
+     */
+    private array $originalConfig = [];
+
+    /**
      * Método que se ejecuta después de cada test para limpiar recursos.
      */
     protected function tearDown(): void
     {
+        // Restauramos configuración modificada durante las pruebas
+        foreach ($this->originalConfig as $key => $value) {
+            config()->set($key, $value);
+        }
+        $this->originalConfig = [];
+
         // Eliminamos todos los directorios temporales creados durante los tests
         foreach ($this->tempDirectories as $directory) {
             $this->deleteDirectory($directory);
@@ -39,13 +58,13 @@ final class DefaultUploadPipelineTest extends TestCase
     public function testProcessThrowsWhenSourceIsNotReadable(): void
     {
         // Creamos una instancia del pipeline con configuración por defecto
-        $pipeline = $this->makePipeline();
+        [$pipeline, $profile] = $this->makePipeline();
 
         // Esperamos que se lance una UploadValidationException
         $this->expectException(UploadValidationException::class);
 
         // Intentamos procesar un archivo que no existe
-        $pipeline->process('/path/to/missing/file.jpg');
+        $pipeline->process('/path/to/missing/file.jpg', $profile, 'test-correlation');
     }
 
     /**
@@ -54,14 +73,14 @@ final class DefaultUploadPipelineTest extends TestCase
     public function testProcessRejectsSuspiciousPayloads(): void
     {
         // Creamos un pipeline que permite text/plain y txt
-        $pipeline = $this->makePipeline(['text/plain'], ['txt']);
+        [$pipeline, $profile] = $this->makePipeline(['text/plain'], ['txt']);
         // Creamos un archivo temporal con contenido sospechoso
         $path = $this->createTempFile('txt', "<script>alert('xss')</script>");
 
         try {
             // Esperamos que se lance una excepción al procesar el archivo
             $this->expectException(UploadValidationException::class);
-            $pipeline->process($path);
+            $pipeline->process($path, $profile, 'test-correlation');
         } finally {
             // Aseguramos que eliminamos el archivo temporal
             @unlink($path);
@@ -73,7 +92,7 @@ final class DefaultUploadPipelineTest extends TestCase
      */
     public function testProcessDetectsPayloadAcrossChunkBoundary(): void
     {
-        $pipeline = $this->makePipeline(['text/plain'], ['txt']);
+        [$pipeline, $profile] = $this->makePipeline(['text/plain'], ['txt']);
         $chunkSize = (int) (new \ReflectionClass(DefaultUploadPipeline::class))->getConstant('CHUNK_SIZE');
         $prefix = str_repeat('A', $chunkSize - 2);
         $payload = $prefix . '<s' . 'cript>';
@@ -81,7 +100,7 @@ final class DefaultUploadPipelineTest extends TestCase
 
         try {
             $this->expectException(UploadValidationException::class);
-            $pipeline->process($path);
+            $pipeline->process($path, $profile, 'test-correlation');
         } finally {
             @unlink($path);
         }
@@ -89,15 +108,16 @@ final class DefaultUploadPipelineTest extends TestCase
 
     /**
      * Crea una instancia del pipeline de subida con configuración específica.
-     *
+     * 
      * @param array<int, string> $allowedMimes MIMEs permitidos
      * @param array<int, string> $allowedExtensions Extensiones permitidas
-     * @return DefaultUploadPipeline Instancia del pipeline
+     * @return array{DefaultUploadPipeline, MediaProfile} Instancia del pipeline y perfil
      */
     private function makePipeline(
         array $allowedMimes = ['image/jpeg', 'image/png', 'image/webp'], // MIMEs por defecto
         array $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'], // Extensiones por defecto
-    ): DefaultUploadPipeline {
+        int $maxBytes = 512 * 1024, // Tamaño máximo por defecto (512KB)
+    ): array {
         // Creamos un directorio temporal único para este test
         $workingDirectory = sys_get_temp_dir() . '/upload-pipeline-tests/' . uniqid('', true);
 
@@ -109,13 +129,110 @@ final class DefaultUploadPipelineTest extends TestCase
         // Añadimos el directorio a la lista para limpiarlo después
         $this->tempDirectories[] = $workingDirectory;
 
-        // Creamos y devolvemos una instancia del pipeline
-        return new DefaultUploadPipeline(
-            $workingDirectory, // Directorio de trabajo
-            $allowedMimes, // MIMEs permitidos
-            $allowedExtensions, // Extensiones permitidas
-            512 * 1024 // Tamaño máximo (512KB)
-        );
+        $securityLogger = new UploadSecurityLogger();
+        $magicBytes = new MagicBytesValidator($securityLogger);
+        $metrics = $this->createMock(MetricsInterface::class);
+        $metrics->method('increment')->willReturnCallback(static function (): void {});
+        $metrics->method('timing')->willReturnCallback(static function (): void {});
+
+        $imagePipeline = $this->createMock(ImageUploadPipelineAdapter::class);
+
+        $constraints = $this->constraints($allowedMimes, $allowedExtensions, $maxBytes);
+        $profile = new class($constraints) implements MediaProfile {
+            public function __construct(private FileConstraints $constraints) {}
+            public function collection(): string { return 'test'; }
+            public function disk(): ?string { return null; }
+            public function conversions(): array { return []; }
+            public function isSingleFile(): bool { return true; }
+            public function fileConstraints(): FileConstraints { return $this->constraints; }
+            public function fieldName(): string { return 'file'; }
+            public function requiresSquare(): bool { return false; }
+            public function applyConversions(\App\Application\Uploads\Media\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
+            public function usesQuarantine(): bool { return false; }
+            public function usesAntivirus(): bool { return false; }
+            public function requiresImageNormalization(): bool { return false; }
+            public function getQuarantineTtlHours(): int { return 0; }
+            public function getFailedTtlHours(): int { return 0; }
+        };
+
+        // Creamos y devolvemos una instancia del pipeline junto con el perfil
+        return [
+            new DefaultUploadPipeline(
+                $workingDirectory, // Directorio de trabajo
+                $imagePipeline,
+                $magicBytes,
+                $securityLogger,
+                $metrics
+            ),
+            $profile,
+        ];
+    }
+
+    /**
+     * Construye restricciones de archivos para las pruebas.
+     *
+     * @param array<int,string> $allowedMimes
+     * @param array<int,string> $allowedExtensions
+     */
+    private function constraints(array $allowedMimes, array $allowedExtensions, int $maxBytes): FileConstraints
+    {
+        $this->rememberOriginalConfig([
+            'image-pipeline.allowed_mimes',
+            'image-pipeline.allowed_extensions',
+            'image-pipeline.max_bytes',
+        ]);
+
+        // Ajustamos configuración temporal para que FileConstraints use los valores solicitados.
+        config()->set('image-pipeline.allowed_mimes', $this->buildMimeMap($allowedMimes, $allowedExtensions));
+        config()->set('image-pipeline.allowed_extensions', $allowedExtensions);
+        config()->set('image-pipeline.max_bytes', $maxBytes);
+
+        return new FileConstraints();
+    }
+
+    /**
+     * Construye un mapa MIME => extensión usando heurísticas simples.
+     *
+     * @param array<int,string> $allowedMimes
+     * @param array<int,string> $allowedExtensions
+     * @return array<string,string>
+     */
+    private function buildMimeMap(array $allowedMimes, array $allowedExtensions): array
+    {
+        $extensions = array_values($allowedExtensions);
+        $fallback = $extensions[0] ?? 'bin';
+        $map = [];
+
+        foreach ($allowedMimes as $mime) {
+            $base = strtolower(substr($mime, (int) strrpos($mime, '/') + 1));
+            $match = null;
+
+            foreach ($extensions as $extension) {
+                $normalized = strtolower($extension);
+                if ($normalized === $base || str_starts_with($normalized, $base) || str_starts_with($base, $normalized)) {
+                    $match = $extension;
+                    break;
+                }
+            }
+
+            $map[$mime] = $match ?? $fallback;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Guarda una copia de los valores de configuración antes de mutarlos.
+     *
+     * @param array<int,string> $keys
+     */
+    private function rememberOriginalConfig(array $keys): void
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $this->originalConfig)) {
+                $this->originalConfig[$key] = config($key);
+            }
+        }
     }
 
     /**
