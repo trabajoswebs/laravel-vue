@@ -32,6 +32,7 @@ final class GenericUploadTest extends TestCase
     public function test_store_document_upload_succeeds(): void
     {
         Storage::fake('public');
+        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $response = $this->actingAs($user)
@@ -39,7 +40,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content')->mimeType('application/pdf'),
             ]);
 
         $response->assertCreated()
@@ -49,6 +50,7 @@ final class GenericUploadTest extends TestCase
     public function test_replace_document_upload_succeeds(): void
     {
         Storage::fake('public');
+        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $store = $this->actingAs($user)
@@ -56,7 +58,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content')->mimeType('application/pdf'),
             ])
             ->assertCreated()
             ->json('id');
@@ -66,7 +68,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->patch(route('uploads.update', ['uploadId' => $store]), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', '%PDF-1.4 content v2', 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', '%PDF-1.4 content v2')->mimeType('application/pdf'),
             ])
             ->assertCreated()
             ->assertJsonStructure(['id', 'profile_id', 'status', 'correlation_id']);
@@ -75,6 +77,7 @@ final class GenericUploadTest extends TestCase
     public function test_delete_document_upload_succeeds(): void
     {
         Storage::fake('public');
+        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $uploadId = $this->actingAs($user)
@@ -82,7 +85,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content')->mimeType('application/pdf'),
             ])
             ->assertCreated()
             ->json('id');
@@ -97,6 +100,7 @@ final class GenericUploadTest extends TestCase
     public function test_cross_tenant_operations_are_forbidden(): void
     {
         Storage::fake('public');
+        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$owner, $tenant] = $this->makeTenantUser();
         $foreign = User::factory()->create(['current_tenant_id' => null]);
 
@@ -105,7 +109,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content')->mimeType('application/pdf'),
             ])
             ->json('id');
 
@@ -114,7 +118,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content')->mimeType('application/pdf'),
             ])
             ->assertStatus(403);
 
@@ -123,7 +127,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->patch(route('uploads.update', ['uploadId' => $uploadId]), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', '%PDF-1.4 content v2', 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', '%PDF-1.4 content v2')->mimeType('application/pdf'),
             ])
             ->assertStatus(403);
 
@@ -137,6 +141,7 @@ final class GenericUploadTest extends TestCase
     public function test_secret_upload_download_is_forbidden(): void
     {
         Storage::fake('public');
+        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $uploadId = $this->actingAs($user)
@@ -144,7 +149,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'certificate_secret',
-                'file' => UploadedFile::fake()->createWithContent('cert.p12', 'secret-bytes', 'application/octet-stream'),
+                'file' => UploadedFile::fake()->createWithContent('cert.p12', 'secret-bytes')->mimeType('application/octet-stream'),
             ])
             ->json('id');
 

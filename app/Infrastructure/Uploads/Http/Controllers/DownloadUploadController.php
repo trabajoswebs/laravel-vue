@@ -58,7 +58,7 @@ final class DownloadUploadController extends Controller
             ->first();
 
         if (!$upload) {
-            throw new NotFoundHttpException();
+            return response('', Response::HTTP_NOT_FOUND);
         }
 
         // Log y bloqueo explícito de secretos antes de la policy para auditoría
@@ -69,14 +69,14 @@ final class DownloadUploadController extends Controller
                 'user_id' => (string) ($request->user()?->getKey() ?? ''),
             ]);
 
-            abort(403, 'Forbidden');
+            return response('', Response::HTTP_FORBIDDEN);
         }
 
         // Autoriza mediante policy (verifica tenant y perfiles permitidos)
         try {
             $this->authorize('download', $upload);
         } catch (AuthorizationException $e) {
-            abort(403, 'Forbidden');
+            return response('', Response::HTTP_FORBIDDEN);
         }
 
         // Obtiene la configuración de disco y ruta del archivo desde la base de datos

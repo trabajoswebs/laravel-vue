@@ -129,7 +129,9 @@ class DownloadUploadTest extends TestCase
         $userB->tenants()->attach($tenantB->id, ['role' => 'owner']);
 
         // Act: user from another tenant tries to download
-        $response = $this->actingAs($userB)->get(route('uploads.download', ['uploadId' => $uploadA->id]));
+        $response = $this->actingAs($userB)
+            ->withSession(['tenant_id' => $tenantB->id])
+            ->get(route('uploads.download', ['uploadId' => $uploadA->id]));
 
         // Assert: scoped lookup returns 404 for other tenants
         $response->assertStatus(404);
