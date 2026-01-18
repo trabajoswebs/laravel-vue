@@ -482,7 +482,7 @@ class LanguageController extends Controller
 
         // Si es Inertia
         if ($request->header('X-Inertia')) {
-            $redirect = Redirect::back(fallback: '/dashboard');
+            $redirect = Redirect::to('/dashboard');
 
             return $redirect
                 ->with('error', $sanitizedMessage)

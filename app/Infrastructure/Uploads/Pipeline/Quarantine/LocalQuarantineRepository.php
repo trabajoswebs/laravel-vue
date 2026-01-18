@@ -190,7 +190,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
         // Obtenemos el tamaño del stream
         $stats  = fstat($stream) ?: [];
         $length = $stats['size'] ?? null;
-        // Validamos tamaño (en testing permitimos fakes de tamaño 0)
+        // Validamos tamaño (en testing permitimos fakes vacíos)
         if (!app()->environment('testing') && $length !== null && $length <= 0) {
             throw new RuntimeException(__('media.uploads.quarantine_empty_content'));
         }

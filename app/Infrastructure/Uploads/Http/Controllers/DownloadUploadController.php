@@ -58,7 +58,7 @@ final class DownloadUploadController extends Controller
             ->first();
 
         if (!$upload) {
-            return abort(403, 'Forbidden');
+            throw new NotFoundHttpException();
         }
 
         // Log y bloqueo explícito de secretos antes de la policy para auditoría
