@@ -13,7 +13,7 @@ use App\Application\Shared\Contracts\ClockInterface;
 use App\Application\Shared\Contracts\EventBusInterface;
 use App\Application\Shared\Contracts\LoggerInterface;
 use App\Application\Shared\Contracts\TransactionManagerInterface;
-use App\Application\Media\Contracts\MediaOwner;
+use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
 use Illuminate\Support\Facades\Schema;
 
 /**

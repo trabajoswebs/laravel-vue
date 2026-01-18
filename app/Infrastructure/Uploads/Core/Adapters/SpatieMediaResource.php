@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Core\Adapters;
 
-use App\Domain\Uploads\Media\Contracts\MediaResource;
+use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**

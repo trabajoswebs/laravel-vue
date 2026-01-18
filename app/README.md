@@ -12,12 +12,12 @@ Mapa rápido:
   - `Security/Rules/` → Reglas para headers de avatar y firmas de rate limiting.
 - `Application/`
   - `Uploads/` → Actions (`UploadFile`, `ReplaceFile`), orquestador contract y DTOs (`UploadResult`, `ReplacementResult`), repositorio contract.
-  - `Media/` → `MediaReplacementService` y puertos (`MediaProfile`, `MediaOwner`, `UploadedMedia`, `MediaUploader`, `MediaArtifactCollector`, `MediaCleanupScheduler`) usados por el pipeline actual. **Legacy en observación**: se podría recortar cuando Uploads exponga todos los perfiles.
+  - `Media/` → `MediaReplacementService` y puertos (`MediaProfile`, `MediaOwner`, `UploadedMedia`, `MediaUploader`, `MediaArtifactCollector`, `MediaCleanupScheduler`) usados por el pipeline actual. **Legacy eliminado**: toda esta funcionalidad vive ahora en `Infrastructure/Uploads/Core/{Contracts,DTO,Services}`.
   - `User/` → Actions de avatar (`UpdateAvatar`, `DeleteAvatar`), eventos (`AvatarUpdated/Deleted`), puertos/repos (`Contracts/*`), DTOs (`AvatarUpdateResult`, `AvatarDeletionResult`), mensaje `CleanupMediaArtifacts`, enum `ConversionReadyState`.
   - `Shared/Contracts/` → Puertos de reloj/logger/event bus/colas/transacciones.
 - `Infrastructure/`
   - `Http/` → Controladores Auth/Settings/Language; base `Controller`, middlewares de seguridad/auditoría y FormRequests genéricas. Uploads expone controllers/FormRequests/middleware/rules en `Infrastructure/Uploads/Http` (incl. `SecureImageValidation` y `RateLimitUploads`).
-  - `Uploads/` → Hub único: Http (controllers/FormRequests/middleware + `HttpUploadedMedia`), Core (`Core/Orchestrators/DefaultUploadOrchestrator`, registry de perfiles, paths tenant-first, repositorios/adaptadores/modelos), Pipeline (ImagePipeline + UploadPipeline, cuarentena, scanning AV/Yara, seguridad, optimizador, jobs/listeners/observers, health check), scheduler de cleanup y providers (MediaLibrary, ImagePipeline, Uploads). Todos los endpoints de subida/descarga/serving se apoyan en este hub.
+  - `Uploads/` → Hub único: Http (controllers/FormRequests/middleware + `HttpUploadedMedia`), Core (Orchestrator, registry de perfiles, paths tenant-first, repositorios/adaptadores/modelos, contratos/DTOs y servicios de media), Pipeline (ImagePipeline + UploadPipeline, cuarentena, scanning AV/Yara, seguridad, optimizador, jobs/listeners/observers, health check), scheduler de cleanup y providers (MediaLibrary, ImagePipeline, Uploads). Todos los endpoints de subida/descarga/serving se apoyan en este hub.
   - `Console/` → Kernel y comandos `quarantine:*`, `CleanAuditLogs`.
   - `Providers/` → App/Auth/Event/HtmlPurifier/ImagePipeline y Tenancy.
   - `Localization/` → `TranslationService`.
@@ -46,5 +46,5 @@ Mapa rápido:
 
 ## Componentes deprecados/eliminados
 - `Infrastructure/Media/` → DEPRECATED. Vacío salvo `README.md`; toda la lógica vive en `Infrastructure/Uploads`.
-- Legacy en observación: `Application/Media/*` y `Domain/Media/*` (puertos/DTOs) siguen alimentando el pipeline actual; eliminar solo cuando Uploads exponga contratos equivalentes.
-- Eliminados por duplicados: `app/Infrastructure/Media/DTO/ReplacementResult.php`, `ReplacementSnapshot.php`, `ReplacementSnapshotItem.php` (usaban snapshots redundantes con los DTO de Domain/Application). Usar `Application/Uploads/DTO/ReplacementResult` y los DTO de dominio `MediaReplacementSnapshot` en su lugar.
+- Eliminados: `Application/Media/*` y `Domain/Media/*` (puertos/DTOs) fueron absorbidos por `Infrastructure/Uploads/Core/{Contracts,DTO,Services}`.
+- Eliminados por duplicados: `app/Infrastructure/Media/DTO/ReplacementResult.php`, `ReplacementSnapshot.php`, `ReplacementSnapshotItem.php` (usaban snapshots redundantes con los DTO de Domain/Application). Usar `Infrastructure/Uploads/Core/DTO/MediaReplacementResult` y snapshots de `Core/DTO`.

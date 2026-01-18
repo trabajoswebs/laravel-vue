@@ -4,11 +4,11 @@ declare(strict_types=1); // Tipado estricto
 
 namespace App\Infrastructure\Uploads\Providers; // Namespace del provider de uploads
 
-use App\Application\Uploads\Media\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract; // Contrato colector
-use App\Application\Uploads\Media\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract; // Contrato cleanup
-use App\Application\Uploads\Media\Contracts\MediaProfile; // Contrato perfil Spatie
-use App\Application\Uploads\Media\Contracts\MediaUploader as MediaUploaderContract; // Contrato de uploader
-use App\Application\Uploads\Media\Handlers\MediaReplacementService; // Servicio de reemplazo
+use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract; // Contrato colector
+use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract; // Contrato cleanup
+use App\Infrastructure\Uploads\Core\Contracts\MediaProfile; // Contrato perfil Spatie
+use App\Infrastructure\Uploads\Core\Contracts\MediaUploader as MediaUploaderContract; // Contrato de uploader
+use App\Infrastructure\Uploads\Core\Services\MediaReplacementService; // Servicio de reemplazo
 use App\Application\Shared\Contracts\MetricsInterface; // Métricas
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles

@@ -2,12 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Media\Contracts;
-
-use App\Domain\Media\Contracts\MediaResource;
+namespace App\Infrastructure\Uploads\Core\Contracts;
 
 /**
- * Puerto de aplicación para programar y ejecutar limpieza de artefactos.
+ * Coordina el cleanup de artefactos de media tras conversions.
  */
 interface MediaCleanupScheduler
 {
@@ -17,15 +15,14 @@ interface MediaCleanupScheduler
     public function flagPendingConversions(MediaResource $media, array $expectedConversions): void;
 
     /**
-     * @param array<string,list<array{dir:string,mediaId?:string|null}>> $artifacts
-     * @param array<int,string|int|null> $preserveMediaIds
-     * @param array<int,string> $expectedConversions
+     * @param array<string,list<string>> $artifacts
+     * @param array<int,string|int> $preserveMediaIds
      */
     public function scheduleCleanup(
         MediaResource $triggerMedia,
         array $artifacts,
         array $preserveMediaIds,
-        array $expectedConversions
+        array $conversions = []
     ): void;
 
     public function handleConversionEvent(MediaResource $media): void;

@@ -9,7 +9,7 @@ use App\Application\Uploads\Contracts\UploadRepositoryInterface; // Contrato de 
 use App\Application\Uploads\DTO\ReplacementResult; // DTO de reemplazo
 use App\Application\Uploads\DTO\UploadResult; // DTO de upload
 use App\Application\Shared\Contracts\TenantContextInterface; // Contexto de tenant
-use App\Application\Uploads\Media\Handlers\MediaReplacementService; // Servicio de reemplazo de media
+use App\Infrastructure\Uploads\Core\Services\MediaReplacementService; // Servicio de reemplazo de media
 use App\Domain\Uploads\ScanMode; // Enum de escaneo
 use App\Domain\Uploads\UploadProfile; // Perfil de upload
 use App\Infrastructure\Models\User; // Modelo User usado como actor/owner
@@ -227,7 +227,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface // 
     /**
      * Mapea perfil de dominio a MediaProfile Spatie.
      */
-    private function resolveMediaProfile(UploadProfile $profile): \App\Application\Uploads\Media\Contracts\MediaProfile // Devuelve MediaProfile
+    private function resolveMediaProfile(UploadProfile $profile): \App\Infrastructure\Uploads\Core\Contracts\MediaProfile // Devuelve MediaProfile
     {
         return $this->avatarProfile; // Usa AvatarProfile para imágenes actuales
     }

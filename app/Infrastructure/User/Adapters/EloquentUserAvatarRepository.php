@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\User\Adapters;
 
-use App\Application\Media\Contracts\MediaArtifactCollector;
-use App\Application\Media\Contracts\MediaOwner;
-use App\Application\Media\Contracts\MediaProfile;
-use App\Application\Media\Contracts\UploadedMedia;
-use App\Application\Media\Handlers\MediaReplacementService;
+use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector;
+use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
+use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
+use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
+use App\Infrastructure\Uploads\Core\Services\MediaReplacementService;
 use App\Application\User\Contracts\UserAvatarRepository;
 use App\Application\User\DTO\AvatarDeletionResult;
 use App\Application\User\DTO\AvatarUpdateResult;
-use App\Domain\Media\Contracts\MediaResource;
+use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
 use Illuminate\Support\Facades\Log;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
