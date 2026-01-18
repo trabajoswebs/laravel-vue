@@ -65,14 +65,16 @@ final class DownloadUploadController extends Controller
                 'user_id' => (string) ($request->user()?->getKey() ?? ''),
             ]);
 
-            abort(403, 'Forbidden');
+            return abort(403, 'Forbidden');
         }
 
         // Autoriza mediante policy (verifica tenant y perfiles permitidos)
         try {
             $this->authorize('download', $upload);
-        } catch (AuthorizationException $e) {
-            abort(403, 'Forbidden');
+        } catch (AuthorizationException) {
+            return abort(403, 'Forbidden');
+        } catch (\Throwable) {
+            return abort(403, 'Forbidden');
         }
 
         // Obtiene la configuración de disco y ruta del archivo desde la base de datos

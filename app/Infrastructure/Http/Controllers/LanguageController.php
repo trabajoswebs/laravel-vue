@@ -473,11 +473,12 @@ class LanguageController extends Controller
         // Sanitizar mensajes de usuario usando SecurityHelper
         $sanitizedMessage = SecurityHelper::sanitizeErrorMessage($userMessage);
         // Asegura flash consistente incluso en flujos Inertia/JSON
-        Session::flash('error', $sanitizedMessage);
-        Session::flash('success', false);
-        Session::flash('message', $sanitizedMessage);
+        $session = $request->session();
+        $session->flash('error', $sanitizedMessage);
+        $session->flash('success', false);
+        $session->flash('message', $sanitizedMessage);
         // Persiste en sesión regular para aserciones en tests de Inertia
-        Session::put('error', $sanitizedMessage);
+        $session->put('error', $sanitizedMessage);
 
         // Si es Inertia
         if ($request->header('X-Inertia')) {
