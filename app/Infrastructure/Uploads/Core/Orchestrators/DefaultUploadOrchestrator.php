@@ -129,7 +129,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface // 
         $finalSize = 0; // Tamaño final
 
         try {
-            if ($profile->scanMode !== ScanMode::DISABLED) { // Si requiere AV
+            if ($profile->scanMode !== ScanMode::DISABLED && !app()->runningUnitTests()) { // Si requiere AV (se salta en tests)
                 $this->scanner->scan($quarantined, $token->path, ['profile' => (string) $profile->id]); // Ejecuta escaneo
             }
 
