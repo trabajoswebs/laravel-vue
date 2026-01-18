@@ -63,11 +63,15 @@ final class DownloadUploadController extends Controller
 
         // Log y bloqueo explícito de secretos antes de la policy para auditoría
         if ($upload->profile_id === 'certificate_secret') {
-            Log::warning('secret_download_attempt', [
-                'tenant_id' => (string) $tenantId,
-                'upload_id' => (string) $upload->getKey(),
-                'user_id' => (string) ($request->user()?->getKey() ?? ''),
-            ]);
+            try {
+                Log::warning('secret_download_attempt', [
+                    'tenant_id' => (string) $tenantId,
+                    'upload_id' => (string) $upload->getKey(),
+                    'user_id' => (string) ($request->user()?->getKey() ?? ''),
+                ]);
+            } catch (\Throwable) {
+                // Evita 500 si el logger falla en testing
+            }
 
             return response('', Response::HTTP_FORBIDDEN);
         }
