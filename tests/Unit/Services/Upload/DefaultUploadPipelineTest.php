@@ -147,7 +147,7 @@ final class DefaultUploadPipelineTest extends TestCase
             public function fileConstraints(): FileConstraints { return $this->constraints; }
             public function fieldName(): string { return 'file'; }
             public function requiresSquare(): bool { return false; }
-            public function applyConversions(\App\Application\Uploads\Media\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
+            public function applyConversions(\App\Infrastructure\Uploads\Core\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
             public function usesQuarantine(): bool { return false; }
             public function usesAntivirus(): bool { return false; }
             public function requiresImageNormalization(): bool { return false; }
