@@ -36,9 +36,10 @@ final class GenericUploadTest extends TestCase
 
         $response = $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
-            ->postJson(route('uploads.store'), [
+            ->withHeader('Accept', 'application/json')
+            ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
             ]);
 
         $response->assertCreated()
@@ -52,20 +53,22 @@ final class GenericUploadTest extends TestCase
 
         $store = $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
-            ->postJson(route('uploads.store'), [
+            ->withHeader('Accept', 'application/json')
+            ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
             ])
             ->assertCreated()
             ->json('id');
 
         $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
-            ->patchJson(route('uploads.update', ['uploadId' => $store]), [
+            ->withHeader('Accept', 'application/json')
+            ->patch(route('uploads.update', ['uploadId' => $store]), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->create('doc2.pdf', 12, 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', '%PDF-1.4 content v2', 'application/pdf'),
             ])
-            ->assertOk()
+            ->assertCreated()
             ->assertJsonStructure(['id', 'profile_id', 'status', 'correlation_id']);
     }
 
@@ -76,16 +79,18 @@ final class GenericUploadTest extends TestCase
 
         $uploadId = $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
-            ->postJson(route('uploads.store'), [
+            ->withHeader('Accept', 'application/json')
+            ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
             ])
             ->assertCreated()
             ->json('id');
 
         $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
-            ->deleteJson(route('uploads.destroy', ['uploadId' => $uploadId]))
+            ->withHeader('Accept', 'application/json')
+            ->delete(route('uploads.destroy', ['uploadId' => $uploadId]))
             ->assertNoContent();
     }
 
@@ -97,31 +102,35 @@ final class GenericUploadTest extends TestCase
 
         $uploadId = $this->actingAs($owner)
             ->withSession(['tenant_id' => $tenant->id])
-            ->postJson(route('uploads.store'), [
+            ->withHeader('Accept', 'application/json')
+            ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
             ])
             ->json('id');
 
         $this->actingAs($foreign)
             ->withSession(['tenant_id' => null])
-            ->postJson(route('uploads.store'), [
+            ->withHeader('Accept', 'application/json')
+            ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc.pdf', '%PDF-1.4 content', 'application/pdf'),
             ])
             ->assertStatus(403);
 
         $this->actingAs($foreign)
             ->withSession(['tenant_id' => null])
-            ->patchJson(route('uploads.update', ['uploadId' => $uploadId]), [
+            ->withHeader('Accept', 'application/json')
+            ->patch(route('uploads.update', ['uploadId' => $uploadId]), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->create('doc2.pdf', 12, 'application/pdf'),
+                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', '%PDF-1.4 content v2', 'application/pdf'),
             ])
             ->assertStatus(403);
 
         $this->actingAs($foreign)
             ->withSession(['tenant_id' => null])
-            ->deleteJson(route('uploads.destroy', ['uploadId' => $uploadId]))
+            ->withHeader('Accept', 'application/json')
+            ->delete(route('uploads.destroy', ['uploadId' => $uploadId]))
             ->assertStatus(403);
     }
 
@@ -132,9 +141,10 @@ final class GenericUploadTest extends TestCase
 
         $uploadId = $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
-            ->postJson(route('uploads.store'), [
+            ->withHeader('Accept', 'application/json')
+            ->post(route('uploads.store'), [
                 'profile_id' => 'certificate_secret',
-                'file' => UploadedFile::fake()->create('cert.p12', 5, 'application/octet-stream'),
+                'file' => UploadedFile::fake()->createWithContent('cert.p12', 'secret-bytes', 'application/octet-stream'),
             ])
             ->json('id');
 

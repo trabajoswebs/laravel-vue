@@ -74,7 +74,7 @@ final class UploadController extends Controller
             'profile_id' => $result->new->profileId,
             'status' => $result->new->status,
             'correlation_id' => $result->new->correlationId,
-        ]);
+        ], Response::HTTP_CREATED);
     }
 
     public function destroy(Request $request, string $uploadId): JsonResponse

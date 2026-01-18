@@ -33,7 +33,7 @@ trait UsesDocumentValidation
             'bail',
             'required',
             'file',
-            File::types($extensions)->max($maxKb),
+            File::types($extensions)->max($maxKb)->min(1),
             'mimetypes:' . implode(',', $allowedMimes),
             $this->guardDocument($allowedMimes, $maxBytes),
         ];
