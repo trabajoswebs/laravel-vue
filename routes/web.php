@@ -28,6 +28,17 @@ Route::middleware(['tenant'])->group(function (): void {
         ->name('uploads.download'); // Nombre de ruta
 });
 
+Route::middleware(['tenant', 'auth'])->group(function (): void {
+    Route::post('uploads', [\App\Infrastructure\Uploads\Http\Controllers\UploadController::class, 'store'])
+        ->name('uploads.store');
+    Route::patch('uploads/{uploadId}', [\App\Infrastructure\Uploads\Http\Controllers\UploadController::class, 'update'])
+        ->whereUuid('uploadId')
+        ->name('uploads.update');
+    Route::delete('uploads/{uploadId}', [\App\Infrastructure\Uploads\Http\Controllers\UploadController::class, 'destroy'])
+        ->whereUuid('uploadId')
+        ->name('uploads.destroy');
+});
+
 Route::get('health/upload-pipeline', [HealthController::class, 'uploadPipeline'])
     ->middleware(['auth', 'throttle:15,1'])
     ->name('health.upload-pipeline');
