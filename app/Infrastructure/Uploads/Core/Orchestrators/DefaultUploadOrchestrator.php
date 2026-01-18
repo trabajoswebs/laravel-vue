@@ -117,7 +117,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface // 
         $uploaded = $this->unwrap($file); // Obtiene UploadedFile
         $this->validateDocument($profile, $uploaded); // Valida magic bytes/MIME/size
 
-        [$quarantined, $token] = $this->quarantine->duplicate($uploaded, null, $this->correlationId()); // Copia a cuarentena
+        [$quarantined, $token] = $this->quarantine->duplicate($uploaded, null, $this->correlationId(), false); // Copia a cuarentena sin validar MIME (se valida abajo)
 
         $tenantId = $this->tenantContext->requireTenantId(); // Obtiene tenant_id
         $disk = $profile->disk; // Disco configurado

@@ -476,6 +476,8 @@ class LanguageController extends Controller
         Session::flash('error', $sanitizedMessage);
         Session::flash('success', false);
         Session::flash('message', $sanitizedMessage);
+        // Persiste en sesión regular para aserciones en tests de Inertia
+        Session::put('error', $sanitizedMessage);
 
         // Si es Inertia
         if ($request->header('X-Inertia')) {
