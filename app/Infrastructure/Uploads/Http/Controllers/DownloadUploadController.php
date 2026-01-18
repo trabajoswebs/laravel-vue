@@ -7,6 +7,7 @@ namespace App\Infrastructure\Uploads\Http\Controllers;
 use App\Application\Shared\Contracts\TenantContextInterface;
 use App\Infrastructure\Http\Controllers\Controller;
 use App\Infrastructure\Uploads\Core\Models\Upload;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -68,7 +69,11 @@ final class DownloadUploadController extends Controller
         }
 
         // Autoriza mediante policy (verifica tenant y perfiles permitidos)
-        $this->authorize('download', $upload);
+        try {
+            $this->authorize('download', $upload);
+        } catch (AuthorizationException $e) {
+            abort(403, 'Forbidden');
+        }
 
         // Obtiene la configuración de disco y ruta del archivo desde la base de datos
         $disk = (string) $upload->disk;
