@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 use App\Infrastructure\Http\Controllers\Settings\PasswordController;
 use App\Infrastructure\Http\Controllers\Settings\ProfileController;
-use App\Infrastructure\Http\Controllers\Settings\ProfileAvatarController;
+use App\Infrastructure\Uploads\Http\Controllers\Settings\ProfileAvatarController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::middleware('auth')->group(function () {
+Route::middleware('tenant')->group(function () { // Protege rutas con grupo tenant
     Route::redirect('settings', '/settings/profile');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');

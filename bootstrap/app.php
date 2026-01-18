@@ -1,16 +1,19 @@
 <?php
 
+require_once __DIR__ . '/helpers.php';
+
 // Importaciones de clases y namespaces necesarios para la configuración de la aplicación.
 use App\Infrastructure\Security\SecurityHelper;
 use App\Infrastructure\Http\Middleware\HandleAppearance;
 use App\Infrastructure\Http\Middleware\HandleInertiaRequests;
 use App\Infrastructure\Http\Middleware\PreventBruteForce;
-use App\Infrastructure\Http\Middleware\RateLimitUploads;
+use App\Infrastructure\Uploads\Http\Middleware\RateLimitUploads;
 use App\Infrastructure\Http\Middleware\SanitizeInput;
 use App\Infrastructure\Http\Middleware\SecurityHeaders;
-use App\Infrastructure\Http\Middleware\TrackMediaAccess;
+use App\Infrastructure\Uploads\Http\Middleware\TrackMediaAccess;
 use App\Infrastructure\Http\Middleware\UserAudit;
 use App\Infrastructure\Http\Middleware\TrustProxies;
+use App\Infrastructure\Tenancy\Middleware\ResolveTenant; // Middleware propio para resolver tenant
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Foundation\Application;
@@ -69,6 +72,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'throttle' => ThrottleRequests::class,
             'rate.uploads' => RateLimitUploads::class,
             'media.access' => TrackMediaAccess::class,
+            'tenant.resolve' => ResolveTenant::class, // Resuelve y fija tenant en la request
+        ]);
+
+        $middleware->group('tenant', [ // Grupo reutilizable para rutas tenant-aware
+            'web',                       // Incluye middleware web (sesiones/csrf)
+            Authenticate::class,         // Requiere usuario autenticado
+            ResolveTenant::class,        // Resuelve tenant desde current_tenant_id y membership
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

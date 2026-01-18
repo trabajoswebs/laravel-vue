@@ -3,7 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Infrastructure\Http\Controllers\LanguageController;
-use App\Infrastructure\Http\Controllers\Media\ShowAvatar;
+use App\Infrastructure\Uploads\Http\Controllers\Media\ShowAvatar;
+use App\Infrastructure\Uploads\Http\Controllers\DownloadUploadController; // Controlador de descargas
 use App\Infrastructure\Http\Controllers\Health\HealthController;
 
 Route::get('/', function () {
@@ -14,10 +15,18 @@ Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::get('media/avatar/{media}', ShowAvatar::class)
-    ->middleware(['signed', 'throttle:60,1', 'media.access']) // firma + rate limit + auditoría
-    ->name('media.avatar.show')
-    ->whereNumber('media');
+Route::middleware(['tenant', 'signed'])->group(function (): void {
+    Route::get('media/avatar/{media}', ShowAvatar::class)
+        ->middleware(['throttle:60,1', 'media.access']) // firma + rate limit + auditoría
+        ->name('media.avatar.show')
+        ->whereNumber('media');
+});
+
+Route::middleware(['tenant'])->group(function (): void {
+    Route::get('uploads/{uploadId}', DownloadUploadController::class) // Descarga de uploads no imagen
+        ->whereUuid('uploadId') // Usa UUID
+        ->name('uploads.download'); // Nombre de ruta
+});
 
 Route::get('health/upload-pipeline', [HealthController::class, 'uploadPipeline'])
     ->middleware(['auth', 'throttle:15,1'])
@@ -41,7 +50,6 @@ Route::prefix('language')->name('language.')->group(function () {
     // Cambiar idioma del usuario
     Route::post('change/{locale}', [LanguageController::class, 'changeLanguage'])
         ->name('change')
-        ->where('locale', '[a-z]{2}(-[A-Z]{2})?')
         ->middleware(['auth', 'throttle:30,1']); // guest + 30 cambios por minuto máximo
     
     // Obtener idioma actual
