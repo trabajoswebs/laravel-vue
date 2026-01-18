@@ -22,13 +22,13 @@ Route::middleware(['tenant', 'signed'])->group(function (): void {
         ->whereNumber('media');
 });
 
-Route::middleware(['tenant'])->group(function (): void {
+Route::middleware(['auth', 'tenant'])->group(function (): void {
     Route::get('uploads/{uploadId}', DownloadUploadController::class) // Descarga de uploads no imagen
         ->whereUuid('uploadId') // Usa UUID
         ->name('uploads.download'); // Nombre de ruta
 });
 
-Route::middleware(['tenant', 'auth'])->group(function (): void {
+Route::middleware(['auth', 'tenant'])->group(function (): void {
     Route::post('uploads', [\App\Infrastructure\Uploads\Http\Controllers\UploadController::class, 'store'])
         ->name('uploads.store');
     Route::patch('uploads/{uploadId}', [\App\Infrastructure\Uploads\Http\Controllers\UploadController::class, 'update'])

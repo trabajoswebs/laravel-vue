@@ -8,17 +8,13 @@ use App\Infrastructure\Auth\Policies\Concerns\HandlesTenantMembership;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Domain\Uploads\ServingMode;
+use App\Domain\Uploads\UploadProfileId;
+use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
 
-/**
- * Policy para descargas de Uploads.
- */
 class UploadPolicy
 {
     use HandlesTenantMembership;
 
-    /**
-     * Autoriza la creación de un upload genérico.
-     */
     public function create(User $user, string $profileId): bool
     {
         if ($this->hasTenantOverride($user)) {
@@ -30,57 +26,59 @@ class UploadPolicy
             return false;
         }
 
+        // Debe pertenecer al tenant actual para subir.
         return $user->tenants()->whereKey($tenantId)->exists();
     }
 
-    /**
-     * Autoriza el reemplazo de un upload existente.
-     */
     public function replace(User $user, Upload $upload): bool
     {
-        return $this->canAccessUpload($user, $upload);
+        return $this->canOperateOnUpload($user, $upload);
     }
 
-    /**
-     * Autoriza la eliminación de un upload existente.
-     */
     public function delete(User $user, Upload $upload): bool
     {
-        return $this->canAccessUpload($user, $upload);
+        return $this->canOperateOnUpload($user, $upload);
     }
 
-    /**
-     * Autoriza la descarga de un upload.
-     */
     public function download(User $user, Upload $upload): bool
     {
-        if ($upload->profile_id === 'certificate_secret') { // Nunca permitir secretos
+        if ($this->isForbiddenProfile($upload)) {
             return false;
         }
 
-        if ($this->hasTenantOverride($user)) { // Admin/override pueden cruzar tenants
-            return true;
-        }
-
-        $tenantId = $user->getCurrentTenantId();
-        if ($tenantId === null || (string) $upload->tenant_id !== (string) $tenantId) { // Debe coincidir tenant activo
-            return false;
-        }
-
-        return $user->tenants()->whereKey($upload->tenant_id)->exists(); // Pertenece al tenant
+        return $this->canOperateOnUpload($user, $upload);
     }
 
-    private function canAccessUpload(User $user, Upload $upload): bool
+    private function canOperateOnUpload(User $user, Upload $upload): bool
     {
         if ($this->hasTenantOverride($user)) {
             return true;
         }
 
         $tenantId = $user->getCurrentTenantId();
-        if ($tenantId === null || (string) $upload->tenant_id !== (string) $tenantId) {
+        if ($tenantId === null) {
             return false;
         }
 
-        return $user->tenants()->whereKey($upload->tenant_id)->exists();
+        if ((string) $upload->tenant_id !== (string) $tenantId) {
+            return false;
+        }
+
+        return $user->tenants()->whereKey($tenantId)->exists();
+    }
+
+    private function isForbiddenProfile(Upload $upload): bool
+    {
+        if ((string) $upload->profile_id === 'certificate_secret') {
+            return true;
+        }
+
+        try {
+            $profile = app(UploadProfileRegistry::class)->get(new UploadProfileId((string) $upload->profile_id));
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return $profile->servingMode === ServingMode::FORBIDDEN;
     }
 }

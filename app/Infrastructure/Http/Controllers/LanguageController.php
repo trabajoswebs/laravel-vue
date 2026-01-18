@@ -31,12 +31,7 @@ class LanguageController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->handleError(
-                'Invalid locale format',
-                $validator->errors()->first(),
-                $request,
-                400
-            );
+            return $this->handleError('Invalid locale', 'Idioma no válido.', $request, 400);
         }
 
         // Rate limiting por usuario/ip (parametrizado)
@@ -57,16 +52,16 @@ class LanguageController extends Controller
         // Hit rate limiter con decaimiento parametrizado
         RateLimiter::hit($rateLimitKey, $decayMinutes * 60);
 
-        $sanitizedLocale = TranslationService::sanitizeLocale($locale);
+        $supportedLocales = array_map(
+            static fn ($value) => is_string($value) ? $value : '',
+            (array) config('locales.supported', [])
+        );
 
-        if (!TranslationService::validateLocale($sanitizedLocale)) {
-            return $this->handleError(
-                'Unsupported language',
-                trans('language.unsupported_language', ['locale' => $sanitizedLocale]),
-                $request,
-                400
-            );
+        if (!in_array($locale, $supportedLocales, true)) {
+            return $this->handleError('Invalid locale', 'Idioma no válido.', $request, 400);
         }
+
+        $sanitizedLocale = TranslationService::sanitizeLocale($locale);
 
         try {
             // Persistir sesión y cookie (separado de la transacción DB)
@@ -82,9 +77,6 @@ class LanguageController extends Controller
                 'user_agent_hash' => substr(hash('sha256', $request->userAgent()), 0, 16),
                 'timestamp' => now()->toISOString()
             ]);
-
-            // Clear rate limit on success
-            RateLimiter::clear($rateLimitKey);
 
             // Responder con datos actualizados
             return $this->handleSuccess(
@@ -480,14 +472,20 @@ class LanguageController extends Controller
     {
         // Sanitizar mensajes de usuario usando SecurityHelper
         $sanitizedMessage = SecurityHelper::sanitizeErrorMessage($userMessage);
+        // Asegura flash consistente incluso en flujos Inertia/JSON
+        Session::flash('error', $sanitizedMessage);
+        Session::flash('success', false);
+        Session::flash('message', $sanitizedMessage);
 
         // Si es Inertia
         if ($request->header('X-Inertia')) {
-            return Redirect::back()->with([
-                'error' => $sanitizedMessage,
-                'success' => false,
-                'message' => $sanitizedMessage // Para consistencia
-            ]);
+            $redirect = Redirect::back(fallback: '/dashboard');
+
+            return $redirect
+                ->with('error', $sanitizedMessage)
+                ->with('success', false)
+                ->with('message', $sanitizedMessage) // Para consistencia
+                ->withErrors(['error' => $sanitizedMessage]);
         }
 
         // Si es JSON
