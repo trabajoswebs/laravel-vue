@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Http\Controllers\Health;
 
 use App\Infrastructure\Http\Controllers\Controller;
-use App\Infrastructure\Media\Health\UploadPipelineHealthCheck;
+use App\Infrastructure\Uploads\Pipeline\Health\UploadPipelineHealthCheck;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 

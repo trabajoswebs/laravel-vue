@@ -4,6 +4,8 @@ namespace App\Infrastructure\Providers;
 
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Auth\Policies\UserPolicy;
+use App\Infrastructure\Auth\Policies\UploadPolicy;
+use App\Infrastructure\Uploads\Core\Models\Upload;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
@@ -16,6 +18,7 @@ class AuthServiceProvider extends ServiceProvider
      */
     protected $policies = [
         User::class => UserPolicy::class,
+        Upload::class => UploadPolicy::class,
     ];
 
     /**
@@ -35,6 +38,10 @@ class AuthServiceProvider extends ServiceProvider
             }
 
             return null;
+        });
+
+        Gate::define('use-current-tenant', function (User $user): bool { // Habilidad para validar tenant activo
+            return $user->can('useCurrentTenant', $user); // Delegado a UserPolicy@useCurrentTenant
         });
     }
 }

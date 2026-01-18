@@ -1,0 +1,129 @@
+<?php // Service provider para registrar perfiles de upload
+
+declare(strict_types=1); // Tipado estricto
+
+namespace App\Infrastructure\Uploads\Providers; // Namespace del provider de uploads
+
+use App\Application\Uploads\Media\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract; // Contrato colector
+use App\Application\Uploads\Media\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract; // Contrato cleanup
+use App\Application\Uploads\Media\Contracts\MediaProfile; // Contrato perfil Spatie
+use App\Application\Uploads\Media\Contracts\MediaUploader as MediaUploaderContract; // Contrato de uploader
+use App\Application\Uploads\Media\Handlers\MediaReplacementService; // Servicio de reemplazo
+use App\Application\Shared\Contracts\MetricsInterface; // Métricas
+use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
+use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles
+use App\Infrastructure\Uploads\Core\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
+use App\Infrastructure\Uploads\Profiles\AvatarImageProfile; // Perfil avatar
+use App\Infrastructure\Uploads\Profiles\AvatarProfile; // Perfil Spatie avatar
+use App\Infrastructure\Uploads\Profiles\CertificateSecretProfile; // Perfil certificados
+use App\Infrastructure\Uploads\Profiles\DocumentPdfProfile; // Perfil PDF
+use App\Infrastructure\Uploads\Profiles\GalleryImageProfile; // Perfil galería
+use App\Infrastructure\Uploads\Profiles\ImportCsvProfile; // Perfil CSV
+use App\Infrastructure\Uploads\Profiles\SpreadsheetXlsxProfile; // Perfil XLSX
+use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline; // Contrato pipeline
+use App\Infrastructure\Uploads\Pipeline\Contracts\UploadService; // Contrato servicio upload
+use App\Infrastructure\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline por defecto
+use App\Infrastructure\Uploads\Pipeline\DefaultUploadService; // Servicio por defecto
+use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter; // Adaptador pipeline imagen
+use App\Infrastructure\Uploads\Pipeline\Image\ImagePipeline; // Pipeline de imagen
+use App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository; // Repo de cuarentena
+use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository; // Contrato de cuarentena
+use App\Infrastructure\Uploads\Pipeline\Scanning\GitYaraRuleManager; // Gestor Yara git
+use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinator; // Coordinador AV
+use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface; // Contrato coordinador AV
+use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager; // Gestor de reglas Yara
+use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator; // Validador de magic bytes
+use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger; // Logger de seguridad
+use App\Infrastructure\Uploads\Pipeline\Services\MediaCleanupScheduler; // Scheduler de cleanup
+use App\Infrastructure\Uploads\Pipeline\Support\MediaArtifactCollector; // Colector de artefactos
+use App\Application\Uploads\Contracts\UploadOrchestratorInterface; // Contrato de orquestador
+use App\Application\Uploads\Contracts\UploadRepositoryInterface; // Contrato de repositorio
+use Illuminate\Support\ServiceProvider; // Base ServiceProvider
+use Illuminate\Support\Facades\Log; // Logger
+use Illuminate\Support\Facades\Storage; // Storage
+use InvalidArgumentException; // Excepciones de config
+
+/**
+ * Registra perfiles de upload y su registro centralizado.
+ */
+class UploadsServiceProvider extends ServiceProvider // Provider de uploads
+{
+    /**
+     * Registra bindings de perfiles de upload.
+     */
+    public function register(): void // Define registro de perfiles
+    {
+        $this->app->singleton(UploadRepositoryInterface::class, EloquentUploadRepository::class); // Binding repositorio uploads
+        $this->app->singleton(UploadOrchestratorInterface::class, DefaultUploadOrchestrator::class); // Binding orquestador
+
+        $this->app->singleton(UploadProfileRegistry::class, function ($app): UploadProfileRegistry { // Crea registro único
+            $profiles = [
+                'avatar_image' => $app->make(AvatarImageProfile::class), // Perfil avatar
+                'gallery_image' => $app->make(GalleryImageProfile::class), // Perfil galería
+                'document_pdf' => $app->make(DocumentPdfProfile::class), // Perfil PDF
+                'spreadsheet_xlsx' => $app->make(SpreadsheetXlsxProfile::class), // Perfil XLSX
+                'import_csv' => $app->make(ImportCsvProfile::class), // Perfil CSV import
+                'certificate_secret' => $app->make(CertificateSecretProfile::class), // Perfil certificados
+            ]; // Fin del array de perfiles
+
+            return new UploadProfileRegistry($profiles); // Devuelve registro inicializado
+        });
+
+        $this->app->singleton(YaraRuleManager::class, static function (): YaraRuleManager {
+            $config = (array) config('image-pipeline.scan.yara', []);
+
+            return new GitYaraRuleManager(
+                (string) ($config['rules_path'] ?? base_path('security/yara/images.yar')),
+                (string) ($config['rules_hash_file'] ?? base_path('security/yara/rules.sha256')),
+                is_string($config['version_file'] ?? null) ? $config['version_file'] : null,
+            );
+        });
+
+        $this->app->singleton(QuarantineRepository::class, static function (): QuarantineRepository {
+            $configuredDisk = config('media.quarantine.disk', 'quarantine');
+
+            try {
+                $filesystem = Storage::disk($configuredDisk);
+            } catch (InvalidArgumentException $exception) {
+                Log::warning('quarantine.disk.invalid', [
+                    'disk' => $configuredDisk,
+                    'error' => $exception->getMessage(),
+                ]);
+                $filesystem = Storage::disk('quarantine');
+            }
+
+            return new LocalQuarantineRepository($filesystem);
+        });
+
+        $this->app->singleton(ImageUploadPipelineAdapter::class, static function ($app): ImageUploadPipelineAdapter {
+            $workingDirectory = storage_path('app/uploads/tmp');
+
+            return new ImageUploadPipelineAdapter(
+                $app->make(ImagePipeline::class),  // Pipeline de procesamiento de imágenes
+                $workingDirectory                  // Directorio temporal para subidas
+            );
+        });
+
+        $this->app->singleton(UploadPipeline::class, static function ($app): UploadPipeline {
+            $workingDirectory = storage_path('app/uploads/tmp');
+
+            return new DefaultUploadPipeline(
+                $workingDirectory,
+                $app->make(ImageUploadPipelineAdapter::class),
+                $app->make(MagicBytesValidator::class),
+                $app->make(UploadSecurityLogger::class),
+                $app->make(MetricsInterface::class),
+            );
+        });
+
+        $this->app->singleton(ScanCoordinatorInterface::class, ScanCoordinator::class);
+        $this->app->alias(ScanCoordinator::class, ScanCoordinatorInterface::class);
+
+        $this->app->singleton(UploadService::class, DefaultUploadService::class);
+        $this->app->singleton(MediaUploaderContract::class, DefaultUploadService::class);
+        $this->app->singleton(MediaArtifactCollectorContract::class, MediaArtifactCollector::class);
+        $this->app->singleton(MediaCleanupSchedulerContract::class, MediaCleanupScheduler::class);
+        $this->app->singleton(MediaProfile::class, AvatarProfile::class);
+        $this->app->singleton(MediaReplacementService::class, MediaReplacementService::class);
+    }
+}

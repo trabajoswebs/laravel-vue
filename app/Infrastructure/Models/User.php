@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Models;
 
-use App\Infrastructure\Media\Models\Concerns\TracksMediaVersions;
-use App\Application\Media\Contracts\MediaOwner;
-use App\Infrastructure\Media\ConversionProfiles\AvatarConversionProfile;
-use App\Infrastructure\Media\Profiles\AvatarProfile;
+use App\Application\Uploads\Media\Contracts\MediaOwner; // Contrato que marca modelos propietarios de medios
+use App\Infrastructure\Uploads\Core\Models\Concerns\TracksMediaVersions; // Trait que versiona media para cache busting
+use App\Infrastructure\Uploads\Pipeline\Image\AvatarConversionProfile;
+use App\Infrastructure\Uploads\Profiles\AvatarProfile;
+use App\Infrastructure\Tenancy\Models\Tenant; // Modelo de tenant para relaciones
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo; // Relación belongsTo para tenant actual
+use Illuminate\Database\Eloquent\Relations\BelongsToMany; // Relación belongsToMany para miembros de tenant
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
@@ -41,6 +45,7 @@ class User extends Authenticatable implements HasMedia, MediaOwner
     protected $fillable = [
         'name',           // Nombre del usuario
         'email',          // Correo electrónico del usuario
+        'current_tenant_id', // Tenant actual para sesión tenant-first
         'password',       // Contraseña (hash)
         'avatar_version', // Versión del avatar para cache busting
     ];
@@ -73,7 +78,38 @@ class User extends Authenticatable implements HasMedia, MediaOwner
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'avatar_updated_at' => 'datetime',
+            'current_tenant_id' => 'integer', // Garantiza que el tenant_id se trate como entero
         ];
+    }
+
+    /**
+     * Relación: tenant actual asociado al usuario.
+     *
+     * @return BelongsTo Relación belongsTo hacia Tenant
+     */
+    public function currentTenant(): BelongsTo // Devuelve el tenant actual del usuario
+    {
+        return $this->belongsTo(Tenant::class, 'current_tenant_id'); // Usa la FK current_tenant_id
+    }
+
+    /**
+     * Relación: tenants a los que pertenece el usuario.
+     *
+     * @return BelongsToMany Relación muchos a muchos
+     */
+    public function tenants(): BelongsToMany // Devuelve la colección de tenants del usuario
+    {
+        return $this->belongsToMany(Tenant::class)->withTimestamps(); // Usa la tabla pivote tenant_user
+    }
+
+    /**
+     * Helper para obtener el tenant_id actual.
+     *
+     * @return int|null Retorna el id del tenant activo
+     */
+    public function getCurrentTenantId(): ?int // Devuelve el tenant_id activo o null
+    {
+        return $this->current_tenant_id; // Lee directamente la columna current_tenant_id
     }
 
     /**
@@ -215,5 +251,13 @@ class User extends Authenticatable implements HasMedia, MediaOwner
         $separator = str_contains($url, '?') ? '&' : '?';
 
         return "{$url}{$separator}v={$version}";
+    }
+
+    /**
+     * Resuelve la factory del modelo, independientemente del namespace del modelo.
+     */
+    protected static function newFactory(): Factory
+    {
+        return \Database\Factories\UserFactory::new();
     }
 }
