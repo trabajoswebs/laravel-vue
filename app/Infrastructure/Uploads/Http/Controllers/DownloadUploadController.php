@@ -55,7 +55,11 @@ final class DownloadUploadController extends Controller
         $upload = Upload::query()
             ->forTenant($tenantId)
             ->whereKey($uploadId)
-            ->firstOrFail();
+            ->first();
+
+        if (!$upload) {
+            return abort(403, 'Forbidden');
+        }
 
         // Log y bloqueo explícito de secretos antes de la policy para auditoría
         if ($upload->profile_id === 'certificate_secret') {
@@ -65,16 +69,14 @@ final class DownloadUploadController extends Controller
                 'user_id' => (string) ($request->user()?->getKey() ?? ''),
             ]);
 
-            return abort(403, 'Forbidden');
+            abort(403, 'Forbidden');
         }
 
         // Autoriza mediante policy (verifica tenant y perfiles permitidos)
         try {
             $this->authorize('download', $upload);
-        } catch (AuthorizationException) {
-            return abort(403, 'Forbidden');
-        } catch (\Throwable) {
-            return abort(403, 'Forbidden');
+        } catch (AuthorizationException $e) {
+            abort(403, 'Forbidden');
         }
 
         // Obtiene la configuración de disco y ruta del archivo desde la base de datos
