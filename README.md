@@ -17,7 +17,7 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 - **Procesamiento de imágenes endurecido** - UploadPipeline unificado (DefaultUploadService + DefaultUploadPipeline) con SecureImageValidation, normalización y OptimizerService (local/remoto)
 - **Cuarentena con verificación de integridad** - LocalQuarantineRepository (hash sidecars, promote seguro) + comandos `quarantine:*` para mantener la cuarentena limpia
 - **Media lifecycle resiliente** - Scheduler transaccional + CleanupMediaArtifactsJob para limpiar artefactos en cualquier disco
-- **Media Library** - Gestión avanzada de archivos multimedia con Spatie
+- **Uploads-first** - Hub único en `app/Infrastructure/Uploads` (orchestrator, pipeline de seguridad/AV, quarantine, MediaLibrary glue). Ver `app/Infrastructure/Uploads/README.md`.
 - **Docker & Laravel Sail** - Entorno de desarrollo containerizado
 - **Herramientas de desarrollo** - ESLint, Prettier, TypeScript configurados y listas para CI/CD
 - **Capa de seguridad documentada** - CSP, rate limiting, auditoría y cabeceras listas para producción ([ver guía](docs/SECURITY.md))
@@ -25,13 +25,15 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 ## 📁 Estructura del proyecto
 
 ### Backend, media y seguridad endurecida
-- `app/Domain` agrupa value objects puros (`Media/DTO/*`, `Media/Contracts/MediaResource`) y reglas inmutables (`Security/Rules/*`) sin dependencias de Laravel.
-- `app/Application/Media` orquesta lifecycle y cleanup (coordinador y handler de replacements), define puertos (`MediaProfile`, `MediaOwner`, `UploadedMedia`, uploader/scheduler/collector), VO de límites (`FileConstraints`) y DTOs de limpieza/reemplazo.
+
+**Nota uploads-first:** `app/Infrastructure/Media` fue eliminado; todo el ciclo de subidas/AV/quarantine/pipeline vive en `app/Infrastructure/Uploads` (ver README dedicado). Los contratos de media (owner/profile/uploader/artifact collector/cleanup) viven en `app/Application/Uploads/Media` y los DTO/contratos de recursos en `app/Domain/Uploads/Media`, usados por el pipeline de Uploads.
+- `app/Domain` agrupa value objects puros (`Uploads/*` con perfiles/VOs; contratos `Security/Rules/*`) sin dependencias de Laravel.
+- `app/Application/Uploads` concentra Actions, DTOs y contratos del orquestador/repositorio para subidas; los puertos de media se sirven desde aquí (perfiles, owner, uploader, collector, scheduler, límites).
 - `app/Application/User` concentra Actions/Events y los puertos/repositorios (`Contracts/*` + DTOs de resultados), el mensaje `CleanupMediaArtifacts` y el enum `ConversionReadyState` que se adaptan a jobs de infraestructura.
 - `app/Application/Shared` expone puertos transversales (clock, logger, event bus, transaction manager, async job dispatcher) consumidos por adaptadores de infraestructura.
-- `app/Infrastructure/Http/Controllers`, `Middleware` y `Requests` definen controladores Inertia/Auth/Settings/Media, más los middlewares (`SecurityHeaders`, `RateLimitUploads`, `SanitizeInput`, `UserAudit`) y FormRequests endurecidos con `SecureImageValidation`.
-- `app/Infrastructure/Media` reúne el pipeline de imágenes (`ImagePipeline` + workflows Imagick/Fallback + `PipelineConfig`/`PipelineLogger`), perfiles (`MediaProfile`, `Profiles/*`, `ConversionProfiles/*`), adaptadores (`Adapters/SpatieMediaResource`, `HttpUploadedMedia`), jobs/listeners de conversions (`Media/Jobs`, `Media/Listeners`), optimización (`OptimizerService` + adapters) y el módulo de uploads (`Upload/*`: DefaultUploadService/Pipeline, cuarentena, ScanCoordinator, reporter/manager, excepciones) que coordinan Spatie Media Library con cuarentena verificable.
-- `app/Infrastructure/Media/Security` contiene `PayloadScanner`, `ImageMetadataReader`, `ImageNormalizer`, `MimeNormalizer`, escáneres (ClamAV/Yara) y `UploadValidationLogger`, reforzando `SecureImageValidation` y el `DefaultUploadService` con normalización y auditoría anónima.
+- `app/Infrastructure/Http/Controllers`, `Middleware` y `Requests` definen controladores Inertia/Auth/Settings base y middlewares transversales (`SecurityHeaders`, `SanitizeInput`, `UserAudit`). El stack de uploads (controllers/FormRequests/middleware/rules) vive en `app/Infrastructure/Uploads/Http` junto con `SecureImageValidation`.
+- `app/Infrastructure/Uploads` agrupa Http/Core/Pipeline: controladores/FormRequests/middleware de uploads (incl. `RateLimitUploads`, `TrackMediaAccess`, `HttpUploadedMedia`), Core (`DefaultUploadOrchestrator`, registry de perfiles, paths tenant-first, repositorios/adaptadores/modelos) y Pipeline (`ImagePipeline`, seguridad/AV/quarantine, optimizer, jobs/listeners/observers, services/support/contracts/exceptions/health) coordinando Spatie Media Library con cuarentena verificable.
+- `app/Infrastructure/Uploads/Pipeline/Security` contiene `PayloadScanner`, `ImageMetadataReader`, `ImageNormalizer`, `MimeNormalizer`, escáneres (ClamAV/Yara) y `UploadValidationLogger`, reforzando `SecureImageValidation` y el `DefaultUploadService` con normalización y auditoría anónima.
 - `app/Infrastructure/Auth/Policies/Concerns/HandlesMediaOwnership.php` encapsula la verificación de propiedad y permisos elevados sobre medios para que `UserPolicy` reutilice la misma lógica entre acciones; los providers (`Infrastructure/Providers/*`) registran bindings, eventos y sanitización (HtmlPurifier/ImagePipeline/MediaLibrary).
 - `app/Infrastructure/Shared/Adapters` implementa los puertos de `Application/Shared` con Laravel (colas, reloj, logger, eventos, transacciones) y `app/Infrastructure/User/Adapters` concreta los repositorios de usuario/avatar en Eloquent + Spatie.
 - `app/Infrastructure/Sanitization/DisplayName` y `app/Infrastructure/Security` (helpers, firmas y excepciones de antivirus) complementan la capa de seguridad con value objects, firmas estables y manejo de fallos de escaneo.
@@ -44,7 +46,7 @@ Un kit de inicio completo para aplicaciones web modernas usando Laravel 12 y Vue
 ### Infraestructura, herramientas y documentación
 - `config/` expone `security.php`, `image-pipeline.php`, `media.php`, `media-library.php`, `audit.php` y ajustes de cuarentena para gobernar políticas de CSP, rate limits, media lifecycle, hash sidecars y auditoría.
 - `app/Infrastructure/Sanitization/DisplayName` convierte nombres visibles en value objects sanitizados y reutilizables, mientras que `app/Infrastructure/Security/RateLimitSignatureFactory` normaliza las firmas usadas por los limitadores de Laravel.
-- `app/Infrastructure/Console/Commands` y `app/Console/Kernel.php` añaden las herramientas `quarantine:prune` y `quarantine:cleanup-sidecars` para mantener la cuarentena bajo control (programables vía scheduler).
+- `app/Infrastructure/Console/Commands` y `app/Console/Kernel.php` añaden las herramientas `quarantine:prune`, `quarantine:cleanup-sidecars` y `tenancy:bootstrap-existing-users` (ejecutar tras migrar para asignar tenant personal a usuarios existentes) para mantener la cuarentena bajo control y bootstrap multi-tenant (programables vía scheduler).
 - `deploy/`, `docker/`, `Dockerfile`, `docker-compose.yml` y `scripts/check_storage_exec.sh` contienen los artefactos de despliegue y validadores (p. ej. copia de policy.xml para ImageMagick y comprobaciones de ejecución en `/storage`).
 - `docs/` aloja las guías de seguridad (`SECURITY.md`), traducciones dinámicas y media lifecycle, mientras que `app_tree.txt` y los tests (`tests/Unit`, `phpunit.xml`) mantienen la documentación viva y verificable.
 
@@ -133,18 +135,18 @@ Variables de entorno clave:
 
  Este proyecto implementa una arquitectura de subida reutilizable basada en un contrato único de perfil:
 
-- `app/Infrastructure/Media/Upload/DefaultUploadService::upload(MediaOwner $owner, UploadedMedia $file, MediaProfile $profile, ?string $correlationId = null)`
+- `app/Infrastructure/Uploads/Pipeline/DefaultUploadService::upload(MediaOwner $owner, UploadedMedia $file, MediaProfile $profile, ?string $correlationId = null)`
     - Centraliza cuarentena + escaneo + normalización (`DefaultUploadPipeline`/`ImagePipeline`) y adjunta a Spatie Media Library con trazabilidad (`correlation_id`, `quarantine_id`, dimensiones, mime, headers).
-- Perfiles (`app/Infrastructure/Media`):
+- Perfiles (`app/Infrastructure/Uploads`):
     - `MediaProfile` (contrato): define colección, disco, conversions, flags de cuarentena/AV/normalización, TTLs y `applyConversions()`.
     - `Profiles/AvatarProfile`: usa `avatar_collection`/`avatar_disk`, TTLs configurables y delega conversions a `AvatarConversionProfile`.
     - `Profiles/GalleryProfile`: define conversions típicas de galería con tamaños configurables y TTLs propios.
 - Listener multi-colecta:
-    - `QueueAvatarPostProcessing` (`app/Infrastructure/Media/Listeners`) soporta múltiples colecciones configurables en `image-pipeline.postprocess_collections` (por defecto `avatar,gallery`).
+    - `QueueAvatarPostProcessing` (`app/Infrastructure/Uploads/Pipeline/Listeners`) soporta múltiples colecciones configurables en `image-pipeline.postprocess_collections` (por defecto `avatar,gallery`).
 
 ### Limpieza y lifecycle de medios
 
-- `MediaLifecycleCoordinator` coordina replace + conversions + cleanup usando DTO compartidos.
+- `MediaReplacementService` coordina replace + conversions + cleanup usando DTO compartidos.
 - `MediaCleanupScheduler` guarda el estado por media y programa limpieza tras conversions (local o discos remotos).
 - `CleanupMediaArtifactsJob` (infra) elimina artefactos residuales (originales, conversions, responsive-images) de forma idempotente y segura a partir del mensaje `CleanupMediaArtifacts`.
 - `RunPendingMediaCleanup` escucha eventos de Spatie (`ConversionHasBeenCompleted/Failed`) y dispara el scheduler oportunamente.
@@ -164,15 +166,15 @@ public function registerMediaCollections(): void
 
 public function registerMediaConversions(?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void
 {
-    (new \App\Infrastructure\Media\Profiles\GalleryProfile())->applyConversions($this, $media);
+    (new \App\Infrastructure\Uploads\Profiles\GalleryProfile())->applyConversions($this, $media);
 }
 ```
 
 2. En tu controlador/action para galería:
 
 ```php
-$media = app(\App\Infrastructure\Media\Upload\DefaultUploadService::class)
-    ->upload($model, $request->file('image'), new \App\Infrastructure\Media\Profiles\GalleryProfile());
+$media = app(\App\Infrastructure\Uploads\Pipeline\DefaultUploadService::class)
+    ->upload($model, $request->file('image'), new \App\Infrastructure\Uploads\Profiles\GalleryProfile());
 ```
 
 3. Configura opcionalmente en `.env`:
@@ -235,9 +237,9 @@ El middleware `App\\Http\\Middleware\\SecurityHeaders` genera la CSP; `config/se
 
 ```php
 // routes/settings.php
-Route::patch('settings/avatar', [\\App\\Http\\Controllers\\Settings\\ProfileAvatarController::class, 'update'])
+Route::patch('settings/avatar', [\\App\\Infrastructure\\Uploads\\Http\\Controllers\\Settings\\ProfileAvatarController::class, 'update'])
     ->name('settings.avatar.update');
-Route::delete('settings/avatar', [\\App\\Http\\Controllers\\Settings\\ProfileAvatarController::class, 'destroy'])
+Route::delete('settings/avatar', [\\App\\Infrastructure\\Uploads\\Http\\Controllers\\Settings\\ProfileAvatarController::class, 'destroy'])
     ->name('settings.avatar.destroy');
 ```
 
@@ -245,7 +247,7 @@ Route::delete('settings/avatar', [\\App\\Http\\Controllers\\Settings\\ProfileAva
 
 La ruta pública `GET /media/avatar/{media}` (`media.avatar.show`)
 sirve conversions firmadas y expira automáticamente. El controlador
-`App\Infrastructure\Http\Controllers\Media\ShowAvatar` aplica:
+`App\Infrastructure\Uploads\Http\Controllers\Media\ShowAvatar` aplica:
 
 - Middleware `signed` + `throttle:60,1` para evitar hotlinking y abusos.
 - Validación estricta del parámetro `c` (`thumb`, `medium`, `large`) y del

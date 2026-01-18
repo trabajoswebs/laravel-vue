@@ -1,31 +1,50 @@
 # Arquitectura de `app/`
 
-Capas y dependencias permitidas:
-- **Domain** → Entidades/Value Objects/Contratos/Reglas puras. No depende de Application ni Infrastructure.
+Capas (regla de dependencias: Domain ← Application ← Infrastructure):
+- **Domain** → Entidades, Value Objects, contratos puros, reglas inmutables. No depende de Application ni Infrastructure.
 - **Application** → Casos de uso, coordinadores, Actions/Jobs/Listeners/Policies, DTOs y Requests. Solo depende de Domain.
-- **Infrastructure** → Adaptadores técnicos (HTTP, Console, Providers, Pipelines, Upload, Security, Localization), integración con Laravel y servicios externos. Puede depender de Application y Domain.
+- **Infrastructure** → Adaptadores técnicos (HTTP, Console, Providers, Pipelines, Uploads, Security, Localization), integración con Laravel y servicios externos. Puede depender de Application y Domain.
 
-Mapa actual (simplificado):
+Mapa rápido:
 - `Domain/`
-  - `Media/` → Contrato de recurso (`Contracts/MediaResource`) y VOs agnósticos (`DTO/*` snapshots y conversiones).
-  - `Security/Rules/` → Reglas inmutables para headers de avatar y firmas de rate limiting.
+  - `Media/` → Contrato `Contracts/MediaResource` y DTOs de snapshots/conversions (soporte actual). **Legacy**: se mantiene hasta simplificar a Uploads-only.
+  - `Uploads/` → VOs (`UploadProfile`, `UploadProfileId`, `UploadKind`, `ScanMode`, `ProcessingMode`, `ServingMode`).
+  - `Security/Rules/` → Reglas para headers de avatar y firmas de rate limiting.
 - `Application/`
-  - `Media/` → Coordinadores y handlers de lifecycle/cleanup (`MediaLifecycleCoordinator`, `MediaReplacementService`), puertos (`MediaProfile`, `MediaOwner`, `UploadedMedia`, uploader/scheduler/collector), VO `FileConstraints` y DTOs de cleanup/reemplazo.
-  - `User/` → Actions avatar, Events (`AvatarUpdated/Deleted`), puertos/repos (`Contracts/*`), DTOs (`AvatarUpdateResult`, `AvatarDeletionResult`), mensaje `CleanupMediaArtifacts` (puro) y enum `ConversionReadyState`.
-  - `Shared/Contracts/` → Puertos transversales para reloj/logger/event bus/colas/transacciones.
+  - `Uploads/` → Actions (`UploadFile`, `ReplaceFile`), orquestador contract y DTOs (`UploadResult`, `ReplacementResult`), repositorio contract.
+  - `Media/` → `MediaReplacementService` y puertos (`MediaProfile`, `MediaOwner`, `UploadedMedia`, `MediaUploader`, `MediaArtifactCollector`, `MediaCleanupScheduler`) usados por el pipeline actual. **Legacy en observación**: se podría recortar cuando Uploads exponga todos los perfiles.
+  - `User/` → Actions de avatar (`UpdateAvatar`, `DeleteAvatar`), eventos (`AvatarUpdated/Deleted`), puertos/repos (`Contracts/*`), DTOs (`AvatarUpdateResult`, `AvatarDeletionResult`), mensaje `CleanupMediaArtifacts`, enum `ConversionReadyState`.
+  - `Shared/Contracts/` → Puertos de reloj/logger/event bus/colas/transacciones.
 - `Infrastructure/`
-  - `Console/` → Kernel y comandos (`quarantine:*`, `CleanAuditLogs`).
-  - `Http/` → Controladores Auth/Settings/Media/Language; base `Controller`, middlewares de seguridad/rate limiting/auditoría, FormRequests y regla `SecureImageValidation`.
-  - `Media/` → ImagePipeline (Imagick/Fallback, `PipelineConfig`, `PipelineLogger`), contrato `MediaProfile` + perfiles (`Profiles/*`, `ConversionProfiles/*`), adaptadores (`Adapters/SpatieMediaResource`, `Adapters/HttpUploadedMedia`), servicio de subida unificado (`DefaultUploadService` + `DefaultUploadPipeline`), jobs/listeners de conversions (`Media/Jobs`, `Media/Listeners`), módulo de uploads (`Upload/*`: cuarentena, ScanCoordinator, reporter/manager, excepciones), optimizador y adapters, seguridad (`PayloadScanner`, normalizadores, scanners ClamAV/Yara, `UploadValidationLogger`), DTOs de replace, modelo `MediaCleanupState` + `Concerns/TracksMediaVersions`, servicio `MediaCleanupScheduler` y `Observers/MediaObserver`.
+  - `Http/` → Controladores Auth/Settings/Language; base `Controller`, middlewares de seguridad/auditoría y FormRequests genéricas. Uploads expone controllers/FormRequests/middleware/rules en `Infrastructure/Uploads/Http` (incl. `SecureImageValidation` y `RateLimitUploads`).
+  - `Uploads/` → Hub único: Http (controllers/FormRequests/middleware + `HttpUploadedMedia`), Core (`Core/Orchestrators/DefaultUploadOrchestrator`, registry de perfiles, paths tenant-first, repositorios/adaptadores/modelos), Pipeline (ImagePipeline + UploadPipeline, cuarentena, scanning AV/Yara, seguridad, optimizador, jobs/listeners/observers, health check), scheduler de cleanup y providers (MediaLibrary, ImagePipeline, Uploads). Todos los endpoints de subida/descarga/serving se apoyan en este hub.
+  - `Console/` → Kernel y comandos `quarantine:*`, `CleanAuditLogs`.
+  - `Providers/` → App/Auth/Event/HtmlPurifier/ImagePipeline y Tenancy.
   - `Localization/` → `TranslationService`.
-  - `Models/` → Modelos Eloquent (`User`).
-  - `Auth/Policies/` → Políticas de autorización (`UserPolicy`, `Concerns/HandlesMediaOwnership`).
-  - `Shared/Adapters/` → Implementaciones Laravel de los puertos de `Application/Shared` (colas, reloj, logger, eventos, transacciones).
-  - `User/Adapters/` → Implementaciones Eloquent/Spatie de los repositorios de usuario/avatar.
-  - `User/Events/` → Wrappers de eventos de aplicación listos para Laravel.
-  - `Providers/` → Service providers Laravel (App/Auth/Event/HtmlPurifier/ImagePipeline/MediaLibrary).
+  - `Models/` → Eloquent (`User`).
+  - `Auth/Policies/` → Políticas (`UserPolicy`, `Concerns/HandlesMediaOwnership`).
+  - `Shared/Adapters/` → Adaptadores Laravel para puertos transversales.
+  - `User/Adapters`, `User/Events/` → Adaptadores/bridge para usuario/avatar.
   - `Security/` → `AvatarHeaderInspector`, `SecurityHelper`, `RateLimitSignatureFactory`, excepciones de antivirus.
-  - `Sanitization/` → Value Objects y helpers de sanitización (`DisplayName`).
+  - `Sanitization/` → Helpers/VOs (`DisplayName`).
 - `Shared root/` → Alias `Console/Kernel.php` (compatibilidad).
 
-Regla de dependencias: Domain ← Application ← Infrastructure. Mantén los cambios dentro de su capa y evita referencias cruzadas que violen esta dirección.
+## Flujo oficial para subir/servir/descargar
+- Subir (creación): Controller → FormRequest → `Application/Uploads/Actions/UploadFile` → `Infrastructure/Uploads/Core/Orchestrators/DefaultUploadOrchestrator`.
+  - Imágenes (`UploadKind::IMAGE`): pasa por `MediaReplacementService` → `MediaUploader` (DefaultUploadService + DefaultUploadPipeline) → Spatie Media Library con paths tenant-first (`Uploads/Core/Paths/MediaLibrary/*`).
+  - Documentos/secrets: `DefaultUploadOrchestrator` valida, duplica a cuarentena (`QuarantineManager`), escanea (`ScanCoordinatorInterface`), genera path con `TenantPathGenerator`, guarda en disco y persiste metadata vía `UploadRepositoryInterface` (Eloquent).
+- Reemplazo: Controller → FormRequest → `Application/Uploads/Actions/ReplaceFile` → mismo orquestador, devuelve `ReplacementResult` (nuevo `UploadResult` + previo opcional).
+- Serving:
+  - Media Library: URLs firmadas/inline por Spatie (`ShowAvatar` u otras vistas); paths generados por `Uploads/Core/Paths/MediaLibrary/TenantAwarePathGenerator` y `TenantAwareFileNamer`.
+  - Uploads tabulares: `Infrastructure/Uploads/Http/Controllers/DownloadUploadController` valida tenant/policy, genera descarga directa o URL temporal.
+
+## Cómo crear un nuevo `UploadProfile`
+1. Crear clase en `Infrastructure/Uploads/Profiles/*` extendiendo `Domain/Uploads/UploadProfile` con `UploadKind`, `allowedMimes`, `maxBytes`, `scanMode`, `processingMode`, `servingMode`, `disk`, `pathCategory`, `requiresOwner`.
+2. Registrar el perfil en `Infrastructure/Uploads/Providers/UploadsServiceProvider` dentro del array de `UploadProfileRegistry`.
+3. Exponer endpoint: FormRequest específico + Controller que invoque `UploadFile` o `ReplaceFile`, pasando el `UploadProfile` resuelto desde el registry y el `HttpUploadedMedia`.
+4. Si `UploadKind::IMAGE`, definir colección/conversions en `Infrastructure/Uploads/Profiles/*` (y, si requiere, ajustes en `Pipeline/Image/*`); si no es imagen, solo ajustar políticas de descarga/visibilidad.
+
+## Componentes deprecados/eliminados
+- `Infrastructure/Media/` → DEPRECATED. Vacío salvo `README.md`; toda la lógica vive en `Infrastructure/Uploads`.
+- Legacy en observación: `Application/Media/*` y `Domain/Media/*` (puertos/DTOs) siguen alimentando el pipeline actual; eliminar solo cuando Uploads exponga contratos equivalentes.
+- Eliminados por duplicados: `app/Infrastructure/Media/DTO/ReplacementResult.php`, `ReplacementSnapshot.php`, `ReplacementSnapshotItem.php` (usaban snapshots redundantes con los DTO de Domain/Application). Usar `Application/Uploads/DTO/ReplacementResult` y los DTO de dominio `MediaReplacementSnapshot` en su lugar.
