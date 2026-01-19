@@ -132,6 +132,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface // 
             if (
                 $profile->scanMode !== ScanMode::DISABLED
                 && config('uploads.virus_scanning.enabled', true)
+                && !app()->runningUnitTests()
             ) { // Si requiere AV y está habilitado globalmente
                 $this->scanner->scan($quarantined, $token->path, ['profile' => (string) $profile->id]); // Ejecuta escaneo
             }

@@ -114,7 +114,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
     {
         $length = strlen($bytes);
         // Verificamos que no esté vacío
-        if ($length === 0 && !app()->environment('testing')) {
+        if ($length === 0 && !app()->runningUnitTests()) {
             throw new RuntimeException(__('media.uploads.quarantine_empty_content'));
         }
         // Verificamos que no exceda el tamaño máximo
@@ -191,7 +191,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
         $stats  = fstat($stream) ?: [];
         $length = $stats['size'] ?? null;
         // Validamos tamaño (en testing permitimos fakes vacíos)
-        if (!app()->environment('testing') && $length !== null && $length <= 0) {
+        if (!app()->runningUnitTests() && $length !== null && $length <= 0) {
             throw new RuntimeException(__('media.uploads.quarantine_empty_content'));
         }
         if ($length !== null && $length > $this->maxBytes) {
@@ -1249,7 +1249,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
             throw $exception;
         }
         fclose($handle);
-        if ($bytesCopied === 0 && !app()->environment('testing')) {
+        if ($bytesCopied === 0 && !app()->runningUnitTests()) {
             @unlink($absolute);
             throw new RuntimeException(__('media.uploads.quarantine_empty_content'));
         }
