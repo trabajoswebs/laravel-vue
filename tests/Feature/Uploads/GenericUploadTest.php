@@ -16,6 +16,19 @@ final class GenericUploadTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Storage::fake('public');
+        Storage::fake('quarantine');
+        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
+        $this->app->singleton(
+            \App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository::class,
+            fn () => new \App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository(Storage::disk('quarantine'))
+        );
+    }
+
     private function makeTenantUser(): array
     {
         $user = User::factory()->create();
@@ -31,8 +44,6 @@ final class GenericUploadTest extends TestCase
 
     public function test_store_document_upload_succeeds(): void
     {
-        Storage::fake('public');
-        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $response = $this->actingAs($user)
@@ -49,8 +60,6 @@ final class GenericUploadTest extends TestCase
 
     public function test_replace_document_upload_succeeds(): void
     {
-        Storage::fake('public');
-        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $store = $this->actingAs($user)
@@ -76,8 +85,6 @@ final class GenericUploadTest extends TestCase
 
     public function test_delete_document_upload_succeeds(): void
     {
-        Storage::fake('public');
-        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $uploadId = $this->actingAs($user)
@@ -99,8 +106,6 @@ final class GenericUploadTest extends TestCase
 
     public function test_cross_tenant_operations_are_forbidden(): void
     {
-        Storage::fake('public');
-        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$owner, $tenant] = $this->makeTenantUser();
         $foreign = User::factory()->create(['current_tenant_id' => null]);
 
@@ -140,8 +145,6 @@ final class GenericUploadTest extends TestCase
 
     public function test_secret_upload_download_is_forbidden(): void
     {
-        Storage::fake('public');
-        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
         [$user, $tenant] = $this->makeTenantUser();
 
         $uploadId = $this->actingAs($user)

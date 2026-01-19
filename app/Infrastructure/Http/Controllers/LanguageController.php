@@ -477,6 +477,7 @@ class LanguageController extends Controller
         $session->flash('error', $sanitizedMessage);
         $session->flash('success', false);
         $session->flash('message', $sanitizedMessage);
+        $session->put('error', $sanitizedMessage);
 
         // Si es Inertia
         if ($request->header('X-Inertia')) {
