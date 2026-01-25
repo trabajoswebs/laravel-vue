@@ -336,9 +336,9 @@ return [
         // Handlers de seguridad a usar
         'handlers' => value(function () {
             $aliases = [
-                'clamav'   => App\Infrastructure\Media\Security\Scanners\ClamAvScanner::class,
-                'clamdscan' => App\Infrastructure\Media\Security\Scanners\ClamAvScanner::class,
-                'yara'     => App\Infrastructure\Media\Security\Scanners\YaraScanner::class,
+                'clamav'   => App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner::class,
+                'clamdscan' => App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner::class,
+                'yara'     => App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\YaraScanner::class,
             ];
 
             $raw = env('VIRUS_SCANNERS', 'clamav,yara');
@@ -367,7 +367,7 @@ return [
             $handlers = array_values(array_unique($handlers));
 
             return $handlers === []
-                ? [App\Infrastructure\Media\Security\Scanners\ClamAvScanner::class]
+                ? [App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner::class]
                 : $handlers;
         }),
 

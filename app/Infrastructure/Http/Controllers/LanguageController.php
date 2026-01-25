@@ -481,7 +481,8 @@ class LanguageController extends Controller
 
         // Si es Inertia
         if ($request->header('X-Inertia')) {
-            return Redirect::back()
+            // Inertia espera flash en sesión; devolvemos siempre al dashboard para consistencia
+            return Redirect::to(route('dashboard'))
                 ->with('error', $sanitizedMessage)
                 ->with('success', false)
                 ->with('message', $sanitizedMessage) // Para consistencia

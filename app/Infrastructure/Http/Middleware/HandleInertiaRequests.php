@@ -183,11 +183,16 @@ class HandleInertiaRequests extends Middleware
      */
     private function resolveUserAttribute(Authenticatable $user, string $attribute): mixed
     {
-        if (method_exists($user, 'getAttribute')) {
-            return $user->getAttribute($attribute);
-        }
+        try {
+            if (method_exists($user, 'getAttribute')) {
+                return $user->getAttribute($attribute);
+            }
 
-        return $user->{$attribute} ?? null;
+            return $user->{$attribute} ?? null;
+        } catch (\Throwable $e) {
+            // Si no se puede leer el atributo (ej. falta tenant para avatar), degradar a null
+            return null;
+        }
     }
 
     /**

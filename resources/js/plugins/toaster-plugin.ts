@@ -1,5 +1,82 @@
 import { App, createApp, h } from 'vue';
-import { Toaster as VueSonner } from 'vue-sonner';
+import { Toaster as VueSonner, toast } from 'vue-sonner';
+
+export type ToastVariant = 'success' | 'warning' | 'error' | 'info' | 'event';
+
+export const toastVisuals: Record<
+    ToastVariant,
+    {
+        className: string;
+        icon: string;
+    }
+> = {
+    success: {
+        className: 'toast-success',
+        icon: '/icons/toast-success.svg',
+    },
+    warning: {
+        className: 'toast-warning',
+        icon: '/icons/toast-warning.svg',
+    },
+    error: {
+        className: 'toast-error',
+        icon: '/icons/toast-error.svg',
+    },
+    info: {
+        className: 'toast-info',
+        icon: '/icons/toast-info.svg',
+    },
+    event: {
+        className: 'toast-success toast-event',
+        icon: '/icons/toast-success.svg',
+    },
+} as const;
+
+const buildToastOptions = (variant: ToastVariant, description?: string | null) => {
+    const visuals = toastVisuals[variant];
+    const iconSizeClass = variant === 'event' ? 'h-4 w-4' : 'h-5 w-5';
+
+    return {
+        class: visuals.className,
+        richColors: true,
+        description: description ?? undefined,
+        icon: h('img', {
+            src: visuals.icon,
+            alt: '',
+            class: iconSizeClass,
+            'aria-hidden': 'true',
+        }),
+    } as const;
+};
+
+const showToast = (variant: ToastVariant, title: string, description?: string | null) => {
+    const options = buildToastOptions(variant, description);
+
+    if (variant === 'event') {
+        toast(title, options);
+        return;
+    }
+
+    const toastMethod =
+        variant === 'info'
+            ? 'info'
+            : variant === 'warning'
+                ? 'warning'
+                : variant === 'error'
+                    ? 'error'
+                    : 'success';
+
+    toast[toastMethod](title, options);
+};
+
+export const notify = {
+    show: showToast,
+    success: (title: string, description?: string | null) => showToast('success', title, description),
+    warning: (title: string, description?: string | null) => showToast('warning', title, description),
+    error: (title: string, description?: string | null) => showToast('error', title, description),
+    info: (title: string, description?: string | null) => showToast('info', title, description),
+    event: (title: string, description?: string | null) => showToast('event', title, description),
+} as const;
 
 export interface ToasterConfig {
     position?: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';

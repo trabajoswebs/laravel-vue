@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\User\Adapters;
 
 use App\Application\User\Contracts\UserRepository;
-use App\Application\Media\Contracts\MediaOwner;
+use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
 use App\Infrastructure\Models\User;
 
 final class EloquentUserRepository implements UserRepository

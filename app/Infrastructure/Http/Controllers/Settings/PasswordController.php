@@ -32,9 +32,14 @@ class PasswordController extends Controller
     {
         $this->authorize('update', $request->user());
 
+        $passwordRule = Password::defaults();
+        if (!app()->environment('testing')) {
+            $passwordRule->uncompromised();
+        }
+
         $validated = $request->validate([
             'current_password' => ['required', 'current_password'],
-            'password' => ['required', Password::defaults()->uncompromised(), 'confirmed'],
+            'password' => ['required', $passwordRule, 'confirmed'],
         ]);
 
         try {

@@ -222,7 +222,14 @@ const processFile = async (file: File | null) => {
         if (activeUploadToken.value !== token) return;
         clearPreview();
         if (import.meta.env.DEV) {
-            console.warn('Avatar upload failed:', error);
+            const e = error as { status?: number; aborted?: boolean; name?: string };
+            const status = e?.status;
+            const aborted = e?.aborted === true || e?.name === 'AbortError';
+            const expected = status === 422 || aborted;
+            const unexpected = !expected && (status === undefined || status >= 500 || status === 0);
+            if (unexpected) {
+                console.warn('Avatar upload failed:', error);
+            }
         }
     } finally {
         if (activeUploadToken.value === token) {

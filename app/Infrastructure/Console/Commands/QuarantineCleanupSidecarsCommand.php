@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Console\Commands;
 
-use App\Infrastructure\Media\Upload\Core\QuarantineRepository;
+use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use Illuminate\Console\Command;
 
 /**

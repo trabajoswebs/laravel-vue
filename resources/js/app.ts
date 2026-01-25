@@ -13,8 +13,7 @@ import type { Config } from 'ziggy-js';
 import { initializeTheme } from './composables/useAppearance';
 import { i18n } from './i18n';
 import { router } from '@inertiajs/vue3';
-import { toast } from 'vue-sonner';
-import { ToasterPlugin } from './plugins/toaster-plugin';
+import { notify, toastVisuals, type ToastVariant, ToasterPlugin } from './plugins/toaster-plugin';
 
 /**
  * Nombre por defecto de la app y límite de caracteres permitidos en los mensajes.
@@ -107,35 +106,6 @@ function toSanitizedNonEmptyString(value: unknown): string | undefined {
 function isValidFlashMessage(flash: unknown): flash is FlashPayload {
     return flash !== null && typeof flash === 'object' && !Array.isArray(flash);
 }
-
-/**
- * Configuración visual de cada tipo de toast.
- * Incluye un tema especial `event` con fondo blanco y tipografía oscura.
- */
-const toastVisuals = {
-    success: {
-        className: 'toast-success',
-        icon: '/icons/toast-success.svg',
-    },
-    warning: {
-        className: 'toast-warning',
-        icon: '/icons/toast-warning.svg',
-    },
-    error: {
-        className: 'toast-error',
-        icon: '/icons/toast-error.svg',
-    },
-    info: {
-        className: 'toast-info',
-        icon: '/icons/toast-info.svg',
-    },
-    event: {
-        className: 'toast-success toast-event',
-        icon: '/icons/toast-success.svg',
-    },
-} as const;
-
-type ToastVariant = keyof typeof toastVisuals;
 
 const normalizeToastVariant = (variant: unknown): ToastVariant | undefined => {
     if (typeof variant !== 'string') {
@@ -314,36 +284,7 @@ const handleFlash = (rawFlash: unknown): boolean => {
  * @example showToast('event', 'Recordatorio', 'Mañana 9:00 AM') => toast blanco con icono oscuro.
  */
 const showToast = (variant: ToastVariant, title: string, description?: string | null) => {
-    const visuals = toastVisuals[variant];
-    const iconSizeClass = variant === 'event' ? 'h-4 w-4' : 'h-5 w-5';
-
-    const sharedOptions = {
-        class: visuals.className,
-        richColors: true,
-        description: description ?? undefined,
-        icon: h('img', {
-            src: visuals.icon,
-            alt: '',
-            class: iconSizeClass,
-            'aria-hidden': 'true',
-        }),
-    } as const;
-
-    if (variant === 'event') {
-        toast(title, sharedOptions);
-        return;
-    }
-
-    const toastMethod =
-        variant === 'info'
-            ? 'info'
-            : variant === 'warning'
-                ? 'warning'
-                : variant === 'error'
-                    ? 'error'
-                    : 'success';
-
-    toast[toastMethod](title, sharedOptions);
+    notify.show(variant, title, description ?? undefined);
 };
 
 /**

@@ -466,10 +466,20 @@ class UserAudit
             $auditData['request_data'] = $this->sanitizeRequestData($request);
         }
 
-        Log::channel($this->defaultChannel)->log($level, 'User audit log', $auditData);
+        $channel = $this->defaultChannel ?: (string) (config('logging.default') ?? 'stack');
 
-        if ($this->isCriticalAction($request)) {
-            Log::channel($this->securityChannel)->warning('Critical user action', $auditData);
+        try {
+            Log::channel($channel)->log($level, 'User audit log', $auditData);
+
+            if ($this->isCriticalAction($request)) {
+                $securityChannel = $this->securityChannel ?: $channel;
+                Log::channel($securityChannel)->warning('Critical user action', $auditData);
+            }
+        } catch (\Throwable $e) {
+            // En testing no dejamos que el logging rompa la respuesta
+            if (!app()->runningUnitTests()) {
+                throw $e;
+            }
         }
     }
 

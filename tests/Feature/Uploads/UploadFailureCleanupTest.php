@@ -24,6 +24,7 @@ class UploadFailureCleanupTest extends TestCase
         // Arrange: fake disks and bindings for quarantine and scanner failure
         Storage::fake('quarantine');
         Storage::fake('public');
+        config(['uploads.virus_scanning.enabled' => true]);
         $this->app->singleton(QuarantineRepository::class, fn () => new LocalQuarantineRepository(Storage::disk('quarantine')));
         $this->app->singleton(ScanCoordinatorInterface::class, fn () => new class implements ScanCoordinatorInterface {
             public function enabled(): bool { return true; }

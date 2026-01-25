@@ -525,7 +525,7 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         try {
             // Escanea únicamente los primeros bytes desde disco para minimizar uso de memoria
             if (! $this->payloadScanner->fileIsClean($path, $value->getClientOriginalName(), $this->resolveUserId())) {
-                $fail(__('validation.custom.image.malicious_payload'));
+                $fail(__('media.uploads.invalid_image'));
                 return;
             }
 
