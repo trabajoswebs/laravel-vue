@@ -6,7 +6,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Support;
 
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadResult;
+use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
@@ -163,12 +163,12 @@ final class QuarantineManager
     }
 
     /**
-     * Limpia artefactos temporales y cuarentena asociados a un UploadResult.
+     * Limpia artefactos temporales y cuarentena asociados a un InternalPipelineResult.
      *
-     * @param UploadResult|null $artifact Artefacto a limpiar.
+     * @param InternalPipelineResult|null $artifact Artefacto a limpiar.
      * @param bool $removeQuarantine Indica si se debe eliminar también la cuarentena.
      */
-    public function cleanupArtifact(?UploadResult $artifact, bool $removeQuarantine = true): void
+    public function cleanupArtifact(?InternalPipelineResult $artifact, bool $removeQuarantine = true): void
     {
         if ($artifact === null) {
             return;

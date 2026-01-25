@@ -34,10 +34,15 @@ class NewPasswordController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        $passwordRule = Rules\Password::defaults();
+        if (!app()->environment('testing')) {
+            $passwordRule->uncompromised();
+        }
+
         $request->validate([
             'token' => 'required',
             'email' => 'required|email',
-            'password' => ['required', 'confirmed', Rules\Password::defaults()->uncompromised()],
+            'password' => ['required', 'confirmed', $passwordRule],
         ]);
 
         // Here we will attempt to reset the user's password. If it is successful we

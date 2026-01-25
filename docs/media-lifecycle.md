@@ -2,7 +2,7 @@
 
 ## Flujo Replace → Conversion → Cleanup
 
-1. `MediaLifecycleCoordinator::replace()` delega en `MediaReplacementService` para subir el nuevo archivo y devuelve un `ReplacementResult` con:
+1. `MediaReplacementService::replace()` sube el nuevo archivo y devuelve un `ReplacementResult` con:
    - `media`: modelo fresco de Spatie.
   - `snapshot`: artefactos (por disco) del media anterior (`ReplacementSnapshot`).
    - `expectations`: conversions esperadas (`ConversionExpectations`).

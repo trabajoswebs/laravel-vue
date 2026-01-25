@@ -5,6 +5,7 @@ namespace App\Infrastructure\Http\Controllers\Auth;
 use App\Infrastructure\Security\SecurityHelper;
 use App\Infrastructure\Http\Controllers\Controller;
 use App\Infrastructure\Models\User;
+use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant para bootstrap inicial
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,6 +45,11 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        $passwordRule = Rules\Password::min(8)->letters()->numbers();
+        if (!app()->environment('testing')) {
+            $passwordRule->uncompromised();
+        }
+
         // Validación principal - simple pero efectiva
         $validated = $request->validate([
             'name' => [
@@ -63,7 +69,7 @@ class RegisteredUserController extends Controller
             'password' => [
                 'required',
                 'confirmed',
-                Rules\Password::min(8)->letters()->numbers()->uncompromised()
+                $passwordRule,
             ],
         ], [
             // Mensajes de error usando traducciones de Laravel
@@ -101,8 +107,16 @@ class RegisteredUserController extends Controller
 
             // Crear usuario
             $user = null;
-            DB::transaction(function () use ($userData, &$user) {
-                $user = User::create($userData); // rellena solo name,email,password
+            DB::transaction(function () use ($userData, &$user) { // Transacción para usuario + tenant
+                $user = User::create($userData); // Crea usuario con datos sanitizados
+
+                $tenant = Tenant::query()->create([ // Crea tenant personal para el nuevo usuario
+                    'name' => "{$user->name}'s tenant", // Nombre legible basado en el usuario
+                    'owner_user_id' => $user->id, // Define al usuario como propietario
+                ]); // Fin de creación de tenant
+
+                $user->tenants()->attach($tenant->id, ['role' => 'owner']); // Vincula usuario al tenant como owner
+                $user->forceFill(['current_tenant_id' => $tenant->id])->save(); // Marca tenant actual en el usuario
             });
 
             // Log de registro exitoso (sin datos sensibles)

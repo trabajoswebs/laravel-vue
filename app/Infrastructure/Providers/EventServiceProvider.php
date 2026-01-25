@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Providers;
 
-use App\Infrastructure\Media\Listeners\RunPendingMediaCleanup;
-use App\Infrastructure\Media\Listeners\QueueAvatarPostProcessing;
-use App\Infrastructure\User\Events\AvatarDeleted;
+use App\Infrastructure\Uploads\Pipeline\Listeners\RunPendingMediaCleanup;
+use App\Infrastructure\Uploads\Pipeline\Listeners\QueueAvatarPostProcessing;
+use App\Application\User\Events\AvatarDeleted;
+use App\Application\User\Events\AvatarUpdated;
+use App\Infrastructure\User\Listeners\OnAvatarDeleted;
+use App\Infrastructure\User\Listeners\OnAvatarUpdated;
 use Spatie\MediaLibrary\Conversions\Events\ConversionHasBeenCompletedEvent;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
@@ -24,9 +27,11 @@ class EventServiceProvider extends ServiceProvider
      * @var array<class-string, array<int, class-string>>
      */
     protected $listen = [
-        // Al borrar avatar: aquí puedes enganchar otros listeners (CDN, métricas…)
+        AvatarUpdated::class => [
+            OnAvatarUpdated::class,
+        ],
         AvatarDeleted::class => [
-            // \App\Listeners\User\PurgeCdnCache::class,
+            OnAvatarDeleted::class,
         ],
 
         // Al completar conversiones de medios: procesamiento posterior y limpieza

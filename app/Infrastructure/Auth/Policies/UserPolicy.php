@@ -4,6 +4,7 @@ namespace App\Infrastructure\Auth\Policies;
 
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Auth\Policies\Concerns\HandlesMediaOwnership;
+use App\Infrastructure\Auth\Policies\Concerns\HandlesTenantMembership; // Trait para validar pertenencia a tenant
 
 /**
  * Política de Autorización para el Modelo User
@@ -26,7 +27,7 @@ use App\Infrastructure\Auth\Policies\Concerns\HandlesMediaOwnership;
  */
 class UserPolicy
 {
-    use HandlesMediaOwnership;
+    use HandlesMediaOwnership, HandlesTenantMembership; // Combina verificación de medios y tenancy
 
     /**
      * Determina si el usuario autenticado puede ver el perfil del usuario objetivo.
@@ -73,6 +74,10 @@ class UserPolicy
      */
     public function viewProfile(User $authenticatedUser, User $targetUser): bool
     {
+        if (! $authenticatedUser->is($targetUser) && ! $this->sharesTenantOrHasOverride($authenticatedUser, $targetUser)) { // Bloquea acceso si no comparte tenant ni override
+            return false; // Deniega acción de visualización cross-tenant
+        }
+
         return $this->canManageProfile($authenticatedUser, $targetUser);
     }
 
@@ -85,6 +90,10 @@ class UserPolicy
      */
     public function updateProfile(User $authenticatedUser, User $targetUser): bool
     {
+        if (! $authenticatedUser->is($targetUser) && ! $this->sharesTenantOrHasOverride($authenticatedUser, $targetUser)) { // Bloquea si no comparte tenant ni tiene override
+            return false; // Deniega acceso cross-tenant
+        }
+
         return $this->canManageProfile($authenticatedUser, $targetUser);
     }
 
@@ -97,6 +106,10 @@ class UserPolicy
      */
     public function deleteProfile(User $authenticatedUser, User $targetUser): bool
     {
+        if (! $authenticatedUser->is($targetUser) && ! $this->sharesTenantOrHasOverride($authenticatedUser, $targetUser)) { // Bloquea si no comparte tenant ni tiene override
+            return false; // Deniega acceso cross-tenant
+        }
+
         return $this->canManageProfile($authenticatedUser, $targetUser);
     }
 
@@ -112,6 +125,10 @@ class UserPolicy
      */
     public function updateAvatar(User $actor, User $target): bool
     {
+        if (! $actor->is($target) && ! $this->sharesTenantOrHasOverride($actor, $target)) { // Asegura pertenencia al mismo tenant o privilegio
+            return false; // Deniega acceso si no cumple tenancy
+        }
+
         return $this->canManageMediaOwnership($actor, $target);
     }
 
@@ -124,6 +141,10 @@ class UserPolicy
      */
     public function deleteAvatar(User $authenticatedUser, User $targetUser): bool
     {
+        if (! $authenticatedUser->is($targetUser) && ! $this->sharesTenantOrHasOverride($authenticatedUser, $targetUser)) { // Asegura pertenencia al mismo tenant o privilegio
+            return false; // Deniega acceso si no cumple tenancy
+        }
+
         return $this->canManageMediaOwnership($authenticatedUser, $targetUser);
     }
 
@@ -167,5 +188,22 @@ class UserPolicy
         }
 
         return false;
+    }
+
+    /**
+     * Habilidad para validar que el usuario puede operar con su tenant actual.
+     *
+     * @param User $authenticatedUser Usuario autenticado
+     * @return bool true si el tenant actual es válido
+     */
+    public function useCurrentTenant(User $authenticatedUser): bool // Verifica pertenencia del usuario a su tenant activo
+    {
+        $tenantId = $authenticatedUser->getCurrentTenantId(); // Obtiene tenant_id activo
+
+        if ($tenantId === null) { // Si no hay tenant asignado
+            return false; // Deniega uso de tenant
+        }
+
+        return $authenticatedUser->tenants()->whereKey($tenantId)->exists(); // Confirma pertenencia en pivote
     }
 }

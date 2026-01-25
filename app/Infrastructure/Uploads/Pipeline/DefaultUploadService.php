@@ -14,7 +14,7 @@ use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
 use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadResult;
+use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadService;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
@@ -212,7 +212,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
 
             // Procesa el archivo a través del pipeline
             $artifact = $this->pipeline->process($quarantinedFile, $profile, $correlationId);
-            $artifact = new UploadResult(
+            $artifact = new InternalPipelineResult(
                 $artifact->path,
                 $artifact->size,
                 $artifact->metadata,
@@ -312,7 +312,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
      * Adjunta el artefacto procesado a un modelo HasMedia.
      *
      * @param HasMediaContract $owner Entidad propietaria del archivo.
-     * @param UploadResult $artifact Resultado del proceso de subida.
+     * @param InternalPipelineResult $artifact Resultado del proceso de subida.
      * @param string $profile Perfil de la colección de medios.
      * @param string|null $disk Disco opcional para la colección.
      * @param bool $singleFile Indicador de colección de archivo único.
@@ -320,7 +320,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
      */
     public function attach(
         HasMediaContract $owner,
-        UploadResult $artifact,
+        InternalPipelineResult $artifact,
         string $profile,
         ?string $disk = null,
         bool $singleFile = false

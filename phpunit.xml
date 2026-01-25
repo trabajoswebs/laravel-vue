@@ -2,8 +2,7 @@
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
-         colors="true"
->
+         colors="true">
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
@@ -22,7 +21,8 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_DRIVER" value="array"/>
-        <env name="DB_DATABASE" value="testing"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
@@ -33,5 +33,6 @@
         <env name="IMG_SCAN_BIN_ALLOWLIST" value=""/>
         <env name="IMG_SCAN_RULES_BASE" value="/tmp"/>
         <env name="IMG_SCAN_ALLOWED_BASE" value="/tmp"/>
+        <env name="MEDIA_SIGNED_SERVE_ENABLED" value="true"/>
     </php>
 </phpunit>

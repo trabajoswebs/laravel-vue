@@ -23,7 +23,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request as HttpRequest;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response; //OJO: es la interfaz base que implementan todas las respuestas en Laravel
 //(Illuminate\Http\Response, Illuminate\Http\JsonResponse, Illuminate\Http\RedirectResponse, etc.).
 //Así evitamos errores de tipado cuando el callback recibe un JsonResponse o un RedirectResponse
@@ -118,6 +120,25 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Personaliza la respuesta de error para solicitudes que esperan JSON.
         $exceptions->render(function (Throwable $e, HttpRequest $request) {
+            if ($e instanceof ValidationException && $request->expectsJson()) {
+                $errors = $e->errors();
+                $firstField = Arr::first($errors);
+                $firstMessage = null;
+
+                if (is_array($firstField)) {
+                    $firstMessage = Arr::first($firstField);
+                } elseif (is_string($firstField)) {
+                    $firstMessage = $firstField;
+                }
+
+                $message = $firstMessage ?? __('errors.validation_error');
+
+                return new JsonResponse([
+                    'message' => $message,
+                    'errors' => $errors,
+                ], $e->status);
+            }
+
             // Si la solicitud no espera JSON, Laravel manejará la respuesta normalmente.
             if (! $request->expectsJson()) {
                 return null;
@@ -126,6 +147,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // Determina el código de estado HTTP.
             $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
             $status = $status >= 400 ? $status : 500; // Asegura que sea al menos 400.
+
+            if ($status < 500) {
+                return null;
+            }
 
             // Obtiene o genera un ID de error para la solicitud.
             $errorId = $request->attributes->get('error_id') ?? Str::uuid()->toString();

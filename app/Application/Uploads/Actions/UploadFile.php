@@ -1,38 +1,63 @@
-<?php // Caso de uso para subir un archivo
+<?php
 
-declare(strict_types=1); // Tipado estricto
+declare(strict_types=1);
 
-namespace App\Application\Uploads\Actions; // Namespace de actions de uploads
+namespace App\Application\Uploads\Actions;
 
-use App\Application\Uploads\Contracts\UploadOrchestratorInterface; // Contrato del orquestador
-use App\Application\Uploads\DTO\UploadResult; // DTO de resultado
-use App\Domain\Uploads\UploadProfile; // Perfil de upload
-use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia; // Wrapper de archivo subido
-use App\Infrastructure\Models\User; // Modelo de usuario
+use App\Domain\Uploads\UploadProfile; // Ej.: perfil document_pdf
+use App\Infrastructure\Models\User; // Ej.: auth user
+use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia; // Ej.: wrapper de media
+use App\Application\Uploads\DTO\UploadResult; // Ej.: {id, status, correlationId}
+use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Ej.: orquestador
 
 /**
- * Orquesta un upload nuevo usando un perfil.
+ * Acción de aplicación para subir archivos.
+ * 
+ * Esta clase encapsula la lógica de negocio para subir archivos, delegando
+ * la implementación al orquestador correspondiente.
+ * 
+ * @package App\Application\Uploads\Actions
  */
-final class UploadFile // Action simple de upload
+final class UploadFile
 {
     /**
-     * @param UploadOrchestratorInterface $orchestrator Orquestador de uploads
+     * Constructor que inyecta el orquestador de uploads.
+     * 
+     * @param DefaultUploadOrchestrator $orchestrator Orquestador encargado de la lógica de subida
      */
-    public function __construct(private readonly UploadOrchestratorInterface $orchestrator) // Injerta orquestador
-    {
-    }
+    public function __construct(private readonly DefaultUploadOrchestrator $orchestrator) // Ej.: DI
+    {}
 
     /**
-     * Ejecuta el upload.
+     * Ejecuta el upload (enqueue/pipeline).
+     * 
+     * Este método invocable maneja la subida de archivos, convirtiendo los parámetros
+     * según sea necesario y delegando la operación al orquestador.
      *
-     * @param UploadProfile $profile Perfil de upload
-     * @param User $actor Usuario autenticado que sube
-     * @param HttpUploadedMedia $file Archivo recibido
-     * @param int|string|null $ownerId Owner opcional
-     * @return UploadResult Resultado del upload
+     * @param UploadProfile $profile Perfil de upload que define las reglas de validación y procesamiento
+     * @param User $user Usuario autenticado que realiza la subida
+     * @param UploadedMedia $media Archivo subido envuelto en una interfaz común
+     * @param mixed $ownerId ID del propietario del archivo (opcional)
+     * @param string|null $correlationId ID de correlación para rastreo de solicitudes (opcional)
+     * @param array<string,mixed> $meta Metadatos adicionales para el upload
+     * @return UploadResult Resultado de la operación de subida con información del upload
      */
-    public function __invoke(UploadProfile $profile, User $actor, HttpUploadedMedia $file, int|string|null $ownerId = null): UploadResult // Acción invocable
-    {
-        return $this->orchestrator->upload($profile, $actor, $file, $ownerId); // Delegado al orquestador
+    public function __invoke(
+        UploadProfile $profile, // Ej.: "document_pdf"
+        User $user, // Ej.: auth user
+        UploadedMedia $media, // Ej.: HttpUploadedMedia
+        mixed $ownerId = null, // Ej.: 123|null
+        ?string $correlationId = null, // Ej.: "req_abc-123"|null
+        array $meta = [], // Ej.: ['note' => 'Factura enero']
+    ): UploadResult {
+        // Si tu orquestador aún no soporta meta/correlation, puedes ignorarlos aquí.
+        return $this->orchestrator->upload(
+            $profile, // Ej.: perfil
+            $user, // Ej.: user
+            $media, // Ej.: media
+            is_numeric($ownerId) ? (int) $ownerId : null, // Ej.: ownerId int|null
+            $correlationId, // Ej.: correlationId|null
+            $meta, // Ej.: metadata
+        );
     }
 }

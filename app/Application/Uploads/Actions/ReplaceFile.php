@@ -1,38 +1,91 @@
-<?php // Caso de uso para reemplazar un archivo
+<?php
 
-declare(strict_types=1); // Tipado estricto
+declare(strict_types=1);
 
-namespace App\Application\Uploads\Actions; // Namespace de actions de uploads
+namespace App\Application\Uploads\Actions;
 
-use App\Application\Uploads\Contracts\UploadOrchestratorInterface; // Contrato del orquestador
-use App\Application\Uploads\DTO\ReplacementResult; // DTO de reemplazo
-use App\Domain\Uploads\UploadProfile; // Perfil de upload
-use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia; // Wrapper de archivo subido
-use App\Infrastructure\Models\User; // Modelo de usuario
+use App\Application\Uploads\DTO\ReplacementResult;
+use App\Application\Uploads\DTO\UploadResult;
+use App\Domain\Uploads\UploadProfile;
+use App\Infrastructure\Models\User;
+use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
+use App\Infrastructure\Uploads\Core\Models\Upload;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
- * Orquesta el reemplazo de un archivo según perfil.
+ * Acción de aplicación para reemplazar archivos.
+ *
+ * Si se proporciona un Upload existente, lo elimina (best-effort) tras crear el nuevo.
+ * Si no se proporciona, actúa como un simple wrapper de UploadFile y devuelve el nuevo resultado.
  */
-final class ReplaceFile // Acción invocable de reemplazo
+final class ReplaceFile
 {
-    /**
-     * @param UploadOrchestratorInterface $orchestrator Orquestador de uploads
-     */
-    public function __construct(private readonly UploadOrchestratorInterface $orchestrator) // Injerta orquestador
+    public function __construct(private readonly UploadFile $uploadFile)
     {
     }
 
     /**
-     * Ejecuta el reemplazo.
-     *
-     * @param UploadProfile $profile Perfil de upload
-     * @param User $actor Usuario autenticado
-     * @param HttpUploadedMedia $file Archivo recibido
-     * @param int|string|null $ownerId Owner opcional
-     * @return ReplacementResult Resultado del reemplazo
+     * Reemplaza un archivo existente con uno nuevo (o simplemente crea uno nuevo si no hay previo).
      */
-    public function __invoke(UploadProfile $profile, User $actor, HttpUploadedMedia $file, int|string|null $ownerId = null): ReplacementResult // Acción invocable
+    public function __invoke(
+        UploadProfile $profile,
+        User $user,
+        UploadedMedia $media,
+        mixed $ownerId = null,
+        ?string $correlationId = null,
+        array $meta = [],
+        ?Upload $replacing = null,
+    ): ReplacementResult {
+        $previous = $replacing ? $this->toUploadResult($replacing) : null;
+
+        $new = ($this->uploadFile)(
+            $profile,
+            $user,
+            $media,
+            $ownerId,
+            $correlationId,
+            $meta,
+        );
+
+        if ($replacing) {
+            $this->deletePreviousFile($replacing);
+            $replacing->delete();
+        }
+
+        return new ReplacementResult($new, $previous);
+    }
+
+    private function deletePreviousFile(Upload $upload): void
     {
-        return $this->orchestrator->replace($profile, $actor, $file, $ownerId); // Delegado al orquestador
+        try {
+            $disk = (string) $upload->disk;
+            $path = (string) $upload->path;
+
+            if ($disk !== '' && $path !== '' && Storage::disk($disk)->exists($path)) {
+                Storage::disk($disk)->delete($path);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('uploads.replace.delete_old_failed', [
+                'upload_id' => (string) $upload->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function toUploadResult(Upload $upload): UploadResult
+    {
+        return new UploadResult(
+            id: (string) $upload->getKey(),
+            tenantId: (string) $upload->tenant_id,
+            profileId: (string) $upload->profile_id,
+            disk: (string) $upload->disk,
+            path: (string) $upload->path,
+            mime: (string) ($upload->mime ?? 'application/octet-stream'),
+            size: (int) ($upload->size ?? 0),
+            checksum: $upload->checksum ? (string) $upload->checksum : null,
+            status: (string) ($upload->status ?? 'stored'),
+            correlationId: $upload->correlation_id ? (string) $upload->correlation_id : null,
+        );
     }
 }

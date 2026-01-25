@@ -21,7 +21,7 @@ class UploadPolicy
             return true;
         }
 
-        $tenantId = $user->getCurrentTenantId();
+        $tenantId = $this->currentTenantId($user);
         if ($tenantId === null) {
             return false;
         }
@@ -55,7 +55,7 @@ class UploadPolicy
             return true;
         }
 
-        $tenantId = $user->getCurrentTenantId();
+        $tenantId = $this->currentTenantId($user);
         if ($tenantId === null) {
             return false;
         }
@@ -80,5 +80,14 @@ class UploadPolicy
         }
 
         return $profile->servingMode === ServingMode::FORBIDDEN;
+    }
+
+    private function currentTenantId(User $user): int|string|null
+    {
+        if (function_exists('tenant') && tenant()) {
+            return tenant()->getKey();
+        }
+
+        return $user->getCurrentTenantId();
     }
 }
