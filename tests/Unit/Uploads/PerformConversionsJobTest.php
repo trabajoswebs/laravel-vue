@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Unit\Uploads;
+
+use App\Infrastructure\Models\User;
+use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Infrastructure\Uploads\Pipeline\Jobs\PerformConversionsJob;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\MediaLibrary\Conversions\ConversionCollection;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
+use Tests\TestCase;
+
+final class PerformConversionsJobTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_job_sets_tenant_id_from_media(): void
+    {
+        $user = User::factory()->create();
+        $tenant = Tenant::query()->create([
+            'name' => 'Acme',
+            'owner_user_id' => $user->getKey(),
+        ]);
+
+        $media = Media::query()->create([
+            'model_type' => User::class,
+            'model_id' => $user->getKey(),
+            'uuid' => 'abc',
+            'collection_name' => 'avatar',
+            'name' => 'avatar',
+            'file_name' => 'avatar.jpg',
+            'mime_type' => 'image/jpeg',
+            'disk' => 'public',
+            'conversions_disk' => null,
+            'size' => 1024,
+            'manipulations' => [],
+            'custom_properties' => ['tenant_id' => $tenant->getKey()],
+            'generated_conversions' => [],
+            'responsive_images' => [],
+            'order_column' => 1,
+        ]);
+
+        $job = new PerformConversionsJob(new ConversionCollection(), $media, false);
+
+        $this->assertSame($tenant->getKey(), $job->tenantId);
+    }
+}

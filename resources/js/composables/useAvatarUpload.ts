@@ -7,6 +7,7 @@ import { route } from 'ziggy-js'; // Resolución de rutas Ziggy (Ej. route('home
 
 import { sendFormData, type NormalizedError } from '@/lib/http/xhrFormData'; // XHR helper (Ej. sendFormData(...) -> { data, status })
 import type { AppPageProps, User } from '@/types'; // Tipos app (Ej. User.email -> "a@b.com")
+import { useAvatarState } from '@/composables/useAvatarState';
 
 // Tipo para los errores que devuelve el backend (Ej. { avatar: ["Mensaje"] })
 type ErrorBag = Record<string, string[]>;
@@ -398,6 +399,7 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
 
     // Page props + Ziggy
     const page = usePage<AppPageProps>(); // Ej. page.props.auth.user
+    const { setAvatarOverride } = useAvatarState();
     const ziggyConfig = computed<Config | null>(() => {
         const config = page.props.ziggy as Config | undefined;
         return config ?? null;
@@ -450,6 +452,8 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
     const uploadProgress = ref<number | null>(null); // Ej. 0..100
     const errors = ref<ErrorBag>({}); // Ej. { avatar: ["..."] }
     const generalError = ref<string | null>(null); // Ej. "No se pudo..."
+    const recentlySuccessful = ref<boolean>(false);
+    const successMessage = ref<string | null>(null);
     const currentUpload = ref<OngoingUpload | null>(null); // Ej. { controller: AbortController }
 
     // Si hay avatar
@@ -780,22 +784,27 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
                 },
             });
 
-            resetErrors();
-            refreshAuth();
+        resetErrors();
+        setAvatarOverride(undefined);
+        refreshAuth();
 
-            // Cambia el cache buster para forzar refresh del avatar
-            avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
+        // Cambia el cache buster para forzar refresh del avatar
+        avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
 
-            // Éxito
-            const payload = (response?.data ?? {}) as Record<string, unknown>;
-            const message = typeof payload.message === 'string' ? payload.message : 'Avatar actualizado correctamente.';
-            notify.success(message);
+        // Éxito
+        const payload = (response?.data ?? {}) as Record<string, unknown>;
+        const message = typeof payload.message === 'string' ? payload.message : 'Avatar actualizado correctamente.';
+        // Usamos el mismo estilo de toast “event” que el guardado de perfil para coherencia visual.
+        notify.event(message);
+        successMessage.value = message;
+        recentlySuccessful.value = true;
+        setTimeout(() => (recentlySuccessful.value = false), 3000);
 
-            return {
-                filename: validation.sanitizedName,
-                width: validation.width,
-                height: validation.height,
-                bytes: validation.bytes,
+        return {
+            filename: validation.sanitizedName,
+            width: validation.width,
+            height: validation.height,
+            bytes: validation.bytes,
             };
         } catch (error) {
             const err = error as NormalizedError;
@@ -888,14 +897,19 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
                 signal: controller?.signal,
             });
 
-            resetErrors();
-            refreshAuth();
+        resetErrors();
+        setAvatarOverride(null);
+        refreshAuth();
 
-            avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
+        avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
 
-            const payload = (response?.data ?? {}) as Record<string, unknown>;
-            const message = typeof payload.message === 'string' ? payload.message : 'Avatar eliminado correctamente.';
-            notify.success(message);
+        const payload = (response?.data ?? {}) as Record<string, unknown>;
+        const message = typeof payload.message === 'string' ? payload.message : 'Avatar eliminado correctamente.';
+        // Misma línea visual que el resto de toasts de perfil.
+        notify.event(message);
+        successMessage.value = message;
+        recentlySuccessful.value = true;
+        setTimeout(() => (recentlySuccessful.value = false), 3000);
 
             return;
         } catch (error) {
@@ -955,6 +969,8 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
         uploadProgress, // Ej. 0..100 o null
         errors, // Ej. { avatar: ["..."] }
         generalError, // Ej. "..."
+        recentlySuccessful, // Flag para mostrar mensaje inline de éxito
+        successMessage, // Último mensaje de éxito
         uploadAvatar, // Fn: subir avatar
         removeAvatar, // Fn: eliminar avatar
         resetErrors, // Fn: limpiar errores

@@ -1,4 +1,4 @@
-<?php // TenantFinder que resuelve por usuario autenticado
+<?php // TenantFinder (Spatie) que resuelve por usuario autenticado
 
 declare(strict_types=1); // Habilita tipado estricto
 
@@ -6,28 +6,33 @@ namespace App\Infrastructure\Tenancy\TenantFinder; // Namespace para finders de 
 
 use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant propio
 use Illuminate\Http\Request; // Request HTTP
-use Illuminate\Support\Facades\Auth; // Facade de autenticación
+
+use Spatie\Multitenancy\Contracts\IsTenant; // Contrato esperado por Spatie // Ej.: return ?IsTenant
+use Spatie\Multitenancy\TenantFinder\TenantFinder; // Base class requerida // Ej.: extends TenantFinder
+
+
 
 /**
  * Resuelve el tenant actual a partir del usuario autenticado.
  */
-class AuthUserTenantFinder // Implementa lógica de finder sin depender de Spatie
+final class AuthUserTenantFinder extends TenantFinder // Finder válido para Spatie // Ej.: auto-determina tenant al inicio del request
 {
     /**
      * Obtiene el tenant aplicable para la request.
      *
      * @param Request $request Request HTTP entrante
-     * @return Tenant|null Tenant encontrado o null si no corresponde
+     * @return IsTenant|null Tenant encontrado o null si no corresponde
      */
-    public function findForRequest(Request $request): ?Tenant // Resuelve el tenant usando auth()->user()
+    public function findForRequest(Request $request): ?IsTenant // Firma exigida por Spatie // Ej.: ?IsTenant
     {
-        $user = Auth::user(); // Obtiene el usuario autenticado actual
+        $user = $request->user(); // Obtiene el usuario autenticado del request // Ej.: User #2
 
         if ($user === null) { // Si no hay usuario autenticado
             return null; // No se puede resolver tenant
         }
 
-        $tenantId = $user->getCurrentTenantId(); // Lee el tenant_id actual del usuario
+        $tenantId = $user->current_tenant_id // Campo directo; ej. 1
+            ?? (method_exists($user, 'getCurrentTenantId') ? $user->getCurrentTenantId() : null); // Fallback; ej. 1
 
         if ($tenantId === null) { // Si no hay tenant asignado
             return null; // No se resuelve tenant

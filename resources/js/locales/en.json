@@ -131,7 +131,7 @@
         "login_title": "Welcome back",
         "login_description": "Pop in your email and password to carry on.",
         "email_address": "Email address",
-        "email_placeholder": "name@@business.co.uk",
+        "email_placeholder": "name@business.co.uk",
         "password_placeholder": "Your password",
         "forgot_password_link": "Forgotten your password?",
         "dont_have_account": "Need an account?",

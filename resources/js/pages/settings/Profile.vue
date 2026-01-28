@@ -14,6 +14,7 @@ import { useLanguage } from '@/composables/useLanguage';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import AvatarUploader from '@/components/settings/AvatarUploader.vue';
 import FormCard from '@/components/FormCard.vue';
+import InlineStatus from '@/components/ui/InlineStatus.vue';
 
 interface Props {
     mustVerifyEmail: boolean;
@@ -97,11 +98,8 @@ const user = computed<User>(() => page.props.auth.user as User);
                                 {{ t('common.save') }}
                             </Button>
 
-                            <Transition enter-active-class="transition ease-in-out" enter-from-class="opacity-0"
-                                leave-active-class="transition ease-in-out" leave-to-class="opacity-0">
-                                <p v-show="recentlySuccessful" class="text-sm text-neutral-600">{{
-                                    t('profile.profile_updated') }}</p>
-                            </Transition>
+                            <InlineStatus class="flex items-center" dense :show="recentlySuccessful"
+                                :message="t('profile.profile_updated')" variant="success" />
                         </div>
                     </Form>
                 </FormCard>

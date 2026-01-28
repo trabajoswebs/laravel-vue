@@ -30,6 +30,8 @@ use Symfony\Component\HttpFoundation\Response; //OJO: es la interfaz base que im
 //(Illuminate\Http\Response, Illuminate\Http\JsonResponse, Illuminate\Http\RedirectResponse, etc.).
 //Así evitamos errores de tipado cuando el callback recibe un JsonResponse o un RedirectResponse
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Spatie\Multitenancy\Http\Middleware\NeedsTenant; // Exige tenant current en rutas tenant-aware
+use Spatie\Multitenancy\Http\Middleware\EnsureValidTenantSession; // Valida que sesión y tenant no estén desalineados
 
 /**
  * Configura y crea la instancia de la aplicación Laravel.
@@ -75,12 +77,17 @@ return Application::configure(basePath: dirname(__DIR__))
             'rate.uploads' => RateLimitUploads::class,
             'media.access' => TrackMediaAccess::class,
             'tenant.resolve' => ResolveTenant::class, // Resuelve y fija tenant en la request
+            'tenant.needs' => NeedsTenant::class, // Exige tenant current (Spatie)
+            'tenant.session' => EnsureValidTenantSession::class, // Valida sesión/tenant (Spatie)
+
         ]);
 
         $middleware->group('tenant', [ // Grupo reutilizable para rutas tenant-aware
             'web',                       // Incluye middleware web (sesiones/csrf)
             Authenticate::class,         // Requiere usuario autenticado
             ResolveTenant::class,        // Resuelve tenant desde current_tenant_id y membership
+            NeedsTenant::class,          // Falla rápido si no hay tenant current
+            EnsureValidTenantSession::class, // Evita sesión tenant manipulada o desalineada
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

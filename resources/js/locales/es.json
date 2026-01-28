@@ -131,7 +131,7 @@
         "login_title": "Accede a tu cuenta",
         "login_description": "Introduce tu correo y tu contraseña para empezar.",
         "email_address": "Correo electrónico",
-        "email_placeholder": "correo@@empresa.com",
+        "email_placeholder": "correo@empresa.com",
         "password_placeholder": "Tu contraseña",
         "forgot_password_link": "¿Has olvidado la contraseña?",
         "dont_have_account": "¿Todavía no tienes cuenta?",

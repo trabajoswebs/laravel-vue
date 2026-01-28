@@ -4,26 +4,28 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
-use App\Application\Shared\Contracts\ClockInterface;
-use App\Application\Shared\Contracts\LoggerInterface;
-use App\Infrastructure\Uploads\Pipeline\Optimizer\OptimizerService;                                  // Servicio de optimización basado en Spatie Image Optimizer // Ej.: $optimizer->optimize($media, 'thumb')
-use Illuminate\Bus\Queueable;                                        // Trait de colas // Ej.: onQueue('media')
-use Illuminate\Cache\RedisStore;
-use Illuminate\Contracts\Queue\ShouldBeUnique;                       // Evita duplicados en paralelo // Ej.: uniqueId()
-use Illuminate\Contracts\Queue\ShouldQueue;                          // Ejecutar en cola // Ej.: worker procesa el job
-use Illuminate\Filesystem\FilesystemAdapter;                         // Adapter de Storage // Ej.: directoryExists()
-use Illuminate\Foundation\Bus\Dispatchable;                          // Dispatchable // Ej.: Job::dispatch()
-use Illuminate\Queue\InteractsWithQueue;                             // InteractsWithQueue // Ej.: release(5)
-use Illuminate\Queue\Middleware\WithoutOverlapping;                  // Lock para no solapar // Ej.: lock por mediaId
-use Illuminate\Queue\SerializesModels;                               // Serialización segura
-use Illuminate\Support\Arr;                                          // Helpers de arrays
-use Illuminate\Support\Facades\Cache;                                // Cache para contador de releases
-use Illuminate\Support\Facades\Storage;                              // Storage::disk()
+use App\Application\Shared\Contracts\ClockInterface; // Reloj desacoplado; ej. now()
+use App\Application\Shared\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
+use App\Application\User\Jobs\Enums\ConversionReadyState; // Enum de estado de conversions; ej. READY
+use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant para makeCurrent; ej. Tenant #3
+use App\Infrastructure\Uploads\Pipeline\Optimizer\OptimizerService; // Servicio de optimización de imágenes; ej. optimize media
+use Illuminate\Bus\Queueable; // Trait de colas; ej. onQueue('media')
+use Illuminate\Cache\RedisStore; // Cache Redis para contadores; ej. release count
+use Illuminate\Contracts\Queue\ShouldBeUnique; // Evita duplicados; ej. uniqueId por media
+use Illuminate\Contracts\Queue\ShouldQueue; // Marca job para cola; ej. procesar en worker
+use Illuminate\Filesystem\FilesystemAdapter; // FS adapter; ej. Storage::disk('public')
+use Illuminate\Foundation\Bus\Dispatchable; // Permite dispatch estático; ej. ::dispatch()
+use Illuminate\Queue\InteractsWithQueue; // Acceso a release/delete; ej. release(5)
+use Illuminate\Queue\Middleware\WithoutOverlapping; // Middleware de no solapar; ej. lock por mediaId
+use Illuminate\Queue\SerializesModels; // Serializa modelos en payload; ej. Media
+use Illuminate\Support\Arr; // Helpers de arrays; ej. Arr::get
+use Illuminate\Support\Facades\Cache; // Cache facade; ej. contador de releases
+use Illuminate\Support\Facades\Storage; // Storage facade; ej. path media
 use RuntimeException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;               // Modelo Media
 use Throwable;                                                       // Errores genéricos
-use Carbon\Carbon;
-use App\Application\User\Jobs\Enums\ConversionReadyState;
+use Carbon\Carbon; // Fecha inmutable para comparaciones; ej. Carbon::now()
+use Carbon\CarbonInterface; // Interface para formatear fechas; ej. toIso8601String()
 
 /**
  * PostProcessAvatarMedia
@@ -52,25 +54,33 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
     private const OVERLAP_LOCK_EXPIRE_SEC  = 600;  // TTL lock overlapping
     private const RELEASECOUNT_TTL_MIN     = 30;   // TTL contador releases
 
+    /**
+     * Define un máximo de intentos coherente con el número de releases permitido.
+     * Necesario porque el worker se está lanzando con --tries=1; sin esto, el
+     * segundo intento tras un release fallaría inmediatamente con MaxAttemptsExceeded.
+     */
+    public int $tries = self::MAX_RELEASES_DEFAULT + 2; // margen extra para finalizar tras el último release
+
     private readonly array $normalizedConversions;
     private ?\DateTimeInterface $mediaBaselineUpdatedAt = null;
 
     public readonly int $firstSeenAtEpoch;
 
     public function __construct(
-        public readonly int $mediaId,                   // Ej.: 42
-        public readonly array $conversions = [],        // Ej.: ['thumb','preview']
-        public readonly string $collection = 'avatar',  // Ej.: 'avatar'
-        public readonly int $maxWaitSeconds = 60,       // Ej.: 60
-        public readonly int $checkIntervalSeconds = 5,  // Ej.: 5
-        ?int $firstSeenAtEpoch = null,                 // Ej.: time()
-        public readonly ?string $correlationId = null   // Ej.: 'req-123'
+        public readonly int $mediaId,                   // ID del media; ej. 42
+        public int|string|null $tenantId = null, // Tenant asociado; ej. 3
+        public readonly array $conversions = [],        // Conversions objetivo; ej. ['thumb']
+        public readonly string $collection = 'avatar',  // Colección; ej. avatar
+        public readonly int $maxWaitSeconds = 60,       // Timeout total; ej. 60s
+        public readonly int $checkIntervalSeconds = 5,  // Intervalo de recheck; ej. 5s
+        ?int $firstSeenAtEpoch = null,                 // Marca de tiempo; ej. time()
+        public readonly ?string $correlationId = null   // Correlación; ej. uuid
     ) {
-        $this->onQueue(config('queue.aliases.media', 'media')); // Cola de medios
-        $this->afterCommit();                                   // Ejecutar tras commit BD
-        $now = time();
-        $this->normalizedConversions = $this->normalizeConversionList($conversions);
-        $this->firstSeenAtEpoch = $this->sanitizeFirstSeenEpoch($firstSeenAtEpoch, $now);
+        $this->onQueue(config('queue.aliases.media', 'media')); // Selecciona cola de medios; ej. media
+        $this->afterCommit(); // Ejecuta tras commit para coherencia; ej. evita leer media sin guardar
+        $now = time(); // Captura timestamp actual; ej. 1715000000
+        $this->normalizedConversions = $this->normalizeConversionList($conversions); // Normaliza lista de conversions; ej. ['thumb']
+        $this->firstSeenAtEpoch = $this->sanitizeFirstSeenEpoch($firstSeenAtEpoch, $now); // Limpia epoch; ej. dentro de 1h
     }
 
     /**
@@ -82,16 +92,18 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
      * @param string|null $correlationId ID para correlacionar logs.
      */
     public static function dispatchFor(
-        Media $media,
-        array $conversions,
-        string $collection,
-        ?string $correlationId = null
+        Media $media, // Media de origen; ej. Media #5
+        int|string $tenantId, // Tenant asociado; ej. 3
+        array $conversions, // Conversions; ej. ['thumb']
+        string $collection, // Colección; ej. avatar
+        ?string $correlationId = null // Correlación; ej. uuid
     ): void {
-        self::dispatch(
-            mediaId: (int) $media->getKey(),
-            conversions: $conversions,
-            collection: $collection,
-            correlationId: $correlationId
+        self::dispatch( // Despacha el job con payload tenant-aware; ej. queue media
+            mediaId: (int) $media->getKey(), // Pasa mediaId; ej. 5
+            tenantId: $tenantId, // Pasa tenantId; ej. 3
+            conversions: $conversions, // Pasa conversions; ej. ['thumb']
+            collection: $collection, // Pasa colección; ej. avatar
+            correlationId: $correlationId // Pasa correlación; ej. req-123
         );
     }
 
@@ -181,10 +193,16 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
         $startedAt = microtime(true);
 
-        $media = $this->findTargetMedia();
-        if ($media === null) {
-            return;
+        $media = $this->findTargetMedia(); // Busca el media en DB; ej. Media #5
+        if ($media === null) { // Si no existe, aborta
+            return; // Evita procesar sin media
         }
+
+        $resolvedTenantId = $this->tenantId ?? $media->getCustomProperty('tenant_id'); // Resuelve tenant desde payload o custom_props; ej. 3
+        if (!$this->makeTenantCurrent($resolvedTenantId)) { // Si no puede fijar tenant, aborta
+            return; // Evita fuga cross-tenant
+        }
+        $this->tenantId = $resolvedTenantId; // Guarda tenantId resuelto; ej. 3
 
         if (!$this->ensureExpectedCollection($media)) {
             return;
@@ -424,10 +442,12 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             ? Carbon::instance($latest->updated_at)->toImmutable()
             : null;
 
-        if ($currentUpdatedAt === null || $currentUpdatedAt->greaterThan($baseline)) {
+        if ($currentUpdatedAt === null || $currentUpdatedAt->greaterThan($baseline)) { // Si el media cambió desde el baseline
+            $baselineIso = $baseline instanceof CarbonInterface ? $baseline->toIso8601String() : $baseline?->format(DATE_ATOM); // Formatea baseline; ej. 2026-01-25T00:00:00Z
+            $currentIso = $currentUpdatedAt instanceof CarbonInterface ? $currentUpdatedAt->toIso8601String() : $currentUpdatedAt?->format(DATE_ATOM); // Formatea current; ej. 2026-01-25T00:10:00Z
             $this->logger()->info('ppam_media_replaced_during_postprocess', $this->context([
-                'baseline' => $baseline->toIso8601String(),
-                'current'  => $currentUpdatedAt?->toIso8601String(),
+                'baseline' => $baselineIso, // Base de comparación; ej. 2026-01-25T00:00:00Z
+                'current'  => $currentIso, // Última actualización; ej. 2026-01-25T00:10:00Z
             ]));
             return false;
         }
@@ -725,8 +745,11 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             LUA;
 
             try {
-                $redis = $store->getRedis();
-                $result = $redis->eval($script, 1, $key, $ttlSeconds);
+                /** @var \Redis|\Predis\ClientInterface $redis */ // Cliente Redis; ej. PhpRedis o Predis
+                $redis = $store->getRedis(); // Obtiene cliente bajo nivel; ej. PhpRedis
+                $result = method_exists($redis, 'eval') // Usa eval si está disponible; ej. PhpRedis->eval
+                    ? $redis->eval($script, [$key, $ttlSeconds], 1) // Evalúa script con args; ej. INCR+EXPIRE
+                    : $redis->executeRaw(['EVAL', $script, 1, $key, $ttlSeconds]); // Fallback para Predis executeRaw
                 $cnt = (int) ($result[0] ?? 0);
                 $ttl = (int) ($result[1] ?? 0);
                 if ($ttl <= 0) {
@@ -764,8 +787,10 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
      */
     private function maxReleases(): int
     {
-        $value = (int) config('media.ppam_max_releases', self::MAX_RELEASES_DEFAULT);
-        return $value > 0 ? $value : self::MAX_RELEASES_DEFAULT;
+        $value = config('media.ppam_max_releases'); // Lee config opcional; ej. config/media.php
+        $fallback = config('image-pipeline.ppam_max_releases'); // Fallback secundario; ej. config/image-pipeline.php
+        $resolved = (int) ($value ?? $fallback ?? self::MAX_RELEASES_DEFAULT); // Resuelve valor final; ej. 50
+        return $resolved > 0 ? $resolved : self::MAX_RELEASES_DEFAULT; // Garantiza positivo; ej. 50
     }
 
     private function sanitizeFirstSeenEpoch(?int $value, int $now): int
@@ -802,11 +827,31 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
     private function context(array $extra = []): array
     {
         return array_merge([
-            'media_id'   => $this->mediaId,                 // Ej.: 42
-            'collection' => $this->collection,              // Ej.: 'avatar'
-            'corr'       => $this->correlationId ?? 'none', // Ej.: 'req-123'
-            'queue'      => $this->queue,                   // Ej.: 'media'
-            'connection' => $this->connection,              // Ej.: 'database'|'redis'
+            'media_id'   => $this->mediaId,                 // ID de media; ej. 42
+            'collection' => $this->collection,              // Colección; ej. avatar
+            'corr'       => $this->correlationId ?? 'none', // Correlación; ej. req-123
+            'queue'      => $this->queue,                   // Cola; ej. media
+            'connection' => $this->connection,              // Conexión; ej. redis
+            'tenant_id'  => $this->tenantId ?? 'none',      // Tenant en contexto; ej. 3
         ], $extra);
+    }
+
+    private function makeTenantCurrent(int|string|null $tenantId): bool
+    {
+        if ($tenantId === null) { // Si no hay tenantId, aborta
+            $this->logger()->warning('ppam_missing_tenant', $this->context()); // Loguea warning con contexto
+            return false; // No continúa para evitar fugas
+        }
+
+        $tenant = Tenant::query()->find($tenantId); // Busca tenant en DB; ej. Tenant #3
+
+        if ($tenant === null) { // Si no existe, aborta
+            $this->logger()->warning('ppam_tenant_not_found', $this->context(['tenant_id' => $tenantId])); // Loguea warning
+            return false; // Evita procesar sin tenant válido
+        }
+
+        $tenant->makeCurrent(); // Fija tenant actual; ej. tenant()->id = 3
+
+        return true; // Continúa procesando
     }
 }

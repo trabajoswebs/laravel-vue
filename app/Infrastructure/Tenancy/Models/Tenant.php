@@ -1,73 +1,34 @@
-<?php // Modelo Tenant para multi-tenant single-database
+<?php // Modelo Tenant compatible con Spatie (single-database)
 
-declare(strict_types=1); // Fuerza tipado estricto para consistencia
+declare(strict_types=1); // Tipado estricto // Ej.: evita coerciones silenciosas
 
-namespace App\Infrastructure\Tenancy\Models; // Namespace de infraestructura de tenancy
+namespace App\Infrastructure\Tenancy\Models; // Namespace del modelo // Ej.: App\...\Tenant
 
-use App\Infrastructure\Models\User; // Importa el modelo de usuario
-use Illuminate\Database\Eloquent\Relations\BelongsTo; // Importa relación BelongsTo
-use Illuminate\Database\Eloquent\Relations\BelongsToMany; // Importa relación BelongsToMany
-use Illuminate\Database\Eloquent\Model; // Modelo base de Eloquent
+use App\Infrastructure\Models\User; // Modelo User // Ej.: $tenant->users()
+use Illuminate\Database\Eloquent\Relations\BelongsTo; // Relación BelongsTo // Ej.: owner()
+use Illuminate\Database\Eloquent\Relations\BelongsToMany; // Relación BelongsToMany // Ej.: users()
+use Spatie\Multitenancy\Models\Tenant as SpatieTenant; // Base Spatie (trae makeCurrent/checkCurrent/etc.) // Ej.: $tenant->makeCurrent()
 
 /**
- * Modelo que representa un tenant en la base de datos única.
+ * Tenant single-db, extendiendo el Tenant de Spatie para no romper su API interna.
  */
-class Tenant extends Model // Extiende modelo Eloquent estándar
+final class Tenant extends SpatieTenant // Extiende SpatieTenant // Ej.: Tenant::checkCurrent()
 {
-    /**
-     * Tenant actual en memoria (similar a Spatie\Multitenancy\Models\Tenant).
-     */
-    private static ?self $current = null;
+    protected $guarded = []; // Sin fillables estrictos (ya validas antes) // Ej.: mass-assign controlado
 
     /**
-     * Atributos protegidos contra asignación masiva.
-     *
-     * @var array<int, string>
+     * Usuarios pertenecientes al tenant (pivot tenant_user).
      */
-    protected $guarded = []; // Permite asignación masiva controlada por validación previa
-
-    /**
-     * Relación: usuarios pertenecientes al tenant.
-     *
-     * @return BelongsToMany Relación muchos a muchos
-     */
-    public function users(): BelongsToMany // Devuelve los usuarios miembros
+    public function users(): BelongsToMany // Relación M:N // Ej.: $tenant->users()->exists()
     {
-        return $this->belongsToMany(User::class)->withTimestamps(); // Usa tabla pivote tenant_user con timestamps
+        return $this->belongsToMany(User::class)->withTimestamps(); // Pivot con timestamps // Ej.: created_at/updated_at
     }
 
     /**
-     * Relación: usuario propietario del tenant.
-     *
-     * @return BelongsTo Relación con el dueño
+     * Usuario propietario del tenant.
      */
-    public function owner(): BelongsTo // Devuelve el dueño del tenant
+    public function owner(): BelongsTo // Relación 1:N inversa // Ej.: $tenant->owner->id
     {
-        return $this->belongsTo(User::class, 'owner_user_id'); // FK owner_user_id en la tabla tenants
-    }
-
-    /**
-     * Marca este tenant como el actual en contexto de aplicación.
-     * Permite mantener compatibilidad con llamadas previas a makeCurrent().
-     */
-    public function makeCurrent(): void
-    {
-        self::$current = $this;
-    }
-
-    /**
-     * Olvida el tenant actual (compatibilidad con ForgetCurrentTenantAction).
-     */
-    public static function forgetCurrent(): void
-    {
-        self::$current = null;
-    }
-
-    /**
-     * Obtiene el tenant actual si fue marcado con makeCurrent().
-     */
-    public static function current(): ?self
-    {
-        return self::$current;
+        return $this->belongsTo(User::class, 'owner_user_id'); // FK owner_user_id // Ej.: owner_user_id = 2
     }
 }

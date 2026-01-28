@@ -16,6 +16,7 @@ import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useLanguage } from '@/composables/useLanguage';
 import { resolveUserAvatarUrl } from '@/utils/avatar';
+import { useAvatarState } from '@/composables/useAvatarState';
 
 const { t } = useLanguage();
 
@@ -29,7 +30,11 @@ const props = withDefaults(defineProps<Props>(), {
 
 const page = usePage();
 const auth = computed(() => page.props.auth);
+const { avatarOverride } = useAvatarState();
 const avatarSrc = computed<string | null>(() => {
+    if (avatarOverride.value !== undefined) {
+        return avatarOverride.value ?? null;
+    }
     const user = (auth.value?.user as User | undefined) ?? null;
     return resolveUserAvatarUrl(user, user?.updated_at ?? null);
 });

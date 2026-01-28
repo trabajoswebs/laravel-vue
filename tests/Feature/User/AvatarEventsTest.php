@@ -7,6 +7,7 @@ namespace Tests\Feature\User;
 use App\Application\User\Events\AvatarDeleted;
 use App\Application\User\Events\AvatarUpdated;
 use App\Infrastructure\Models\User;
+use App\Infrastructure\Tenancy\Models\Tenant;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -24,6 +25,11 @@ final class AvatarEventsTest extends TestCase
         Queue::fake();
 
         $user = User::factory()->create();
+        $tenant = Tenant::query()->create([
+            'name' => 'Acme',
+            'owner_user_id' => $user->getKey(),
+        ]);
+
         $media = Media::query()->create([
             'model_type' => User::class,
             'model_id' => $user->getKey(),
@@ -36,7 +42,7 @@ final class AvatarEventsTest extends TestCase
             'conversions_disk' => null,
             'size' => 1024,
             'manipulations' => [],
-            'custom_properties' => [],
+            'custom_properties' => ['tenant_id' => $tenant->getKey()],
             'generated_conversions' => [],
             'responsive_images' => [],
             'order_column' => 1,
@@ -51,8 +57,9 @@ final class AvatarEventsTest extends TestCase
             null,
         ));
 
-        Queue::assertPushed(PostProcessAvatarMedia::class, function (PostProcessAvatarMedia $job) use ($media) {
-            return (int) $job->mediaId === (int) $media->getKey();
+        Queue::assertPushed(PostProcessAvatarMedia::class, function (PostProcessAvatarMedia $job) use ($media, $tenant) {
+            return (int) $job->mediaId === (int) $media->getKey()
+                && (int) $job->tenantId === (int) $tenant->getKey();
         });
     }
 

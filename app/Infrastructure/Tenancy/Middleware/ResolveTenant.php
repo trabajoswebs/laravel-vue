@@ -63,7 +63,10 @@ class ResolveTenant // Middleware invocable por rutas tenant-aware
      */
     private function assertUserBelongsToTenant(User $user, Tenant $tenant): void // Valida relación en tenant_user
     {
-        $belongs = $tenant->users()->whereKey($user->getKey())->exists(); // Comprueba existencia en pivote
+        $belongs = DB::table('tenant_user') // Tabla pivote // Ej.: tenant_user
+            ->where('tenant_id', $tenant->getKey()) // Tenant actual // Ej.: 1
+            ->where('user_id', $user->getKey()) // Usuario autenticado // Ej.: 2
+            ->exists(); // true si pertenece
 
         if (! $belongs) { // Si no pertenece
             abort(403, 'El usuario no pertenece al tenant actual'); // Bloquea acceso

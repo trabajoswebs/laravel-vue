@@ -441,6 +441,12 @@ class LanguageController extends Controller
             return Redirect::back()->with([
                 'success' => true,
                 'message' => SecurityHelper::sanitizeOutput($userMessage),
+                // Alineamos el estilo de toast con el de perfil (variant "event")
+                'event' => [
+                    'title' => SecurityHelper::sanitizeOutput($userMessage),
+                    'description' => $data['description'] ?? null,
+                    'variant' => 'event',
+                ],
                 ...$data
             ]);
         }

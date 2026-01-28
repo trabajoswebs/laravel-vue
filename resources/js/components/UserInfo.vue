@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useInitials } from '@/composables/useInitials';
+import { useAvatarState } from '@/composables/useAvatarState';
 import type { User } from '@/types';
 import { computed } from 'vue';
 import { resolveUserAvatarUrl } from '@/utils/avatar';
@@ -15,19 +16,27 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const { getInitials } = useInitials();
+const { avatarOverride } = useAvatarState();
 
-const avatarUrl = computed(() => resolveUserAvatarUrl(props.user, props.user?.updated_at ?? null));
+const avatarUrl = computed(() => {
+    if (avatarOverride.value !== undefined) {
+        return avatarOverride.value;
+    }
+    return resolveUserAvatarUrl(props.user, props.user?.updated_at ?? null);
+});
 // Compute whether we should show the avatar image
 const showAvatar = computed(() => Boolean(avatarUrl.value));
 </script>
 
 <template>
-    <Avatar class="h-8 w-8 overflow-hidden rounded-lg">
-        <AvatarImage v-if="showAvatar" :src="avatarUrl!" :key="avatarUrl" :alt="user.name" />
-        <AvatarFallback class="rounded-lg text-black dark:text-white">
+    <div class="h-8 w-8 overflow-hidden rounded-lg">
+        <Avatar v-if="showAvatar" class="h-8 w-8 overflow-hidden rounded-lg">
+            <AvatarImage :src="avatarUrl!" :key="avatarUrl" :alt="user.name" />
+        </Avatar>
+        <div v-else class="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-sm font-semibold text-black dark:text-white">
             {{ getInitials(user.name) }}
-        </AvatarFallback>
-    </Avatar>
+        </div>
+    </div>
 
     <div class="grid flex-1 text-left text-sm leading-tight">
         <span class="truncate font-medium">{{ user.name }}</span>

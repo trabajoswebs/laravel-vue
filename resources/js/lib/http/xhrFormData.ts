@@ -31,9 +31,10 @@ const defaultHeaders = () => {
         'X-Requested-With': 'XMLHttpRequest',
     };
 
+    // Usamos X-XSRF-TOKEN (estándar Laravel/Axios); Laravel lo desencripta.
     const csrf = getCsrfToken();
     if (csrf) {
-        headers['X-CSRF-TOKEN'] = csrf;
+        headers['X-XSRF-TOKEN'] = csrf;
     }
 
     return headers;

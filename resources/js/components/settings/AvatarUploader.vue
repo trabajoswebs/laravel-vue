@@ -6,12 +6,14 @@ import { Camera, ImagePlus, Loader2, Upload, X } from 'lucide-vue-next';
 // Importaciones de componentes UI
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
+import InlineStatus from '@/components/ui/InlineStatus.vue';
 
 // Importaciones de composables personalizados
 import { useAvatarUpload } from '@/composables/useAvatarUpload';
 import { useInitials } from '@/composables/useInitials';
 import { useLanguage } from '@/composables/useLanguage';
 import type { User } from '@/types';
+import { notify } from '@/plugins/toaster-plugin';
 
 // Definición de props del componente
 interface Props {
@@ -49,6 +51,8 @@ const {
     uploadProgress, // Progreso de la subida (0-100)
     errors, // Errores de validación
     generalError, // Error general
+    recentlySuccessful, // Flag de éxito inline
+    successMessage, // Mensaje de éxito inline
     uploadAvatar, // Función para subir avatar
     removeAvatar, // Función para eliminar avatar
     resolveAvatarUrl, // Función para obtener URL del avatar
@@ -94,11 +98,11 @@ const previewUrl = ref<string | null>(null); // URL de vista previa del archivo
 const renderedAvatarUrl = computed<string | null>(() => previewUrl.value ?? avatarUrl.value); // URL a mostrar (vista previa o avatar actual)
 
 // Mensajes
-const helperMessage = computed<string>(() => {
-    if (props.helperText && props.helperText.trim() !== '') {
-        return props.helperText;
-    }
-    return t('profile.avatar_helper_dynamic', {
+    const helperMessage = computed<string>(() => {
+        if (props.helperText && props.helperText.trim() !== '') {
+            return props.helperText;
+        }
+        return t('profile.avatar_helper_dynamic', {
         types: allowedMimeSummary,
         max: formatBytesLabel(constraints.maxBytes),
         min: constraints.minDimension,
@@ -119,6 +123,8 @@ const isBusy = computed<boolean>(() => isUploading.value || isDeleting.value); /
 const isUploadCancellable = computed<boolean>(() => isUploading.value); // Indica si la subida se puede cancelar
 const acceptAttribute = computed<string>(() => acceptMimeTypes); // Tipos MIME permitidos
 const isDragActive = ref(false); // Indica si hay arrastre activo
+const inlineSuccessMessage = computed(() => successMessage.value || t('profile.avatar_upload_success_toast'));
+const inlineErrorMessage = computed(() => generalError.value || avatarErrorMessage.value || '');
 
 // Establece el estado de arrastre
 const setDragState = (active: boolean) => {
@@ -229,7 +235,10 @@ const processFile = async (file: File | null) => {
             const unexpected = !expected && (status === undefined || status >= 500 || status === 0);
             if (unexpected) {
                 console.warn('Avatar upload failed:', error);
+                notify.error(t('profile.avatar_error_generic'));
             }
+        } else {
+            notify.error(t('profile.avatar_error_generic'));
         }
     } finally {
         if (activeUploadToken.value === token) {
@@ -252,9 +261,8 @@ const handleRemove = async () => {
     try {
         await removeAvatar();
     } catch (error) {
-        if (import.meta.env.DEV) {
-            console.warn('Avatar removal failed:', error);
-        }
+        notify.error(t('profile.avatar_error_generic'));
+        if (import.meta.env.DEV) console.warn('Avatar removal failed:', error);
     }
 };
 
@@ -515,9 +523,9 @@ const handleImageError = () => {
                 </div>
             </div>
 
-            <!-- Errores -->
-            <InputError v-if="avatarErrorMessage" :id="errorId" :message="avatarErrorMessage"
-                class="animate-in fade-in slide-in-from-top-2 duration-200" />
+            <!-- Mensajes inline -->
+            <InlineStatus :show="Boolean(inlineErrorMessage)" :message="inlineErrorMessage" variant="error" />
+            <InlineStatus :show="recentlySuccessful" :message="inlineSuccessMessage" variant="success" />
         </div>
 
         <p :id="helperId" class="sr-only">

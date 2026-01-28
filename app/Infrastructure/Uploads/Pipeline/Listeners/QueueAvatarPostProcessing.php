@@ -6,10 +6,10 @@ namespace App\Infrastructure\Uploads\Pipeline\Listeners;
 
 use App\Application\Shared\Contracts\ClockInterface;
 use App\Application\Shared\Contracts\LoggerInterface;
-use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;
+use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia; // Job de post-proceso; ej. optimiza media
+use Illuminate\Support\Facades\Cache; // Cache para debounce; ej. Cache::add
+use Illuminate\Support\Str; // Generar UUIDs; ej. Str::uuid()
+use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media; ej. Media #5
 
 /**
  * Listener síncrono que encola el job de post-procesado/optimización
@@ -204,14 +204,25 @@ final class QueueAvatarPostProcessing
         // 4) Genera un Correlation ID para trazabilidad entre el listener y el job
         $correlationId = (string) Str::uuid();
 
+        $tenantId = $media->getCustomProperty('tenant_id') ?? tenant()?->getKey(); // Resuelve tenant desde custom_props o helper; ej. 3
+        if ($tenantId === null) { // Sin tenant -> aborta
+            $this->logger->warning('ppam_listener_missing_tenant', [ // Log warning para trazabilidad
+                'media_id' => $media->id, // Ej. 5
+                'collection' => $collection, // Ej. avatar
+                'conversion_fired' => $conversionName, // Ej. thumb
+            ]);
+            return; // No encola job sin tenant
+        }
+
         // 5) Despacha el Job de forma endurecida (no bloqueante, usando cola image-optimization)
         try {
             // Despacha el job de post-procesamiento para el archivo Media
             PostProcessAvatarMedia::dispatchFor(
-                media: $media,
-                conversions: $this->conversions,
-                collection: $collection,
-                correlationId: $correlationId
+                media: $media, // Pasa Media completo; ej. Media #5
+                tenantId: $tenantId, // Pasa tenantId; ej. 3
+                conversions: $this->conversions, // Lista de conversions; ej. ['thumb']
+                collection: $collection, // Colección; ej. avatar
+                correlationId: $correlationId // Correlación; ej. uuid
             );
 
             // Registra un info sobre el despacho exitoso
@@ -221,6 +232,7 @@ final class QueueAvatarPostProcessing
                 'conversions'      => $this->conversions,
                 'conversion_fired' => $conversionName,
                 'correlation_id'   => $correlationId,
+                'tenant_id'        => $tenantId,
             ]);
         } catch (\Throwable $e) {
             // En caso de error al despachar, registra el error y limpia la caché
