@@ -23,6 +23,8 @@ Route::middleware('tenant')->group(function () { // Protege rutas con grupo tena
         ->name('settings.avatar.destroy');
     Route::get('settings/avatar/status', [ProfileAvatarController::class, 'status'])
         ->name('settings.avatar.status');
+    Route::get('api/avatar/uploads/{uploadUuid}/status', [ProfileAvatarController::class, 'uploadStatus'])
+        ->name('settings.avatar.upload-status');
 
     Route::get('settings/password', [PasswordController::class, 'edit'])->name('password.edit');
 

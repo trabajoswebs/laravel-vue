@@ -46,8 +46,23 @@ final class MediaReplacementService
         $snapshot = $this->snapshotFromArtifacts($previousArtifacts);
         $media = $this->replace($owner, $file, $profile, $correlationId);
 
-        if ($snapshot !== null) {
-            $this->cleanupScheduler->scheduleCleanup($media, $snapshot->toArtifacts(), [], $profile->conversions());
+        if ($previousArtifacts !== []) {
+            foreach ($previousArtifacts as $entry) {
+                $previousMedia = $entry['media'] ?? null;
+                $pathsByDisk = $entry['artifacts'] ?? [];
+
+                if (!$previousMedia instanceof MediaResource || !is_array($pathsByDisk) || $pathsByDisk === []) {
+                    continue;
+                }
+
+                $artifacts = $this->enrichArtifactsWithMediaId($pathsByDisk, (string) $previousMedia->getKey());
+                if ($artifacts === []) {
+                    continue;
+                }
+
+                // La limpieza debe esperar las conversiones del media anterior (no del nuevo).
+                $this->cleanupScheduler->scheduleCleanup($previousMedia, $artifacts, [], $profile->conversions());
+            }
         }
 
         return MediaReplacementResult::make($media, $snapshot, null);
@@ -80,5 +95,32 @@ final class MediaReplacementService
         }
 
         return MediaReplacementSnapshot::fromItems($items);
+    }
+
+    /**
+     * @param array<string, list<string>> $pathsByDisk
+     * @return array<string, list<array{dir:string,mediaId:string}>>
+     */
+    private function enrichArtifactsWithMediaId(array $pathsByDisk, string $mediaId): array
+    {
+        $result = [];
+
+        foreach ($pathsByDisk as $disk => $paths) {
+            if (!is_array($paths) || $paths === []) {
+                continue;
+            }
+
+            foreach ($paths as $path) {
+                if (!is_string($path) || $path === '') {
+                    continue;
+                }
+                $result[(string) $disk][] = [
+                    'dir' => $path,
+                    'mediaId' => $mediaId,
+                ];
+            }
+        }
+
+        return $result;
     }
 }

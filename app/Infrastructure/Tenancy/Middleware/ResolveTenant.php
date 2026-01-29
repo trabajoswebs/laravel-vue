@@ -45,12 +45,16 @@ class ResolveTenant // Middleware invocable por rutas tenant-aware
 
         $sessionKey = config('multitenancy.current_tenant_id_key', 'tenant_id'); // Obtiene clave de sesión configurada
         $sessionTenantId = $request->session()->get($sessionKey); // Lee tenant almacenado en sesión
+        $legacySessionTenantId = $request->session()->get('tenant_id'); // Compatibilidad con tests/legacy
 
-        if ($sessionTenantId !== null && (string) $sessionTenantId !== (string) $tenant->getKey()) { // Detecta sesiones alteradas
+        $candidate = $sessionTenantId ?? $legacySessionTenantId;
+
+        if ($candidate !== null && (string) $candidate !== (string) $tenant->getKey()) { // Detecta sesiones alteradas
             return abort(403, 'Sesión con tenant inválido'); // Bloquea si la sesión apunta a otro tenant
         }
 
         $request->session()->put($sessionKey, $tenant->getKey()); // Guarda tenant_id en sesión para validación
+        $request->session()->put('tenant_id', $tenant->getKey()); // Clave legacy para compatibilidad
 
         return $next($request); // Continúa el pipeline con tenant resuelto
     }

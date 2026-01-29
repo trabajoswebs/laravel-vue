@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\User\Listeners;
 
 use App\Application\User\Events\AvatarUpdated; // Evento de aplicación al actualizar avatar; ej. user_id=1
-use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia; // Job que post-procesa avatar; ej. optimiza imagen
+use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor para avatar
 use Illuminate\Support\Facades\Log; // Logger para dejar trazas; ej. warning si falta tenant
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media de Spatie; ej. media_id=5
 
@@ -38,12 +38,14 @@ final class OnAvatarUpdated
             return; // No encola job sin tenant para evitar fugas cross-tenant
         }
 
-        PostProcessAvatarMedia::dispatchFor(
-            media: $media, // Pasa el modelo Media; ej. Media #5
-            tenantId: $tenantId, // Incluye tenantId en payload; ej. 3
-            conversions: [], // Conversions a procesar (vacío usa defaults); ej. []
-            collection: $event->collection, // Colección origen; ej. avatar
-            correlationId: $event->version, // Usa versión como correlación; ej. v1
+        ProcessLatestAvatar::rememberLatest(
+            $tenantId,
+            $event->userId,
+            $media->getKey(),
+            (string) ($media->getCustomProperty('upload_uuid') ?? $media->uuid),
+            $event->version
         );
+
+        ProcessLatestAvatar::enqueueOnce($tenantId, $event->userId);
     }
 }

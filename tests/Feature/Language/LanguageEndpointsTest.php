@@ -66,7 +66,7 @@ class LanguageEndpointsTest extends TestCase
             ->post('/language/change/invalid!');
 
         $response->assertRedirect('/dashboard');
-        $response->assertSessionHas('error');
+        $response->assertSessionHasErrors('error');
         $this->assertSame('en', session('locale', config('app.locale')));
     }
 

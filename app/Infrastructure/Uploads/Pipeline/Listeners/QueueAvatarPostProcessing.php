@@ -7,7 +7,8 @@ namespace App\Infrastructure\Uploads\Pipeline\Listeners;
 use App\Application\Shared\Contracts\ClockInterface;
 use App\Application\Shared\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia; // Job de post-proceso; ej. optimiza media
-use Illuminate\Support\Facades\Cache; // Cache para debounce; ej. Cache::add
+use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor por usuario
+use Illuminate\Support\Facades\Redis; // Redis para lock/coalescing por usuario
 use Illuminate\Support\Str; // Generar UUIDs; ej. Str::uuid()
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media; ej. Media #5
 
@@ -164,44 +165,7 @@ final class QueueAvatarPostProcessing
             return; // Sale si la colección no está permitida
         }
 
-        // 3) Implementa debounce: 1 dispatch por media en una ventana de tiempo (30 segundos)
-        $key = "ppam:dispatch:media:{$media->id}";
-        $ttl = $this->clock->now()->addSeconds(30);
-
-        try {
-            // Intenta añadir una entrada en caché para evitar dispatchs duplicados
-            if (!Cache::add($key, '1', $ttl)) {
-                // Si ya existe una entrada, el evento está debounced
-                $this->logger->debug('ppam_listener_debounced', [
-                    'media_id'         => $media->id,
-                    'key'              => $key,
-                    'ttl_seconds'      => 30,
-                    'conversion_fired' => $conversionName,
-                ]);
-                $this->logger->info('ppam_listener_debounced_metric', [
-                    'media_id'         => $media->id,
-                    'key'              => $key,
-                    'ttl_seconds'      => 30,
-                    'metric'           => 'ppam.dispatch.debounced',
-                ]);
-                return; // Sale si el evento está debounced
-            }
-        } catch (\Throwable $e) {
-            // Fallback degradado: si la caché está caída, seguimos para no perder el post-proceso
-            $this->logger->warning('ppam_listener_cache_unavailable', [
-                'media_id'         => $media->id,
-                'error'            => $e->getMessage(),
-                'degraded'         => true,
-                'conversion_fired' => $conversionName,
-            ]);
-            $this->logger->warning('ppam_listener_cache_unavailable_metric', [
-                'media_id'         => $media->id,
-                'error'            => $e->getMessage(),
-                'metric'           => 'ppam.cache.unavailable',
-            ]);
-        }
-
-        // 4) Genera un Correlation ID para trazabilidad entre el listener y el job
+        // 3) Genera un Correlation ID para trazabilidad entre el listener y el job
         $correlationId = (string) Str::uuid();
 
         $tenantId = $media->getCustomProperty('tenant_id') ?? tenant()?->getKey(); // Resuelve tenant desde custom_props o helper; ej. 3
@@ -214,39 +178,63 @@ final class QueueAvatarPostProcessing
             return; // No encola job sin tenant
         }
 
-        // 5) Despacha el Job de forma endurecida (no bloqueante, usando cola image-optimization)
+        // 4) Persistir SIEMPRE el último media para el usuario/tenant
+        ProcessLatestAvatar::rememberLatest(
+            $tenantId,
+            $media->model_id,
+            $media->getKey(),
+            $media->getCustomProperty('upload_uuid') ?? (string) $media->uuid,
+            $media->getCustomProperty('correlation_id') ?? $correlationId
+        );
+
+        // 5) Intentar adquirir el lock por (tenant,user); si se obtiene, encola el job.
+        $lockKey = sprintf('ppam:avatar:lock:%s:%s', $tenantId, $media->model_id);
         try {
-            // Despacha el job de post-procesamiento para el archivo Media
-            PostProcessAvatarMedia::dispatchFor(
-                media: $media, // Pasa Media completo; ej. Media #5
-                tenantId: $tenantId, // Pasa tenantId; ej. 3
-                conversions: $this->conversions, // Lista de conversions; ej. ['thumb']
-                collection: $collection, // Colección; ej. avatar
-                correlationId: $correlationId // Correlación; ej. uuid
-            );
-
-            // Registra un info sobre el despacho exitoso
-            $this->logger->info('ppam_listener_dispatch', [
-                'media_id'         => $media->id,
-                'collection'       => $collection,
-                'conversions'      => $this->conversions,
-                'conversion_fired' => $conversionName,
-                'correlation_id'   => $correlationId,
-                'tenant_id'        => $tenantId,
-            ]);
+            $acquired = Redis::set($lockKey, '1', 'EX', 60, 'NX');
         } catch (\Throwable $e) {
-            // En caso de error al despachar, registra el error y limpia la caché
-            $this->logger->error('ppam_listener_dispatch_failed', [
+            $this->logger->warning('ppam_listener_cache_unavailable', [
                 'media_id'         => $media->id,
-                'collection'       => $collection,
-                'conversions'      => $this->conversions,
-                'conversion_fired' => $conversionName,
+                'user_id'          => $media->model_id,
+                'tenant_id'        => $tenantId,
                 'error'            => $e->getMessage(),
-                'correlation_id'   => $correlationId,
+                'degraded'         => true,
+                'conversion_fired' => $conversionName,
             ]);
-
-            // Limpia la entrada de caché en caso de error para permitir reintentos
-            Cache::forget($key);
+            $acquired = true; // degradar a dispatch para no perder el procesamiento
         }
+
+        if ($acquired) {
+            ProcessLatestAvatar::dispatch($tenantId, $media->model_id);
+        } else {
+            $this->logger->debug('ppam_listener_debounced', [
+                'media_id'         => $media->id,
+                'user_id'          => $media->model_id,
+                'tenant_id'        => $tenantId,
+                'key'              => $lockKey,
+                'ttl_seconds'      => 60,
+                'conversion_fired' => $conversionName,
+            ]);
+            $this->logger->info('ppam_listener_debounced_metric', [
+                'media_id'    => $media->id,
+                'user_id'     => $media->model_id,
+                'tenant_id'   => $tenantId,
+                'key'         => $lockKey,
+                'ttl_seconds' => 60,
+                'metric'      => 'ppam.dispatch.debounced',
+            ]);
+        }
+
+        $this->logger->info('ppam_listener_dispatch', [
+            'media_id'         => $media->id,
+            'collection'       => $collection,
+            'conversions'      => $this->conversions,
+            'conversion_fired' => $conversionName,
+            'correlation_id'   => $correlationId,
+            'tenant_id'        => $tenantId,
+            'user_id'          => $media->model_id,
+            'latest_key'       => sprintf('ppam:avatar:last:%s:%s', $tenantId, $media->model_id),
+            'lock_key'         => $lockKey,
+            'coalesced'        => true,
+        ]);
     }
 }

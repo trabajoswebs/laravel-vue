@@ -10,12 +10,15 @@ namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 use App\Application\Shared\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
 use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant para makeCurrent; ej. Tenant #3
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler; // Scheduler de limpieza; ej. flushExpired
+use App\Infrastructure\Models\User; // Modelo User para validar avatar
+use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob; // Limpieza directa de artefactos
 use Illuminate\Contracts\Debug\ExceptionHandler; // Reporta excepciones; ej. app(ExceptionHandler)
 use Illuminate\Support\Facades\Storage; // Acceso a disks; ej. Storage::disk('public')->exists('x.jpg')
 use Spatie\MediaLibrary\Conversions\ConversionCollection; // Lista de conversions; ej. ['thumb']
 use Spatie\MediaLibrary\Conversions\FileManipulator; // Ejecuta conversions; ej. performConversions()
 use Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob as BasePerformConversionsJob; // Extiende base Spatie; ej. job original
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media; ej. Media #5
+use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator; // Genera paths por media
 
 /**
  * Variante defensiva del job de conversions.
@@ -37,6 +40,9 @@ class PerformConversionsJob extends BasePerformConversionsJob
      * Si tu worker usa --tries=1, esto no aplica.
      */
     public int|array $backoff = 30; // Ej. 30s
+
+    // Mantener la misma firma que la clase base (sin tipo declarado).
+    public $deleteWhenMissingModels = true; // Limpia jobs con Media inexistente
 
     /**
      * Constructor que delega la inicialización a la clase base.
@@ -75,13 +81,32 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
             // 2) Si el Media ya no existe, descarta el job.
             if ($freshMedia === null) {
-                $this->logger()->notice('media.conversions.skipped_missing', [ // Log skip
-                    'media_id' => $this->media->getKey(), // Ej. 1863
-                    'collection' => $this->media->collection_name, // Ej. 'avatar'
+                $this->staleSkip('media_missing', [
+                    'media_id' => $this->media->getKey(),
                 ]);
-
                 $this->flushPendingCleanup(); // Limpia restos; ej. conversions/responsive-images
                 return true; // Termina OK
+            }
+
+            if ($freshMedia->collection_name === 'avatar') {
+                $user = User::query()->find($freshMedia->model_id);
+                if ($user === null) {
+                    $this->staleSkip('user_missing', [
+                        'media_id' => $freshMedia->getKey(),
+                        'user_id' => $freshMedia->model_id,
+                    ]);
+                    return true;
+                }
+
+                $current = $user->getFirstMedia($freshMedia->collection_name);
+                if ($current === null || $current->getKey() !== $freshMedia->getKey()) {
+                    $this->staleSkip('superseded', [
+                        'media_id' => $freshMedia->getKey(),
+                        'current_media_id' => $current?->getKey(),
+                        'user_id' => $user->getKey(),
+                    ]);
+                    return true;
+                }
             }
 
             // 3) Si no hay conversions, termina.
@@ -96,12 +121,11 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
             // 4) NUEVO: si el fichero original ya no existe (carrera con DELETE), descarta limpio.
             if (!$this->sourceFileExists($freshMedia)) {
-                $this->logger()->notice('media.conversions.skipped_source_missing', [ // Log skip
-                    'media_id' => $freshMedia->getKey(), // Ej. 1863
-                    'disk' => $freshMedia->disk, // Ej. 'public'
-                    'path' => $this->safeRelativePath($freshMedia), // Ej. 'tenants/1/.../file.jpg'
+                $this->staleSkip('source_missing', [
+                    'media_id' => $freshMedia->getKey(),
+                    'disk' => $freshMedia->disk,
+                    'path' => $this->safeRelativePath($freshMedia),
                 ]);
-
                 $this->flushPendingCleanup(); // Limpia restos
                 return true; // Importante: NO FAIL, NO RETRY
             }
@@ -111,10 +135,46 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
             // 6) Ejecuta conversiones.
             $fileManipulator->performConversions(
-                $this->conversions, // Ej. ['thumb','medium','large']
+                $this->conversions, // Ej. ['thumb','medium','large'] 
                 $this->media, // Ej. Media #1863
                 $this->onlyMissing // Ej. false
             );
+
+            // 7) Hardening post-conversion: si el avatar fue reemplazado durante el proceso, limpia residuos.
+            if ($this->media->collection_name === 'avatar') {
+                $postMedia = Media::query()->find($this->media->getKey());
+                if ($postMedia === null) {
+                    $this->staleSkip('media_missing_post_conversion', [
+                        'media_id' => $this->media->getKey(),
+                    ]);
+                    $this->flushPendingCleanup();
+                    $this->dispatchDirectCleanup($this->media, 'media_missing_post_conversion');
+                    return true;
+                }
+
+                $user = User::query()->find($postMedia->model_id);
+                if ($user === null) {
+                    $this->staleSkip('user_missing_post_conversion', [
+                        'media_id' => $postMedia->getKey(),
+                        'user_id' => $postMedia->model_id,
+                    ]);
+                    $this->flushPendingCleanup();
+                    $this->dispatchDirectCleanup($postMedia, 'user_missing_post_conversion');
+                    return true;
+                }
+
+                $current = $user->getFirstMedia($postMedia->collection_name);
+                if ($current === null || $current->getKey() !== $postMedia->getKey()) {
+                    $this->staleSkip('superseded_post_conversion', [
+                        'media_id' => $postMedia->getKey(),
+                        'current_media_id' => $current?->getKey(),
+                        'user_id' => $user->getKey(),
+                    ]);
+                    $this->flushPendingCleanup();
+                    $this->dispatchDirectCleanup($postMedia, 'superseded_post_conversion');
+                    return true;
+                }
+            }
 
             return true; // OK
         } catch (\Throwable $exception) {
@@ -132,6 +192,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
                 ]);
 
                 $this->flushPendingCleanup();
+                $this->dispatchDirectCleanup($this->media, 'missing_during_processing');
                 return true; // IMPORTANT: no FAIL, no retry
             }
 
@@ -144,6 +205,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
                 ]);
 
                 $this->flushPendingCleanup();
+                $this->dispatchDirectCleanup($this->media, 'missing_runtime');
                 return true;
             }
 
@@ -264,5 +326,77 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
         $tenant->makeCurrent(); // Fija tenant actual; ej. tenant()->id = 1
         return true; // OK
+    }
+
+    private function staleSkip(string $reason, array $context = []): void
+    {
+        $this->logger()->info('job.stale_skipped', array_merge([
+            'reason' => $reason,
+            'media_id' => $this->media->getKey(),
+            'tenant_id' => $this->tenantId,
+        ], $context));
+    }
+
+    /**
+     * Programa limpieza directa de artefactos cuando no hay estado de cleanup.
+     */
+    private function dispatchDirectCleanup(Media $media, string $reason): void
+    {
+        try {
+            $artifacts = $this->artifactsForMedia($media);
+            if ($artifacts === []) {
+                return;
+            }
+
+            CleanupMediaArtifactsJob::dispatch($artifacts, []);
+
+            $this->logger()->info('media.conversions.cleanup_dispatched', [
+                'media_id' => $media->getKey(),
+                'reason' => $reason,
+                'disks' => array_keys($artifacts),
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger()->warning('media.conversions.cleanup_dispatch_failed', [
+                'media_id' => $media->getKey(),
+                'reason' => $reason,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Construye artefactos por media usando el PathGenerator actual.
+     *
+     * @return array<string,list<array{dir:string,mediaId:string}>>
+     */
+    private function artifactsForMedia(Media $media): array
+    {
+        $disk = (string) ($media->disk ?? '');
+        if ($disk === '') {
+            return [];
+        }
+
+        $conversionDisk = (string) ($media->conversions_disk ?: $media->disk);
+        $pathGenerator = app(PathGenerator::class);
+        $mediaId = (string) $media->getKey();
+
+        $baseDir = rtrim($pathGenerator->getPath($media), '/');
+        $convDir = rtrim($pathGenerator->getPathForConversions($media), '/');
+        $respDir = rtrim($pathGenerator->getPathForResponsiveImages($media), '/');
+
+        $artifacts = [
+            $disk => [
+                ['dir' => $baseDir, 'mediaId' => $mediaId],
+            ],
+        ];
+
+        if ($conversionDisk !== '') {
+            $artifacts[$conversionDisk] = array_merge($artifacts[$conversionDisk] ?? [], [
+                ['dir' => $convDir, 'mediaId' => $mediaId],
+                ['dir' => $respDir, 'mediaId' => $mediaId],
+            ]);
+        }
+
+        return $artifacts;
     }
 }

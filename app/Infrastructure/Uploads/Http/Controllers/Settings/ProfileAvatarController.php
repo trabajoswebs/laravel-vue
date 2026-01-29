@@ -24,6 +24,7 @@ use Illuminate\Http\RedirectResponse;                 // Ej. respuesta redirect
 use Illuminate\Http\Request;                          // Ej. request base
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
 use Throwable;                                        // Ej. captura de errores
 
 /**
@@ -200,6 +201,71 @@ class ProfileAvatarController extends Controller
         }
 
         return response()->json(['status' => 'processing']);
+    }
+
+    /**
+     * Endpoint API: estado de una subida de avatar por upload_uuid.
+     *
+     * Devuelve 200 con status (completed|processing|superseded|failed) y media_id/latest_media_id.
+     */
+    public function uploadStatus(Request $request, string $uploadUuid): JsonResponse
+    {
+        /** @var User $authUser */
+        $authUser = $request->user();
+
+        if (!$authUser) {
+            throw new AuthorizationException('Authenticated user required to query avatar upload.');
+        }
+
+        $collection = app(\App\Infrastructure\Uploads\Profiles\AvatarProfile::class)->collection();
+        $current = $authUser->getFirstMedia($collection);
+
+        $requested = $authUser->getMedia($collection)
+            ->first(function ($media) use ($uploadUuid) {
+                return (string) ($media->getCustomProperty('upload_uuid') ?? '') === $uploadUuid;
+            });
+
+        if ($requested) {
+            if ($current && $current->getKey() === $requested->getKey()) {
+                return response()->json([
+                    'status' => 'completed',
+                    'media_id' => (string) $requested->getKey(),
+                    'updated_at' => $requested->updated_at,
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'superseded',
+                'media_id' => (string) $requested->getKey(),
+                'latest_media_id' => $current?->getKey(),
+                'updated_at' => $requested->updated_at,
+            ]);
+        }
+
+        $tenantId = tenant()?->getKey() ?? $authUser->tenant_id ?? $authUser->getKey();
+        $last = $this->readLastUploadPayload($tenantId, $authUser->getKey());
+
+        if ($last && ($last['upload_uuid'] ?? null) !== $uploadUuid) {
+            return response()->json([
+                'status' => 'superseded',
+                'latest_media_id' => $last['media_id'] ?? null,
+                'media_id' => null,
+                'updated_at' => $last['updated_at'] ?? null,
+            ]);
+        }
+
+        if ($last && ($last['upload_uuid'] ?? null) === $uploadUuid) {
+            return response()->json([
+                'status' => 'processing',
+                'media_id' => $last['media_id'] ?? null,
+                'updated_at' => $last['updated_at'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'failed',
+            'message' => __('image-pipeline.validation.avatar_not_found'),
+        ]);
     }
 
     /**
@@ -503,5 +569,17 @@ class ProfileAvatarController extends Controller
         }
 
         return [(int) $info[0], (int) $info[1]];
+    }
+
+    private function readLastUploadPayload(int|string $tenantId, int|string $userId): ?array
+    {
+        $key = sprintf('ppam:avatar:last:%s:%s', $tenantId, $userId);
+        $raw = Redis::get($key);
+        if (!is_string($raw) || $raw === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : null;
     }
 }

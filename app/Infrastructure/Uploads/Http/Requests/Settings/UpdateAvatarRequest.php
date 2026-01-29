@@ -6,6 +6,8 @@ namespace App\Infrastructure\Uploads\Http\Requests\Settings;
 
 use Illuminate\Foundation\Http\FormRequest;
 use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesImageValidation; // Trait de reglas de imagen
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 /**
  * Solicitud para validar la actualización del avatar del usuario.
@@ -58,5 +60,27 @@ class UpdateAvatarRequest extends FormRequest
             'avatar.mimetypes'  => __('image-pipeline.validation.avatar_mime'),
             'avatar.dimensions' => __('image-pipeline.validation.dimensions'),
         ];
+    }
+
+    protected function failedValidation(Validator $validator): void
+    {
+        if ($this->wantsJson()) {
+            $errors = $validator->errors()->all();
+            $first = $errors[0] ?? __('validation.custom.image.invalid_file');
+            $code = 'VALIDATION_ERROR';
+
+            if (str_contains($first, '|')) {
+                [$maybeCode, $message] = explode('|', $first, 2);
+                $code = trim($maybeCode) ?: $code;
+                $first = trim($message) ?: $first;
+            }
+
+            throw new HttpResponseException(response()->json([
+                'message' => $first,
+                'code' => $code,
+            ], 422));
+        }
+
+        parent::failedValidation($validator);
     }
 }

@@ -9,6 +9,7 @@ use App\Application\Shared\Contracts\LoggerInterface; // Logger desacoplado; ej.
 use App\Application\User\Jobs\Enums\ConversionReadyState; // Enum de estado de conversions; ej. READY
 use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant para makeCurrent; ej. Tenant #3
 use App\Infrastructure\Uploads\Pipeline\Optimizer\OptimizerService; // Servicio de optimización de imágenes; ej. optimize media
+use App\Infrastructure\Models\User; // Modelo User propietario
 use Illuminate\Bus\Queueable; // Trait de colas; ej. onQueue('media')
 use Illuminate\Cache\RedisStore; // Cache Redis para contadores; ej. release count
 use Illuminate\Contracts\Queue\ShouldBeUnique; // Evita duplicados; ej. uniqueId por media
@@ -22,8 +23,8 @@ use Illuminate\Support\Arr; // Helpers de arrays; ej. Arr::get
 use Illuminate\Support\Facades\Cache; // Cache facade; ej. contador de releases
 use Illuminate\Support\Facades\Storage; // Storage facade; ej. path media
 use RuntimeException;
-use Spatie\MediaLibrary\MediaCollections\Models\Media;               // Modelo Media
-use Throwable;                                                       // Errores genéricos
+use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media
+use Throwable; // Errores genéricos
 use Carbon\Carbon; // Fecha inmutable para comparaciones; ej. Carbon::now()
 use Carbon\CarbonInterface; // Interface para formatear fechas; ej. toIso8601String()
 
@@ -63,18 +64,19 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     private readonly array $normalizedConversions;
     private ?\DateTimeInterface $mediaBaselineUpdatedAt = null;
+    public $deleteWhenMissingModels = true; // Limpia jobs con Media inexistente
 
     public readonly int $firstSeenAtEpoch;
 
     public function __construct(
         public readonly int $mediaId,                   // ID del media; ej. 42
-        public int|string|null $tenantId = null, // Tenant asociado; ej. 3
-        public readonly array $conversions = [],        // Conversions objetivo; ej. ['thumb']
-        public readonly string $collection = 'avatar',  // Colección; ej. avatar
-        public readonly int $maxWaitSeconds = 60,       // Timeout total; ej. 60s
-        public readonly int $checkIntervalSeconds = 5,  // Intervalo de recheck; ej. 5s
-        ?int $firstSeenAtEpoch = null,                 // Marca de tiempo; ej. time()
-        public readonly ?string $correlationId = null   // Correlación; ej. uuid
+        public int|string|null $tenantId = null,         // Tenant asociado; ej. 3
+        public readonly array $conversions = [],         // Conversions objetivo; ej. ['thumb']
+        public readonly string $collection = 'avatar',   // Colección; ej. avatar
+        public readonly int $maxWaitSeconds = 60,        // Timeout total; ej. 60s
+        public readonly int $checkIntervalSeconds = 5,   // Intervalo de recheck; ej. 5s
+        ?int $firstSeenAtEpoch = null,                   // Marca de tiempo; ej. time()
+        public readonly ?string $correlationId = null    // Correlación; ej. uuid
     ) {
         $this->onQueue(config('queue.aliases.media', 'media')); // Selecciona cola de medios; ej. media
         $this->afterCommit(); // Ejecuta tras commit para coherencia; ej. evita leer media sin guardar
@@ -85,7 +87,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Helper estático para despachar el job desde listeners/spies.
-     * 
+     *
      * @param Media $media El modelo Media a procesar.
      * @param array $conversions Nombres de conversiones a optimizar (e.g., ['thumb']).
      * @param string $collection Nombre de la colección.
@@ -111,7 +113,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Identificador único para evitar duplicados de este job.
-     * 
+     *
      * @return string Clave única para el lock.
      */
     public function uniqueId(): string
@@ -121,7 +123,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Tiempo de vida del lock de unicidad.
-     * 
+     *
      * @return int TTL en segundos.
      */
     public function uniqueFor(): int
@@ -131,7 +133,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Middleware para evitar solapamiento de ejecuciones concurrentes.
-     * 
+     *
      * @return array Middleware aplicado al job.
      */
     public function middleware(): array
@@ -145,8 +147,46 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
     // ───── Observabilidad ───────────────────────────────────────────────────────
 
     /**
+     * Loguea estados "esperables" (avatar borrado/reemplazado durante el post-proceso).
+     * Evita contaminar logs con WARNING cuando el usuario está probando la app.
+     *
+     * Niveles soportados: none|debug|info|warning
+     * Config: media.ppam_expected_log_level (env: PPAM_EXPECTED_LOG_LEVEL)
+     */
+    private function logExpected(string $event, array $extra = []): void
+    {
+        $level = (string) config('media.ppam_expected_log_level', 'debug');
+        if ($level === 'none') {
+            return;
+        }
+
+        $ctx = $this->context($extra);
+        $logger = $this->logger();
+
+        match ($level) {
+            'debug'   => $logger->debug($event, $ctx),
+            'info'    => $logger->info($event, $ctx),
+            'warning' => $logger->warning($event, $ctx),
+            default   => $logger->debug($event, $ctx),
+        };
+    }
+
+    /**
+     * Razones "esperables" cuando el usuario sube/borrra/reemplaza el avatar rápido.
+     */
+    private function isExpectedStaleReason(string $reason): bool
+    {
+        return in_array($reason, [
+            'media_missing',
+            'superseded',
+            'source_missing',
+            'user_missing',
+        ], true);
+    }
+
+    /**
      * Etiquetas para identificar el job en el monitor de colas.
-     * 
+     *
      * @return array Lista de tags.
      */
     public function tags(): array
@@ -161,7 +201,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Intervalos de espera entre reintentos exponenciales.
-     * 
+     *
      * @return array<int> Segundos de espera por intento.
      */
     public function backoff(): array
@@ -173,14 +213,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Procesa la optimización de imágenes (original y conversiones) del Media.
-     *
-     * Este método:
-     * - Carga el Media y verifica su existencia.
-     * - Valida la colección y el disco.
-     * - Espera no bloqueante a que las conversiones estén listas.
-     * - Optimiza el archivo original y las conversiones solicitadas.
-     * - Maneja errores y circuit breakers.
-     * - Persiste y limpia el contador de releases.
      *
      * @param OptimizerService $optimizer Servicio de optimización de imágenes.
      */
@@ -198,6 +230,12 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             return; // Evita procesar sin media
         }
 
+        $owner = User::query()->find($media->model_id);
+        if ($owner === null) {
+            $this->staleSkip('user_missing', ['media_id' => $media->getKey()]);
+            return;
+        }
+
         $resolvedTenantId = $this->tenantId ?? $media->getCustomProperty('tenant_id'); // Resuelve tenant desde payload o custom_props; ej. 3
         if (!$this->makeTenantCurrent($resolvedTenantId)) { // Si no puede fijar tenant, aborta
             return; // Evita fuga cross-tenant
@@ -209,6 +247,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
         }
 
         if (!$this->isCurrentForModel($media)) {
+            $this->staleSkip('superseded', ['media_id' => $media->getKey()]);
             return;
         }
 
@@ -235,6 +274,12 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
         }
 
         if (!$this->ensureConversionsReady($media, $disk)) {
+            return;
+        }
+
+        $relative = $media->getPathRelativeToRoot();
+        if (is_string($relative) && $relative !== '' && !$disk->exists($relative)) {
+            $this->staleSkip('source_missing', ['media_id' => $media->getKey(), 'disk' => $media->disk, 'path' => $relative]);
             return;
         }
 
@@ -274,7 +319,7 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Carga el media objetivo o null si no existe.
-     * 
+     *
      * @return Media|null El modelo Media o null si no se encuentra.
      */
     private function findTargetMedia(): ?Media
@@ -282,7 +327,11 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
         $media = Media::query()->find($this->mediaId);
 
         if ($media === null) {
-            $this->logger()->warning('ppam_media_missing', $this->context(['mediaId' => $this->mediaId]));
+            // Esperable si el usuario borró/reemplazó el avatar antes de que corra el worker.
+            $this->logExpected('ppam_expected_missing', [
+                'reason'  => 'media_missing',
+                'mediaId' => $this->mediaId,
+            ]);
         }
 
         return $media;
@@ -320,9 +369,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Verifica que el media pertenezca a la colección esperada.
-     * 
-     * @param Media $media El modelo Media a verificar.
-     * @return bool True si la colección es la esperada.
      */
     private function ensureExpectedCollection(Media $media): bool
     {
@@ -340,9 +386,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Obtiene el adapter de filesystem válido para el media.
-     * 
-     * @param string $diskName Nombre del disco.
-     * @return FilesystemAdapter|null El adapter o null si no es válido.
      */
     private function resolveMediaDisk(string $diskName): ?FilesystemAdapter
     {
@@ -368,9 +411,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Circuit breaker de espera total.
-     * 
-     * @param int $firstSeen Timestamp de cuando se creó el job.
-     * @return bool True si se ha superado el tiempo máximo de espera.
      */
     private function hasTimedOut(int $firstSeen): bool
     {
@@ -390,10 +430,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Garantiza que las conversiones estén listas (o programa un release).
-     * 
-     * @param Media $media El modelo Media.
-     * @param FilesystemAdapter $disk El adapter del disco.
-     * @return bool True si las conversiones están listas, false si se libera el job.
      */
     private function ensureConversionsReady(Media $media, FilesystemAdapter $disk): bool
     {
@@ -430,11 +466,17 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
         $latest = Media::query()->find($media->getKey());
         if ($latest === null) {
-            $this->logger()->warning('ppam_media_missing_during_postprocess', $this->context());
+            $this->logExpected('ppam_expected_missing', [
+                'reason' => 'media_missing_expected',
+            ]);
             return false;
         }
 
         if (!$this->isCurrentForModel($latest)) {
+            $this->logExpected('ppam_expected_missing', [
+                'reason'           => 'stale_avatar',
+                'current_media_id' => (string) ($latest->model?->getFirstMedia($latest->collection_name)?->getKey() ?? 'none'),
+            ]);
             return false;
         }
 
@@ -442,12 +484,13 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             ? Carbon::instance($latest->updated_at)->toImmutable()
             : null;
 
-        if ($currentUpdatedAt === null || $currentUpdatedAt->greaterThan($baseline)) { // Si el media cambió desde el baseline
-            $baselineIso = $baseline instanceof CarbonInterface ? $baseline->toIso8601String() : $baseline?->format(DATE_ATOM); // Formatea baseline; ej. 2026-01-25T00:00:00Z
-            $currentIso = $currentUpdatedAt instanceof CarbonInterface ? $currentUpdatedAt->toIso8601String() : $currentUpdatedAt?->format(DATE_ATOM); // Formatea current; ej. 2026-01-25T00:10:00Z
+        if ($currentUpdatedAt === null || $currentUpdatedAt->greaterThan($baseline)) {
+            $baselineIso = $baseline instanceof CarbonInterface ? $baseline->toIso8601String() : $baseline?->format(DATE_ATOM);
+            $currentIso = $currentUpdatedAt instanceof CarbonInterface ? $currentUpdatedAt->toIso8601String() : $currentUpdatedAt?->format(DATE_ATOM);
+
             $this->logger()->info('ppam_media_replaced_during_postprocess', $this->context([
-                'baseline' => $baselineIso, // Base de comparación; ej. 2026-01-25T00:00:00Z
-                'current'  => $currentIso, // Última actualización; ej. 2026-01-25T00:10:00Z
+                'baseline' => $baselineIso,
+                'current'  => $currentIso,
             ]));
             return false;
         }
@@ -457,10 +500,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Optimiza el archivo original del media si corresponde.
-     * 
-     * @param OptimizerService $optimizer Servicio de optimización.
-     * @param Media $media El modelo Media.
-     * @param string $diskName Nombre del disco.
      */
     private function optimizeOriginalMedia(OptimizerService $optimizer, Media $media, string $diskName): void
     {
@@ -474,10 +513,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Optimiza las conversiones generadas del media.
-     *
-     * @param OptimizerService $optimizer Servicio de optimización.
-     * @param Media $media El modelo Media.
-     * @param string $diskName Nombre del disco.
      */
     private function optimizeConversions(OptimizerService $optimizer, Media $media, string $diskName): void
     {
@@ -498,15 +533,11 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             $optimizer->optimize($media, [$name]);
         }
     }
+
     // ───── Helpers de readiness / seguridad / disco ─────────────────────────────
 
     /**
      * Verifica si las conversiones están listas para ser procesadas.
-     *
-     * @param Media $media Media cargado
-     * @param FilesystemAdapter $disk Adapter del disco del media
-     * @param array<string> $conversions Nombres de conversiones a verificar
-     * @return 'ready'|'pending'|'transient' Estado de readiness
      */
     private function conversionsReady(Media $media, FilesystemAdapter $disk, array $conversions): ConversionReadyState
     {
@@ -544,13 +575,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Verifica que una ruta absoluta esté dentro del root del disco para evitar path traversal.
-     *
-     * Solo tiene sentido en discos locales (root existe en config).
-     * En discos cloud (s3, etc.), no podemos aplicar realpath guard de forma útil.
-     *
-     * @param string $absolutePath Ruta absoluta del archivo
-     * @param string $diskName Nombre del disco
-     * @return void
      */
     private function guardLocalPath(string $absolutePath, string $diskName): void
     {
@@ -601,14 +625,25 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
                 'path' => $absolutePath,
             ]);
         }
-
-        return;
     }
 
     private function failSecurity(string $tag, array $context = []): void
     {
         $this->logger()->critical($tag, $this->context($context));
         throw new RuntimeException("Security guard failed: {$tag}");
+    }
+
+    private function staleSkip(string $reason, array $context = []): void
+    {
+        $payload = array_merge(['reason' => $reason], $context);
+
+        // Razones esperables → log configurable (por defecto debug)
+        if ($this->isExpectedStaleReason($reason)) {
+            $this->logExpected('job.stale_skipped', $payload);
+            return;
+        }
+
+        $this->logger()->info('job.stale_skipped', $this->context($payload));
     }
 
     private function sanitizeDiskName(string $diskName): ?string
@@ -624,12 +659,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Resuelve la ruta absoluta del archivo si el disco es local.
-     *
-     * En discos cloud (s3, etc.), este método puede lanzar o no devolver una ruta absoluta.
-     *
-     * @param Media $media Media cargado
-     * @param string|null $conversionName Nombre de la conversión (null para original)
-     * @return string|null Ruta absoluta o null si no es local o falla
      */
     private function resolveLocalPathIfAny(Media $media, ?string $conversionName = null): ?string
     {
@@ -647,10 +676,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Obtiene la lista de discos permitidos para este job.
-     *
-     * Puedes definir media.allowed_disks en config/media.php; por defecto, todos los definidos.
-     *
-     * @return array<string> Nombres de discos permitidos
      */
     private function allowedDisks(): array
     {
@@ -663,9 +688,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Verifica si un disco es permitido.
-     *
-     * @param string $diskName Nombre del disco
-     * @return bool True si el disco es permitido
      */
     private function isAllowedDisk(string $diskName): bool
     {
@@ -674,9 +696,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Determina si un error es transitorio (puede reintentarse).
-     *
-     * @param Throwable $e Excepción a clasificar
-     * @return bool True si es transitorio
      */
     private function isTransient(Throwable $e): bool
     {
@@ -693,8 +712,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Genera la clave para el contador de releases en cache.
-     *
-     * @return string Clave de cache
      */
     private function releaseCountKey(): string
     {
@@ -718,8 +735,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Obtiene el contador de releases actual.
-     * 
-     * @return int Contador de releases
      */
     private function getReleaseCount(): int
     {
@@ -728,8 +743,6 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Incrementa el contador de releases y lo almacena en cache.
-     *
-     * @return int Contador de releases después del incremento
      */
     private function incrementReleaseCount(): int
     {
@@ -745,13 +758,15 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
             LUA;
 
             try {
-                /** @var \Redis|\Predis\ClientInterface $redis */ // Cliente Redis; ej. PhpRedis o Predis
-                $redis = $store->getRedis(); // Obtiene cliente bajo nivel; ej. PhpRedis
-                $result = method_exists($redis, 'eval') // Usa eval si está disponible; ej. PhpRedis->eval
-                    ? $redis->eval($script, [$key, $ttlSeconds], 1) // Evalúa script con args; ej. INCR+EXPIRE
-                    : $redis->executeRaw(['EVAL', $script, 1, $key, $ttlSeconds]); // Fallback para Predis executeRaw
+                /** @var \Redis|\Predis\ClientInterface $redis */
+                $redis = $store->getRedis();
+                $result = method_exists($redis, 'eval')
+                    ? $redis->eval($script, [$key, $ttlSeconds], 1)
+                    : $redis->executeRaw(['EVAL', $script, 1, $key, $ttlSeconds]);
+
                 $cnt = (int) ($result[0] ?? 0);
                 $ttl = (int) ($result[1] ?? 0);
+
                 if ($ttl <= 0) {
                     $this->logger()->warning('ppam_release_counter_no_ttl', $this->context([
                         'key' => $key,
@@ -782,15 +797,13 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
 
     /**
      * Obtiene el número máximo de releases permitidos.
-     *
-     * @return int Máximo de releases
      */
     private function maxReleases(): int
     {
-        $value = config('media.ppam_max_releases'); // Lee config opcional; ej. config/media.php
-        $fallback = config('image-pipeline.ppam_max_releases'); // Fallback secundario; ej. config/image-pipeline.php
-        $resolved = (int) ($value ?? $fallback ?? self::MAX_RELEASES_DEFAULT); // Resuelve valor final; ej. 50
-        return $resolved > 0 ? $resolved : self::MAX_RELEASES_DEFAULT; // Garantiza positivo; ej. 50
+        $value = config('media.ppam_max_releases');
+        $fallback = config('image-pipeline.ppam_max_releases');
+        $resolved = (int) ($value ?? $fallback ?? self::MAX_RELEASES_DEFAULT);
+        return $resolved > 0 ? $resolved : self::MAX_RELEASES_DEFAULT;
     }
 
     private function sanitizeFirstSeenEpoch(?int $value, int $now): int
@@ -827,31 +840,31 @@ final class PostProcessAvatarMedia implements ShouldQueue, ShouldBeUnique
     private function context(array $extra = []): array
     {
         return array_merge([
-            'media_id'   => $this->mediaId,                 // ID de media; ej. 42
-            'collection' => $this->collection,              // Colección; ej. avatar
-            'corr'       => $this->correlationId ?? 'none', // Correlación; ej. req-123
-            'queue'      => $this->queue,                   // Cola; ej. media
-            'connection' => $this->connection,              // Conexión; ej. redis
-            'tenant_id'  => $this->tenantId ?? 'none',      // Tenant en contexto; ej. 3
+            'media_id'   => $this->mediaId,
+            'collection' => $this->collection,
+            'corr'       => $this->correlationId ?? 'none',
+            'queue'      => $this->queue,
+            'connection' => $this->connection,
+            'tenant_id'  => $this->tenantId ?? 'none',
         ], $extra);
     }
 
     private function makeTenantCurrent(int|string|null $tenantId): bool
     {
-        if ($tenantId === null) { // Si no hay tenantId, aborta
-            $this->logger()->warning('ppam_missing_tenant', $this->context()); // Loguea warning con contexto
-            return false; // No continúa para evitar fugas
+        if ($tenantId === null) {
+            $this->logger()->warning('ppam_missing_tenant', $this->context());
+            return false;
         }
 
-        $tenant = Tenant::query()->find($tenantId); // Busca tenant en DB; ej. Tenant #3
+        $tenant = Tenant::query()->find($tenantId);
 
-        if ($tenant === null) { // Si no existe, aborta
-            $this->logger()->warning('ppam_tenant_not_found', $this->context(['tenant_id' => $tenantId])); // Loguea warning
-            return false; // Evita procesar sin tenant válido
+        if ($tenant === null) {
+            $this->logger()->warning('ppam_tenant_not_found', $this->context(['tenant_id' => $tenantId]));
+            return false;
         }
 
-        $tenant->makeCurrent(); // Fija tenant actual; ej. tenant()->id = 3
+        $tenant->makeCurrent();
 
-        return true; // Continúa procesando
+        return true;
     }
 }

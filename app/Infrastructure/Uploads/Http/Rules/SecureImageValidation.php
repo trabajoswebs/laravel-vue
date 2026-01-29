@@ -163,6 +163,10 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
     /** Permite caer a la lista global de MIMEs permitidos cuando FileConstraints no lo incluye. */
     private bool $allowGlobalMimeFallback = false;
 
+    /** Último motivo de fallo para exponer código estable al cliente. */
+    private ?string $lastFailureCode = null;
+    private ?string $lastFailureMessage = null;
+
     private bool $userContextResolved = false;
 
     private string|int|null $userIdFromContext = null;
@@ -502,6 +506,8 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
         // Resetea estados internos de la instancia para esta validación
         $this->decodedImage = null;
         $this->detectedDimensions = null;
+        $this->lastFailureCode = null;
+        $this->lastFailureMessage = null;
 
         // Valida que el valor sea un archivo subido válido
         if (! $value instanceof UploadedFile) {
@@ -531,7 +537,11 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
 
             // Realiza comprobaciones de firma y metadatos
             if (! $this->passesSignatureChecks($value, $path)) {
-                $fail(__('validation.custom.image.invalid_signature'));
+                $message = $this->lastFailureMessage ?? __('validation.custom.image.invalid_signature');
+                if ($this->lastFailureCode !== null) {
+                    $message = $this->lastFailureCode . '|' . $message;
+                }
+                $fail($message);
                 return;
             }
 
@@ -964,6 +974,9 @@ class SecureImageValidation implements ValidationRule, DataAwareRule
                 'ratio' => $ratio,
                 'threshold' => $this->bombRatioThreshold,
             ]);
+            $this->lastFailureCode = 'IMAGE_BOMB';
+            $this->lastFailureMessage = __('image-pipeline.validation.image_bomb_ratio_blocked', [], app()->getLocale())
+                ?: 'La imagen fue rechazada por seguridad (ratio de descompresión excesivo).';
             return false;
         }
 

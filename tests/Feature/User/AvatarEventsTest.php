@@ -9,7 +9,7 @@ use App\Application\User\Events\AvatarUpdated;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Tenancy\Models\Tenant;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
-use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia;
+use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -57,9 +57,9 @@ final class AvatarEventsTest extends TestCase
             null,
         ));
 
-        Queue::assertPushed(PostProcessAvatarMedia::class, function (PostProcessAvatarMedia $job) use ($media, $tenant) {
-            return (int) $job->mediaId === (int) $media->getKey()
-                && (int) $job->tenantId === (int) $tenant->getKey();
+        Queue::assertPushed(ProcessLatestAvatar::class, function (ProcessLatestAvatar $job) use ($tenant, $user) {
+            return (int) $job->tenantId === (int) $tenant->getKey()
+                && (int) $job->userId === (int) $user->getKey();
         });
     }
 

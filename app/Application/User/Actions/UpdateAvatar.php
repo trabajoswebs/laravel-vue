@@ -12,6 +12,7 @@ use App\Domain\Uploads\UploadProfileId; // VO de perfil
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles
 use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia; // Adaptador de archivo HTTP
 use App\Infrastructure\Models\User; // Modelo User que actúa como owner
+use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor de avatar
 use Illuminate\Support\Str; // Helper para UUID
 
 /**
@@ -54,6 +55,16 @@ final class UpdateAvatar
             $file, // Archivo subido
             $user->getKey() // OwnerId
         ); // Ejecuta reemplazo
+
+        $tenantId = $this->tenantContext->requireTenantId();
+        ProcessLatestAvatar::rememberLatest(
+            $tenantId,
+            $user->getKey(),
+            $result->new->id,
+            $uuid,
+            $result->new->correlationId
+        );
+        ProcessLatestAvatar::enqueueOnce($tenantId, $user->getKey());
 
         $this->logger->info('avatar.upload.enqueued', [
             'user_id' => $user->getKey(), // ID de usuario

@@ -259,7 +259,8 @@ final class DefaultUploadService implements UploadService, MediaUploader
             throw $exception;
         } finally {
             // Limpia el artefacto de cuarentena
-            $removeQuarantine = $promoted;
+            // Siempre elimina la cuarentena (incluso en fallos) para evitar zombies de binarios.
+            $removeQuarantine = true;
             $this->quarantineManager->cleanupArtifact($artifact, $removeQuarantine);
         }
     }

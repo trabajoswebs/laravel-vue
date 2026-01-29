@@ -8,6 +8,9 @@ namespace App\Infrastructure\Uploads\Pipeline\Observers;
 
 // 3. Importaciones de clases necesarias.
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
+use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
+use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
+use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator;
 use Illuminate\Support\Facades\Log;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
@@ -24,6 +27,8 @@ final class MediaObserver
      */
     public function deleted(Media $media): void
     {
+        $this->dispatchDirectCleanup($media, 'deleted_event');
+        CleanupAvatarOrphans::dispatch($media->getCustomProperty('tenant_id') ?? tenant()?->getKey(), $media->model_id);
         $this->flushPendingCleanup($media, 'deleted');
     }
 
@@ -34,6 +39,8 @@ final class MediaObserver
      */
     public function forceDeleted(Media $media): void
     {
+        $this->dispatchDirectCleanup($media, 'force_deleted_event');
+        CleanupAvatarOrphans::dispatch($media->getCustomProperty('tenant_id') ?? tenant()?->getKey(), $media->model_id);
         $this->flushPendingCleanup($media, 'force_deleted');
     }
 
@@ -75,5 +82,68 @@ final class MediaObserver
             ]);
             // No se interrumpe la ejecución aquí, ya que el error es solo de limpieza.
         }
+    }
+
+    /**
+     * Encola cleanup inmediato con paths derivados del media que se está eliminando.
+     */
+    private function dispatchDirectCleanup(Media $media, string $reason): void
+    {
+        try {
+            $artifacts = $this->artifactsForMedia($media);
+            if ($artifacts === []) {
+                return;
+            }
+
+            CleanupMediaArtifactsJob::dispatch($artifacts, []);
+
+            Log::info('media.cleanup.direct_dispatched', [
+                'media_id' => (string) $media->getKey(),
+                'reason'   => $reason,
+                'disks'    => array_keys($artifacts),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('media.cleanup.direct_dispatch_failed', [
+                'media_id' => (string) $media->getKey(),
+                'reason'   => $reason,
+                'error'    => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Construye artefactos (original + conversions + responsive) para un media.
+     *
+     * @return array<string,list<array{dir:string,mediaId:string}>>
+     */
+    private function artifactsForMedia(Media $media): array
+    {
+        $disk = (string) ($media->disk ?? '');
+        if ($disk === '') {
+            return [];
+        }
+
+        $conversionDisk = (string) ($media->conversions_disk ?: $media->disk);
+        $pathGenerator = app(PathGenerator::class);
+        $mediaId = (string) $media->getKey();
+
+        $baseDir = rtrim($pathGenerator->getPath($media), '/');
+        $convDir = rtrim($pathGenerator->getPathForConversions($media), '/');
+        $respDir = rtrim($pathGenerator->getPathForResponsiveImages($media), '/');
+
+        $artifacts = [
+            $disk => [
+                ['dir' => $baseDir, 'mediaId' => $mediaId],
+            ],
+        ];
+
+        if ($conversionDisk !== '') {
+            $artifacts[$conversionDisk] = array_merge($artifacts[$conversionDisk] ?? [], [
+                ['dir' => $convDir, 'mediaId' => $mediaId],
+                ['dir' => $respDir, 'mediaId' => $mediaId],
+            ]);
+        }
+
+        return $artifacts;
     }
 }

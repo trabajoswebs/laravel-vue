@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
 
 class LanguageController extends Controller
 {
@@ -31,7 +32,7 @@ class LanguageController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->handleError('Invalid locale', 'Idioma no válido.', $request, 400);
+            return $this->invalidLocaleResponse($request);
         }
 
         // Rate limiting por usuario/ip (parametrizado)
@@ -58,7 +59,7 @@ class LanguageController extends Controller
         );
 
         if (!in_array($locale, $supportedLocales, true)) {
-            return $this->handleError('Invalid locale', 'Idioma no válido.', $request, 400);
+            return $this->invalidLocaleResponse($request);
         }
 
         $sanitizedLocale = TranslationService::sanitizeLocale($locale);
@@ -484,6 +485,9 @@ class LanguageController extends Controller
         $session->flash('success', false);
         $session->flash('message', $sanitizedMessage);
         $session->put('error', $sanitizedMessage);
+        Session::flash('error', $sanitizedMessage);
+        Session::flash('success', false);
+        Session::flash('message', $sanitizedMessage);
 
         // Si es Inertia
         if ($request->header('X-Inertia')) {
@@ -510,5 +514,23 @@ class LanguageController extends Controller
             ->with('success', false)
             ->withInput()
             ->setStatusCode($status);
+    }
+
+    private function invalidLocaleResponse(Request $request)
+    {
+        $message = 'Idioma no válido.';
+
+        // Para peticiones API/JSON mantenemos el contrato 422 de validación.
+        if ($request->expectsJson() || $request->wantsJson()) {
+            throw ValidationException::withMessages(['error' => $message]);
+        }
+
+        // Para peticiones Inertia / HTML devolvemos redirect con errores en sesión.
+        return Redirect::to(route('dashboard'))
+            ->withErrors(['error' => $message])
+            ->withInput()
+            ->with('error', $message)
+            ->with('success', false)
+            ->with('message', $message);
     }
 }
