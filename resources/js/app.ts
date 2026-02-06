@@ -11,7 +11,7 @@ import { createApp, h } from 'vue';
 import { ZiggyVue } from 'ziggy-js';
 import type { Config } from 'ziggy-js';
 import { initializeTheme } from './composables/useAppearance';
-import { i18n } from './i18n';
+import { i18n, safeT } from './i18n';
 import { router } from '@inertiajs/vue3';
 import { notify, toastVisuals, type ToastVariant, ToasterPlugin } from './plugins/toaster-plugin';
 
@@ -122,7 +122,7 @@ const normalizeToastVariant = (variant: unknown): ToastVariant | undefined => {
  * Función de ayuda para traducir claves almacenadas en i18n.
  * @example translate('flash.default_success') => 'Operación exitosa'
  */
-const translate = (key: string): string => String(i18n.global.t(key));
+const translate = (key: string): string => safeT(key);
 
 /**
  * Extrae una descripción adicional del flash (`description` o `details`).

@@ -107,31 +107,33 @@ final class ShowAvatar extends Controller
         $mimeByPath = $this->guessMimeByPathname($relativePath)
             ?? $media->mime_type
             ?? 'application/octet-stream';
+        $localCacheControl = 'private, max-age=' . $this->localMaxAgeSeconds() . ', must-revalidate';
+        $s3CacheControl = 'private, max-age=0, no-store';
 
         // Handle S3 storage with temporary signed URLs
         if ($driver === 's3') {
             try {
+                $ttlSeconds = $this->s3TemporaryUrlTtlSeconds(); // TTL único para URL temporal
                 $url = $adapter->temporaryUrl(
                     $relativePath,
-                    now()->addMinutes(2), // TTL corto para minimizar ventana de exposición
+                    now()->addSeconds($ttlSeconds), // TTL de URL temporal
                     [
                         'ResponseContentType'  => $mimeByPath,
-                        'ResponseCacheControl' => 'private, max-age=120, must-revalidate', // Cache corto
+                        'ResponseCacheControl' => $s3CacheControl,
                     ]
                 );
-                return redirect()->away($url, 302);
+                return redirect()->away($url, 302)->withHeaders([
+                    'Cache-Control' => $s3CacheControl,
+                    'X-Content-Type-Options' => 'nosniff',
+                ]);
             } catch (\Throwable $e) {
-                // Log the failure and fall back to streaming
-                if (config('app.debug')) {
-                    report($e);
-                } else {
-                    logger()->warning('avatar_signed_url_failed', [
-                        'message' => $e->getMessage(),
-                        'disk'    => $disk,
-                        'path'    => $relativePath,
-                    ]);
-                }
-                return $this->streamFromDisk($adapter, $relativePath, $mimeByPath);
+                // Nunca hacer streaming en S3: loguea y devuelve 404
+                logger()->warning('avatar_signed_url_failed', [
+                    'message' => $e->getMessage(),
+                    'disk'    => $disk,
+                    'path'    => $relativePath,
+                ]);
+                throw new NotFoundHttpException(__('media.errors.missing_conversion'));
             }
         }
 
@@ -140,11 +142,16 @@ final class ShowAvatar extends Controller
         $mime = $this->guessMimeLocal($absolutePath) ?? $mimeByPath;
 
         try {
-            return response()->file($absolutePath, [
+            $response = response()->file($absolutePath, [
                 'Content-Type'            => $mime, // MIME final
                 'X-Content-Type-Options'  => 'nosniff', // Evita sniffing
-                'Cache-Control'           => 'private, max-age=120, must-revalidate', // Cache corta
+                'Cache-Control'           => $localCacheControl, // Cache local configurable
             ]);
+            // BinaryFileResponse marca como public por defecto; forzamos privado.
+            $response->setPrivate();
+            $response->headers->set('Cache-Control', $localCacheControl);
+
+            return $response;
         } catch (\Throwable $e) {
             // Handle race condition where file disappeared between exists() and file()
             if (config('app.debug')) {
@@ -202,19 +209,30 @@ final class ShowAvatar extends Controller
      */
     private function assertConversionExists(Media $media, string $conversion): array
     {
-        $disk = $media->conversions_disk ?: $media->disk;
+        $disk = $media->conversions_disk
+            ?: (string) config('media-library.conversions_disk', '')
+            ?: $media->disk;
+        $relativePath = '';
 
         try {
             $relativePath = $media->getPathRelativeToRoot($conversion);
         } catch (\Throwable) {
+            $relativePath = '';
+        }
+
+        if ($relativePath !== '' && Storage::disk($disk)->exists($relativePath)) {
+            return [$disk, $relativePath];
+        }
+
+        // Fallback al original si la conversión no existe o no está lista aún.
+        $disk = $media->disk;
+        try {
+            $relativePath = $media->getPathRelativeToRoot();
+        } catch (\Throwable) {
             throw new NotFoundHttpException(__('media.errors.missing_conversion'));
         }
 
-        if ($relativePath === '') { // Sin path relativo
-            throw new NotFoundHttpException(__('media.errors.missing_conversion')); // 404
-        }
-
-        if (!Storage::disk($disk)->exists($relativePath)) {
+        if ($relativePath === '') {
             throw new NotFoundHttpException(__('media.errors.missing_conversion'));
         }
 
@@ -285,7 +303,7 @@ final class ShowAvatar extends Controller
      * @param string $mime The MIME type of the file
      * @return Response Streamed response with file content
      */
-    private function streamFromDisk(Filesystem $adapter, string $relativePath, string $mime): Response
+    private function streamFromDisk(Filesystem $adapter, string $relativePath, string $mime, string $cacheControl): Response
     {
         $size = null;
         try {
@@ -311,9 +329,28 @@ final class ShowAvatar extends Controller
         }, 200, array_filter([
             'Content-Type'            => $mime,
             'X-Content-Type-Options'  => 'nosniff',
-            'Cache-Control'           => 'public, max-age=31536000, immutable',
+            'Cache-Control'           => $cacheControl,
             'Content-Length'          => is_int($size) ? (string) $size : null,
         ]));
+    }
+
+    /**
+     * TTL en segundos para URLs/firmas y caché asociada.
+     */
+    private function localMaxAgeSeconds(): int
+    {
+        $seconds = (int) config('media-serving.local_max_age_seconds', 86400);
+        $seconds = $seconds > 0 ? $seconds : 86400;
+
+        return $seconds;
+    }
+
+    private function s3TemporaryUrlTtlSeconds(): int
+    {
+        $seconds = (int) config('media-serving.s3_temporary_url_ttl_seconds', 900);
+        $seconds = $seconds > 0 ? $seconds : 900;
+
+        return $seconds;
     }
 
     /**
@@ -324,8 +361,15 @@ final class ShowAvatar extends Controller
      */
     private function guessMimeByPathname(string $pathname): ?string
     {
+        $extension = strtolower((string) pathinfo($pathname, PATHINFO_EXTENSION));
+        if ($extension === '') {
+            return null;
+        }
+
         $mimeTypes = new MimeTypes();
-        $detected = $mimeTypes->guessMimeType($pathname);
+        $candidates = $mimeTypes->getMimeTypes($extension);
+        $detected = $candidates[0] ?? null;
+
         return is_string($detected) && $detected !== '' ? $detected : null;
     }
 

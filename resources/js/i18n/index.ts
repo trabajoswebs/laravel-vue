@@ -91,6 +91,33 @@ let i18nInitialized = false
 // -------------------------------------------------------------------
 // 7. Helpers
 // -------------------------------------------------------------------
+const I18N_KEY_REGEX = /^[a-z0-9_.-]+$/i
+
+const normalizeCandidate = (value: unknown): string => {
+  if (value === null || value === undefined) return ''
+  return (typeof value === 'string' ? value : String(value)).trim()
+}
+
+export const isLikelyI18nKey = (value: unknown): value is string => {
+  const normalized = normalizeCandidate(value)
+  if (!normalized) return false
+  return I18N_KEY_REGEX.test(normalized) && (normalized.includes('.') || normalized.includes('_') || normalized.includes('-'))
+}
+
+export const safeT = (input: unknown, params?: Record<string, unknown> | unknown[]): string => {
+  const normalized = normalizeCandidate(input)
+  if (!isLikelyI18nKey(normalized)) {
+    return normalized
+  }
+
+  try {
+    return String(composer.t(normalized as any, params as any))
+  } catch (error) {
+    console.warn('[i18n] safeT fallback for non-key', { input: normalized, error })
+    return normalized
+  }
+}
+
 const updateHtmlLang = (lang: Locale): void => {
   if (typeof document !== 'undefined') {
     document.documentElement.lang = lang

@@ -52,6 +52,7 @@ return [
         'avatar_file' => 'El avatar debe ser una imagen.',
         'avatar_mime' => 'Formatos permitidos: JPEG, PNG, GIF, WebP o AVIF.',
         'dimensions' => 'La imagen no tiene el tamaño correcto.',
+        'image_bomb_ratio_blocked' => 'La imagen fue bloqueada por un ratio sospechoso (posible image bomb).', // Ej.: archivo minúsculo con dimensiones enormes
     ],
 
 ];

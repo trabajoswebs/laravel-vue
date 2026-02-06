@@ -73,7 +73,7 @@
         "avatar_format_avif": "AVIF",
         "avatar_format_gif": "GIF",
         "avatar_max_size_title": "Tamaño máximo",
-        "avatar_max_size_value": "20 MB",
+        "avatar_max_size_value": "25 MB",
         "avatar_recommended_dimensions": "Dimensiones recomendadas: 256×256 px",
         "avatar_drag_tip": "Consejo: También puedes arrastrar y soltar una imagen directamente en esta tarjeta.",
         "avatar_empty_cta": "Sube tu foto aquí",
@@ -94,7 +94,7 @@
         "avatar_error_remove": "No pudimos eliminar tu avatar.",
         "avatar_error_cancelled_delete": "La eliminación del avatar fue cancelada.",
         "avatar_error_route_missing": "No pudimos localizar la ruta del avatar ahora mismo. Recarga la página e inténtalo de nuevo.",
-        "avatar_quick_hint": "JPG, PNG, WebP · Máx. 20 MB · También puedes arrastrar la imagen."
+        "avatar_quick_hint": "JPG, PNG, WebP · Máx. 25 MB · También puedes arrastrar la imagen."
     },
     "settings": {
         "title": "Ajustes",
@@ -131,7 +131,7 @@
         "login_title": "Accede a tu cuenta",
         "login_description": "Introduce tu correo y tu contraseña para empezar.",
         "email_address": "Correo electrónico",
-        "email_placeholder": "correo@empresa.com",
+        "email_placeholder": "{email}",
         "password_placeholder": "Tu contraseña",
         "forgot_password_link": "¿Has olvidado la contraseña?",
         "dont_have_account": "¿Todavía no tienes cuenta?",

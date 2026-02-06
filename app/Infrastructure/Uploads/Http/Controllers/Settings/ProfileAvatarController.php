@@ -26,6 +26,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 use Throwable;                                        // Ej. captura de errores
+use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media de Spatie // Ej.: media->getUrl()
 
 /**
  * Controlador de gestión del avatar en el área de perfil.
@@ -87,11 +88,14 @@ class ProfileAvatarController extends Controller
 
             $feedback = $this->buildAvatarUploadFeedback($request->file('avatar'), $payload['message']);
 
+            $avatarData = $this->buildAvatarResponseData($authUser); // Añade URLs del avatar para respuestas JSON // Ej: avatar_url/avatar_thumb_url/version
+
             return $this->respondWithSuccess(
                 $request,
                 $payload,
                 $feedback['description'],
-                $feedback['event']
+                $feedback['event'],
+                $avatarData
             );
         } catch (VirusDetectedException $e) {
             Log::warning('Avatar upload rejected (virus detected)', [
@@ -310,7 +314,8 @@ class ProfileAvatarController extends Controller
                     'deleted' => $deleted,
                 ],
                 $description,
-                $this->buildEventFlash($message, $description)
+                $this->buildEventFlash($message, $description),
+                $this->buildAvatarResponseData($authUser) // Devuelve avatar vacío/actual tras DELETE // Ej.: avatar_url null
             );
         } catch (Throwable $e) {
             // Registra el error en caso de fallo
@@ -418,7 +423,7 @@ class ProfileAvatarController extends Controller
      * @param array|null $event Datos del evento para notificaciones UI.
      * @return RedirectResponse|JsonResponse
      */
-    private function respondWithSuccess(Request $request, array $payload, ?string $description = null, ?array $event = null): RedirectResponse|JsonResponse
+    private function respondWithSuccess(Request $request, array $payload, ?string $description = null, ?array $event = null, array $jsonExtras = []): RedirectResponse|JsonResponse
     {
         if ($description !== null) {
             $payload['description'] = $description;
@@ -429,7 +434,8 @@ class ProfileAvatarController extends Controller
         }
 
         if ($request->wantsJson()) {
-            return response()->json($payload, 200);
+            $merged = array_merge($payload, $jsonExtras); // Fusiona extras solo para JSON // Ej: avatar_url/avatar_thumb_url
+            return response()->json($merged, 200);
         }
 
         return back()->with($this->buildFlashData($payload['message'] ?? null, $description, $event));
@@ -473,6 +479,70 @@ class ProfileAvatarController extends Controller
             'description' => $description,
             'event' => $this->buildEventFlash($message, $description),
         ];
+    }
+
+    /**
+     * Construye datos de avatar (URL original + thumb + versión) para respuestas JSON inmediatas.
+     *
+     * @param User $user Usuario autenticado.
+     * @return array<string, string|null>
+     */
+    private function buildAvatarResponseData(User $user): array
+    {
+        $collection = app(\App\Infrastructure\Uploads\Profiles\AvatarProfile::class)->collection(); // Colección de avatar // Ej: 'avatar'
+        $media = $user->fresh()?->getFirstMedia($collection); // Refresca usuario y obtiene media // Ej: avatar actual
+
+        if (!$media) { // Si no hay avatar // Ej: después de borrar
+            return [
+                'avatar_url' => null,
+                'avatar_thumb_url' => null,
+                'avatar_version' => null,
+                'media_id' => null,
+                'upload_uuid' => null,
+            ];
+        }
+
+        $avatarUrl = $this->safeMediaUrl($media); // URL original segura // Ej: /media/tenants/1/.../v123.jpg
+        $thumbUrl = $this->safeConversionUrl($media, 'thumb') ?? null; // URL thumb si existe // Ej: /media/...-thumb.webp
+
+        $version = $media->getCustomProperty('version')
+            ?? ($media->updated_at ? (string) $media->updated_at->timestamp : null); // Versionado para cache-busting // Ej: 1700000000
+
+        return [
+            'avatar_url' => $avatarUrl,
+            'avatar_thumb_url' => $thumbUrl ?? $avatarUrl, // Fallback al original si no hay thumb // Ej: evita 404
+            'avatar_version' => $version,
+            'media_id' => (string) $media->getKey(),
+            'upload_uuid' => (string) ($media->getCustomProperty('upload_uuid') ?? ''),
+        ];
+    }
+
+    /**
+     * Obtiene URL segura del media, manejando excepciones.
+     */
+    private function safeMediaUrl(Media $media): ?string
+    {
+        try {
+            return $media->getUrl(); // Usa UrlGenerator tenant-aware // Ej: /media/tenants/...
+        } catch (\Throwable) {
+            return null; // Devuelve null si falla // Ej: conversión rota
+        }
+    }
+
+    /**
+     * Obtiene URL de una conversión si existe, evitando excepciones/404 prematuros.
+     */
+    private function safeConversionUrl(Media $media, string $conversion): ?string
+    {
+        try {
+            if ($media->hasGeneratedConversion($conversion)) { // Verifica flag de Spatie // Ej: true si ya se generó
+                return $media->getUrl($conversion); // Devuelve URL de conversión // Ej: thumb
+            }
+        } catch (\Throwable) {
+            // Silencia errores y devuelve null para evitar 404 en UI
+        }
+
+        return null; // Conversión no lista o inexistente // Ej: null
     }
 
     /**

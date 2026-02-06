@@ -209,7 +209,7 @@ IMG_MAX_BYTES=26214400
 
 ```php
 // config/media-library.php
-'max_file_size' => (int) env('IMG_MAX_BYTES', 20 * 1024 * 1024),
+'max_file_size' => (int) env('IMG_MAX_BYTES', 25 * 1024 * 1024),
 ```
 
 2. Driver de imágenes
@@ -275,7 +275,7 @@ Si el ACL no es privado o falta el ContentType, el helper `AvatarHeaderInspector
 lanza advertencias (`avatar.headers.acl_unexpected` / `avatar.headers.content_type_missing`)
 para que el equipo detecte uploads mal configurados antes de exponerlos al público.
 
-5. Límites del servidor para subidas (asegura que no bloqueen 20 MB)
+5. Límites del servidor para subidas (asegura que no bloqueen 25 MB)
 
 - PHP: `upload_max_filesize=20M`, `post_max_size=20M` (php.ini)
 - Nginx: `client_max_body_size 20M;`

@@ -7,9 +7,15 @@ import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import { Form, Head } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { useLanguage } from '@/composables/useLanguage';
 
-const { t } = useLanguage();
+const { t, currentLanguage } = useLanguage();
+const emailPlaceholder = computed(() =>
+    t('auth.email_placeholder', {
+        email: currentLanguage.value === 'es' ? 'correo@empresa.com' : 'name@business.co.uk',
+    })
+);
 
 defineProps<{
     status?: string;
@@ -30,7 +36,7 @@ defineProps<{
                 <div class="grid gap-2">
                     <Label for="email">{{ t('auth.email_address') }}</Label>
                     <Input id="email" type="email" name="email" autocomplete="off" autofocus
-                        :placeholder="t('auth.email_placeholder')" />
+                        :placeholder="emailPlaceholder" />
                     <InputError :message="errors.email" />
                 </div>
 

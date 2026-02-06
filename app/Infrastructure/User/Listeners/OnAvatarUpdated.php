@@ -26,7 +26,10 @@ final class OnAvatarUpdated
             return; // Detiene el listener para evitar encolar sin media
         }
 
-        $tenantId = $media->getCustomProperty('tenant_id') ?? tenant()?->getKey(); // Resuelve tenant: primero custom_properties, luego helper; ej. 3
+        $tenantId = $media->getCustomProperty('tenant_id') // Preferido: guardado en custom_properties
+            ?? tenant()?->getKey() // Contexto actual si está fijado
+            ?? $media->model?->current_tenant_id // Fallback: tenant actual del usuario propietario
+            ?? $media->model?->tenants()->value('tenants.id'); // Último recurso: primer tenant asociado
 
         if ($tenantId === null) { // Si no se pudo resolver tenant, abortar
             Log::warning('avatar.updated.missing_tenant', [ // Deja traza de contexto

@@ -6,6 +6,8 @@ import {
   getBrowserLanguage,
   isBrowserLanguageSupported,
   getAvailableLocales,
+  isLikelyI18nKey,
+  safeT,
   type Locale
 } from '../i18n'
 
@@ -200,7 +202,7 @@ function sanitizeServerTranslations(data: unknown): ServerTranslations {
 
 export function useLanguage() {
   // Importamos helpers de i18n e Inertia.
-  const { t: i18nT, locale } = useI18n() // i18nT: función de traducción local // Ej.: i18nT('hello') => 'Hola'
+  const { locale } = useI18n() // locale: referencia reactiva al idioma actual // Ej.: locale.value === 'es'
   const page = usePage()                 // page: props de Inertia // Ej.: page.props.serverTranslations => {...}
 
   // ---------- Estado reactivo local ----------
@@ -752,20 +754,26 @@ export function useLanguage() {
   // Traducción híbrida (servidor + cliente)
   // Ej: translateHybrid("greeting.hello", {name:"Johan"}) => "Hola Johan"
   const translateHybrid = (key: string, params?: Record<string, any> | any[]): string => {
-    if (!key) return ''
+    const normalizedKey = typeof key === 'string' ? key.trim() : ''
+    if (!normalizedKey) return ''
+
+    // Si no parece una clave, devolvemos el texto tal cual para evitar que el compilador intente enlazarlo.
+    if (!isLikelyI18nKey(normalizedKey)) {
+      return normalizedKey
+    }
 
     try {
-      if (hasServerTranslation(key)) {
-        const translation = getServerTranslation(key)
+      if (hasServerTranslation(normalizedKey)) {
+        const translation = getServerTranslation(normalizedKey)
         return params ? applyParams(translation, params) : translation
       }
 
-      const i18nResult = params ? i18nT(key, params) : i18nT(key)
-      return i18nResult !== key ? i18nResult : key
+      const i18nResult = params ? safeT(normalizedKey, params) : safeT(normalizedKey)
+      return i18nResult !== normalizedKey ? i18nResult : normalizedKey
     } catch (error) {
-      console.warn(`Translation error for: ${key}`, error)
-      lastError.value = `Translation error for: ${key}`
-      return key
+      console.warn(`Translation error for: ${normalizedKey}`, error)
+      lastError.value = `Translation error for: ${normalizedKey}`
+      return normalizedKey
     }
   }
 

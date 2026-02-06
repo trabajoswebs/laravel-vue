@@ -73,7 +73,7 @@
         "avatar_format_avif": "AVIF",
         "avatar_format_gif": "GIF",
         "avatar_max_size_title": "Maximum size",
-        "avatar_max_size_value": "20 MB",
+        "avatar_max_size_value": "25 MB",
         "avatar_recommended_dimensions": "Recommended dimensions: 256×256 px",
         "avatar_drag_tip": "Tip: You can also drag and drop an image directly onto this card.",
         "avatar_empty_cta": "Upload your photo here",
@@ -94,7 +94,7 @@
         "avatar_error_remove": "We couldn’t remove your avatar.",
         "avatar_error_cancelled_delete": "Avatar deletion was cancelled.",
         "avatar_error_route_missing": "We couldn't find the avatar endpoint right now. Refresh the page and try again.",
-        "avatar_quick_hint": "JPG, PNG, WebP · Max 20 MB · You can also drag your image."
+        "avatar_quick_hint": "JPG, PNG, WebP · Max 25 MB · You can also drag your image."
     },
     "settings": {
         "title": "Settings",
@@ -131,7 +131,7 @@
         "login_title": "Welcome back",
         "login_description": "Pop in your email and password to carry on.",
         "email_address": "Email address",
-        "email_placeholder": "name@business.co.uk",
+        "email_placeholder": "{email}",
         "password_placeholder": "Your password",
         "forgot_password_link": "Forgotten your password?",
         "dont_have_account": "Need an account?",

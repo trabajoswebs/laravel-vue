@@ -124,9 +124,13 @@ class User extends Authenticatable implements HasMedia, MediaOwner
      */
     public function registerMediaCollections(): void
     {
+        $avatarDisk = config('image-pipeline.avatar_disk', config('filesystems.default'));
+        $conversionsDisk = config('media-library.conversions_disk', $avatarDisk);
+
         $this->addMediaCollection('avatar')
-            ->useDisk(config('image-pipeline.avatar_disk', config('filesystems.default')))      // Usa el disco S3 para almacenamiento
-            ->singleFile();      // Garantiza un solo archivo por colección
+            ->useDisk($avatarDisk)                      // Disco para originales (p.ej., AVATAR_DISK)
+            ->storeConversionsOnDisk($conversionsDisk)  // Disco para conversiones (p.ej., MEDIA_CONVERSIONS_DISK)
+            ->singleFile();                             // Garantiza un solo archivo por colección
     }
 
     /**
@@ -167,9 +171,7 @@ class User extends Authenticatable implements HasMedia, MediaOwner
                     return null;
                 }
 
-                $url = $this->resolveConversionUrl($media, 'large') ?? $media->getUrl();
-
-                return $this->appendAvatarVersion($url, $media);
+                return $this->signedAvatarRoute($media, 'large');
             }
         );
     }
@@ -194,9 +196,7 @@ class User extends Authenticatable implements HasMedia, MediaOwner
                     return null;
                 }
 
-                $url = $this->resolveConversionUrl($media, 'thumb') ?? $media->getUrl();
-
-                return $this->appendAvatarVersion($url, $media);
+                return $this->signedAvatarRoute($media, 'thumb');
             }
         );
     }
@@ -251,6 +251,34 @@ class User extends Authenticatable implements HasMedia, MediaOwner
         $separator = str_contains($url, '?') ? '&' : '?';
 
         return "{$url}{$separator}v={$version}";
+    }
+
+    /**
+     * Genera URL firmada para el avatar (conversión u original) usando la ruta dedicada.
+     */
+    private function signedAvatarRoute(Media $media, string $conversion): ?string
+    {
+        $ttlMinutes = (int) config('media-library.temporary_url_default_lifetime', 15);
+        $ttlMinutes = $ttlMinutes > 0 ? $ttlMinutes : 15;
+
+        $version = $media->getCustomProperty('version') ?? $this->avatar_version;
+        $params = [
+            'media' => $media->id,
+            'c' => $conversion,
+        ];
+        if ($version) {
+            $params['v'] = $version;
+        }
+
+        try {
+            return \URL::temporarySignedRoute(
+                'media.avatar.show',
+                now()->addMinutes($ttlMinutes),
+                $params
+            );
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

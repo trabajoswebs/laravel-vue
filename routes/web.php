@@ -22,6 +22,13 @@ Route::middleware(['tenant', 'signed'])->group(function (): void {
         ->whereNumber('media');
 });
 
+Route::middleware(['auth', 'tenant'])->group(function (): void { // Grupo con auth+tenant para media protegido // Ej: /media/tenants/1/...
+    Route::get('media/{path}', \App\Infrastructure\Uploads\Http\Controllers\Media\ShowMediaController::class) // Sirve media local sin storage:link // Ej: /media/tenants/1/users/2/avatar.jpg
+        ->where('path', '.*') // Acepta paths profundos con slashes // Ej: conversions/thumb.webp
+        ->middleware('throttle:media-serving') // Rate limit dedicado para servir media
+        ->name('media.show'); // Nombre usado por UrlGenerator tenant-aware // Ej: route('media.show', ['path'=>...])
+});
+
 Route::middleware(['auth', 'tenant'])->group(function (): void {
     Route::get('uploads/{uploadId}', DownloadUploadController::class) // Descarga de uploads no imagen
         ->whereUuid('uploadId') // Usa UUID

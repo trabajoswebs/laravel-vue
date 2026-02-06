@@ -7,7 +7,6 @@ import { route } from 'ziggy-js'; // Resolución de rutas Ziggy (Ej. route('home
 
 import { sendFormData, type NormalizedError } from '@/lib/http/xhrFormData'; // XHR helper (Ej. sendFormData(...) -> { data, status })
 import type { AppPageProps, User } from '@/types'; // Tipos app (Ej. User.email -> "a@b.com")
-import { useAvatarState } from '@/composables/useAvatarState';
 
 // Tipo para los errores que devuelve el backend (Ej. { avatar: ["Mensaje"] })
 type ErrorBag = Record<string, string[]>;
@@ -85,7 +84,7 @@ const DEFAULT_OPTIONS = {
 
 // Restricciones por defecto
 const DEFAULT_CONSTRAINTS: AvatarValidationConstraints = {
-    maxBytes: 25 * 1024 * 1024, // 25MB
+    maxBytes: 25 * 1024 * 1024, // 25MB (mantener alineado con backend)
     minDimension: 128, // 128x128 px
     maxMegapixels: 48, // 48 megapíxeles
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'],
@@ -252,7 +251,7 @@ function resolveCurrentOrigin(locationCandidate: string | null | undefined): str
 
 /**
  * Normaliza URLs de assets que apuntan a hosts locales no accesibles desde el navegador actual.
- * @example normalizeAssetHost('http://localhost/storage/a.png', 'https://app.test') -> 'https://app.test/storage/a.png'
+ * @example normalizeAssetHost('http://localhost/media/a.png', 'https://app.test') -> 'https://app.test/media/a.png'
  */
 function normalizeAssetHost(url: string, preferredOrigin: string | null): string {
     if (!url) return url;
@@ -399,7 +398,6 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
 
     // Page props + Ziggy
     const page = usePage<AppPageProps>(); // Ej. page.props.auth.user
-    const { setAvatarOverride } = useAvatarState();
     const ziggyConfig = computed<Config | null>(() => {
         const config = page.props.ziggy as Config | undefined;
         return config ?? null;
@@ -414,12 +412,21 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
 
     // Cache buster para evitar que el navegador te sirva el avatar viejo
     const avatarCacheBuster = ref<number>(0);
+    // Override local inmediato tras PATCH/DELETE para no depender de router.reload()
+    type AvatarOverride = { avatar_url?: string | null; avatar_thumb_url?: string | null; avatar_version?: string | number | null };
+    const avatarOverride = ref<AvatarOverride | null>(null);
 
     // Devuelve el “valor crudo” de avatar desde props
     const getRawAvatarValue = (user: User | null | undefined): string | null => {
         if (!user) return null;
 
-        const candidates = [user.avatar_thumb_url, user.avatar_url, user.avatar];
+        const candidates = [
+            avatarOverride.value?.avatar_thumb_url,
+            avatarOverride.value?.avatar_url,
+            user.avatar_thumb_url,
+            user.avatar_url,
+            user.avatar,
+        ];
 
         for (const candidate of candidates) {
             if (typeof candidate !== 'string') continue;
@@ -438,12 +445,15 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
 
         const normalizedBase = normalizeAssetHost(base, currentOrigin.value);
 
-        if (avatarCacheBuster.value <= 0) {
+        const versionCandidate = avatarOverride.value?.avatar_version ?? user?.avatar_version;
+        const cacheToken = versionCandidate != null ? String(versionCandidate) : avatarCacheBuster.value;
+
+        if (!cacheToken || (typeof cacheToken === 'number' && cacheToken <= 0)) {
             return normalizedBase;
         }
 
         const separator = normalizedBase.includes('?') ? '&' : '?';
-        return `${normalizedBase}${separator}${CACHE_BUSTER_PARAM}=${avatarCacheBuster.value}`;
+        return `${normalizedBase}${separator}${CACHE_BUSTER_PARAM}=${encodeURIComponent(cacheToken)}`;
     };
 
     // Estados reactivos UI
@@ -458,6 +468,22 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
 
     // Si hay avatar
     const hasAvatar = computed<boolean>(() => getRawAvatarValue(authUser.value) !== null);
+
+    // Limpia override y cache local (wrapper local para no chocar con store global)
+    const setLocalAvatarOverride = (override?: AvatarOverride | null) => {
+        if (!override) {
+            avatarOverride.value = null;
+            return;
+        }
+
+        avatarOverride.value = {
+            avatar_url: typeof override.avatar_url === 'string' ? override.avatar_url.trim() : override.avatar_url ?? null,
+            avatar_thumb_url: typeof override.avatar_thumb_url === 'string' ? override.avatar_thumb_url.trim() : override.avatar_thumb_url ?? null,
+            avatar_version: override.avatar_version ?? null,
+        };
+
+        avatarCacheBuster.value = Date.now(); // Refuerza cache bust local // Ej.: inmediato tras PATCH
+    };
 
     // Limpia errores
     const resetErrors = () => {
@@ -784,27 +810,35 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
                 },
             });
 
-        resetErrors();
-        setAvatarOverride(undefined);
-        refreshAuth();
+            resetErrors();
 
-        // Cambia el cache buster para forzar refresh del avatar
-        avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
+            const payload = (response?.data ?? {}) as Record<string, unknown>;
+            const override: AvatarOverride = {
+                avatar_url: typeof payload.avatar_url === 'string' ? payload.avatar_url : null,
+                avatar_thumb_url: typeof payload.avatar_thumb_url === 'string' ? payload.avatar_thumb_url : null,
+                avatar_version: typeof payload.avatar_version === 'number' || typeof payload.avatar_version === 'string'
+                    ? payload.avatar_version
+                    : null,
+            };
+            setLocalAvatarOverride(override);
+            refreshAuth();
 
-        // Éxito
-        const payload = (response?.data ?? {}) as Record<string, unknown>;
-        const message = typeof payload.message === 'string' ? payload.message : 'Avatar actualizado correctamente.';
-        // Usamos el mismo estilo de toast “event” que el guardado de perfil para coherencia visual.
-        notify.event(message);
-        successMessage.value = message;
-        recentlySuccessful.value = true;
-        setTimeout(() => (recentlySuccessful.value = false), 3000);
+            // Cambia el cache buster para forzar refresh del avatar (fallback si no hay versión)
+            avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
 
-        return {
-            filename: validation.sanitizedName,
-            width: validation.width,
-            height: validation.height,
-            bytes: validation.bytes,
+            // Éxito
+            const message = typeof payload.message === 'string' ? payload.message : 'Avatar actualizado correctamente.';
+            // Usamos el mismo estilo de toast “event” que el guardado de perfil para coherencia visual.
+            notify.event(message);
+            successMessage.value = message;
+            recentlySuccessful.value = true;
+            setTimeout(() => (recentlySuccessful.value = false), 3000);
+
+            return {
+                filename: validation.sanitizedName,
+                width: validation.width,
+                height: validation.height,
+                bytes: validation.bytes,
             };
         } catch (error) {
             const err = error as NormalizedError;
@@ -897,21 +931,29 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
                 signal: controller?.signal,
             });
 
-        resetErrors();
-        setAvatarOverride(null);
-        refreshAuth();
+            resetErrors();
 
-        avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
+            const payload = (response?.data ?? {}) as Record<string, unknown>;
+            const override: AvatarOverride = {
+                avatar_url: typeof payload.avatar_url === 'string' ? payload.avatar_url : null,
+                avatar_thumb_url: typeof payload.avatar_thumb_url === 'string' ? payload.avatar_thumb_url : null,
+                avatar_version: typeof payload.avatar_version === 'number' || typeof payload.avatar_version === 'string'
+                    ? payload.avatar_version
+                    : null,
+            };
+            setLocalAvatarOverride(override.avatar_url || override.avatar_thumb_url ? override : null);
+            refreshAuth();
 
-        const payload = (response?.data ?? {}) as Record<string, unknown>;
-        const message = typeof payload.message === 'string' ? payload.message : 'Avatar eliminado correctamente.';
-        // Misma línea visual que el resto de toasts de perfil.
-        notify.event(message);
-        successMessage.value = message;
-        recentlySuccessful.value = true;
-        setTimeout(() => (recentlySuccessful.value = false), 3000);
+            avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
 
-            return;
+            const message = typeof payload.message === 'string' ? payload.message : 'Avatar eliminado correctamente.';
+            // Misma línea visual que el resto de toasts de perfil.
+            notify.event(message);
+            successMessage.value = message;
+            recentlySuccessful.value = true;
+            setTimeout(() => (recentlySuccessful.value = false), 3000);
+
+        return;
         } catch (error) {
             const err = error as NormalizedError;
             const status = err.status || 0;

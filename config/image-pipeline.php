@@ -120,7 +120,7 @@ return [
     |   IMG_MAX_UPLOAD_SIZE (bytes)
     |
     | Ejemplo .env:
-    |   IMG_MAX_UPLOAD_SIZE=26214400   # ≈ 25 MB
+|   IMG_MAX_UPLOAD_SIZE=26214400   # ≈ 25 MB
     |
     */
     'max_upload_size' => (int) env('IMG_MAX_UPLOAD_SIZE', 25 * 1024 * 1024), // 25 MB
@@ -520,7 +520,7 @@ return [
         }),
 
         // Tamaño máximo de archivo para escaneo individual (bytes)
-        'max_file_size_bytes' => env('IMG_SCAN_MAX_FILE_SIZE', 20 * 1024 * 1024),
+        'max_file_size_bytes' => env('IMG_SCAN_MAX_FILE_SIZE', 25 * 1024 * 1024),
 
         // Tiempo de espera inactivo para escaneo (segundos)
         'idle_timeout' => env('IMG_SCAN_IDLE_TIMEOUT', 10),

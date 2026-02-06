@@ -9,6 +9,11 @@ return [
     'disk_name' => env('MEDIA_DISK', 'public'),
 
     /*
+     * The disk to store conversions. Falls back to the originals disk when empty.
+     */
+    'conversions_disk' => env('MEDIA_CONVERSIONS_DISK', env('MEDIA_DISK', 'public')),
+
+    /*
      * The maximum file size of an item in bytes.
      * Adding a larger file will result in an exception.
      */
@@ -96,7 +101,7 @@ return [
      * When urls to files get generated, this class will be called. Use the default
      * if your files are stored locally above the site root or on s3.
      */
-    'url_generator' => Spatie\MediaLibrary\Support\UrlGenerator\DefaultUrlGenerator::class,
+    'url_generator' => App\Support\Media\TenantAwareUrlGenerator::class, // Usa generador tenant-aware para evitar /storage y rutear media
 
     /*
      * Moves media on updating to keep path consistent. Enable it only with a custom

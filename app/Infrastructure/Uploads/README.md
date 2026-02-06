@@ -49,6 +49,7 @@ Hub único para perfiles de dominio, pipeline de seguridad/AV, cuarentena, servi
 
 ## Descarga y serving
 - `Http/Controllers/DownloadUploadController` autoriza con `UploadPolicy@download` (tenant + bloqueo de `certificate_secret`); si el disco es S3 usa `temporaryUrl`, de lo contrario `Storage::download`.
+- `Http/Controllers/Media/ShowMediaController` (ruta `/media/{path}`) ahora aplica una allowlist configurable en `config/media-serving.php` para evitar servir archivos arbitrarios. Ajusta `allowed_paths` si agregas nuevas rutas de media tenant-first.
 - `ServingMode`:
   - `controller_signed`: servido vía controlador con policy/tenant y, si aplica, URL temporal del driver (avatar/doc/pdf/xlsx/csv firmado o autorizado).
   - `forbidden`: no se expone endpoint de descarga (`import_csv`, `certificate_secret`), solo uso interno/procesamiento.

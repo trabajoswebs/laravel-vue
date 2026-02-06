@@ -5,6 +5,7 @@ namespace App\Infrastructure\Http\Middleware;
 use App\Infrastructure\Security\SecurityHelper;
 use App\Infrastructure\Http\Requests\Concerns\SanitizesInputs;
 use App\Infrastructure\Sanitization\DisplayName;
+use App\Infrastructure\Localization\TranslationService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -295,8 +296,11 @@ class SanitizeInput
         // Sanitización especial para locale en parámetros de ruta
         if (isset($parameters['locale'])) {
             try {
-                $sanitizedLocale = SecurityHelper::sanitizeLocale($parameters['locale']);
-                $route->setParameter('locale', $sanitizedLocale);
+                // No fallback aquí: si es inválido, dejamos que el controller lo rechace.
+                $sanitizedLocale = TranslationService::sanitizeLocale((string) $parameters['locale']);
+                if ($sanitizedLocale !== '') {
+                    $route->setParameter('locale', $sanitizedLocale);
+                }
             } catch (\Throwable $e) {
                 Log::debug('Route locale sanitization failed', ['error' => $e->getMessage()]);
             }

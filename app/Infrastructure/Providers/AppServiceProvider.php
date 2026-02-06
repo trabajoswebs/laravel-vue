@@ -21,9 +21,12 @@ use App\Infrastructure\Shared\Adapters\LaravelTransactionManager;
 use App\Infrastructure\Shared\Metrics\LogMetrics;
 use App\Infrastructure\User\Adapters\EloquentUserAvatarRepository;
 use App\Infrastructure\User\Adapters\EloquentUserRepository;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
+use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\RateLimiter;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
@@ -68,6 +71,17 @@ class AppServiceProvider extends ServiceProvider
         if (app()->environment('production')) {
             Model::preventLazyLoading();
         }
+
+        RateLimiter::for('media-serving', static function (Request $request): array|Limit {
+            $userId = $request->user()?->getAuthIdentifier();
+            $ip = (string) $request->ip();
+
+            if ($userId !== null) {
+                return Limit::perMinute(300)->by('media-user:' . $userId);
+            }
+
+            return Limit::perMinute(120)->by('media-ip:' . $ip);
+        });
 
         // Registra el observador para el modelo Media para limpieza automática de artefactos
         Media::observe(MediaObserver::class);

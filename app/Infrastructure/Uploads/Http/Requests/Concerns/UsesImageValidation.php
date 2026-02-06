@@ -40,7 +40,7 @@ trait UsesImageValidation // Trait reutilizable para FormRequests
             'bail', // Corta en el primer fallo
             'required', // Campo obligatorio
             'file', // Debe ser archivo
-            File::image()->max($maxKb)->types($allowedExt), // Regla File con tipos y tamaño
+            File::types($allowedExt)->max($maxKb), // Limita extensión/tamaño (evita fallo en drivers sin soporte AVIF)
             'mimetypes:' . implode(',', $allowedMimes), // MIME real permitido
             "dimensions:min_width={$minDim},min_height={$minDim},max_width={$maxDim},max_height={$maxDim}", // Guard de dimensiones
             new SecureImageValidation( // Validación profunda de imagen
