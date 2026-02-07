@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Security\Upload;
 
-use Illuminate\Support\Facades\Log;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 
 /**
  * Logger centralizado para eventos de seguridad en subidas.
@@ -13,6 +13,14 @@ use Illuminate\Support\Facades\Log;
  */
 final class UploadSecurityLogger
 {
+    private readonly MediaSecurityLogger $logger;
+
+    public function __construct(
+        ?MediaSecurityLogger $logger = null,
+    ) {
+        $this->logger = $logger ?? app(MediaSecurityLogger::class);
+    }
+
     /**
      * Registra el inicio de un proceso de subida.
      *
@@ -20,7 +28,7 @@ final class UploadSecurityLogger
      */
     public function started(array $context): void
     {
-        Log::info('upload.started', $context);
+        $this->logger->debug('media.pipeline.started', $context);
     }
 
     /**
@@ -30,7 +38,7 @@ final class UploadSecurityLogger
      */
     public function quarantined(array $context): void
     {
-        Log::info('upload.quarantined', $context);
+        $this->logger->debug('media.pipeline.quarantined', $context);
     }
 
     /**
@@ -40,7 +48,7 @@ final class UploadSecurityLogger
      */
     public function magicbytesFailed(array $context): void
     {
-        Log::warning('upload.magicbytes_failed', $context);
+        $this->logger->warning('media.security.suspicious_upload', $context);
     }
 
     /**
@@ -50,7 +58,7 @@ final class UploadSecurityLogger
      */
     public function scanStarted(array $context): void
     {
-        Log::info('upload.scan_started', $context);
+        $this->logger->debug('media.security.scan_started', $context);
     }
 
     /**
@@ -60,7 +68,7 @@ final class UploadSecurityLogger
      */
     public function scanPassed(array $context): void
     {
-        Log::info('upload.scan_passed', $context);
+        $this->logger->debug('media.security.scan_passed', $context);
     }
 
     /**
@@ -70,7 +78,7 @@ final class UploadSecurityLogger
      */
     public function scanFailed(array $context): void
     {
-        Log::warning('upload.scan_failed', $context);
+        $this->logger->warning('media.security.scan_failed', $context);
     }
 
     /**
@@ -80,7 +88,7 @@ final class UploadSecurityLogger
      */
     public function virusDetected(array $context): void
     {
-        Log::error('upload.virus_detected', $context);
+        $this->logger->error('media.security.virus_detected', $context);
     }
 
     /**
@@ -90,7 +98,7 @@ final class UploadSecurityLogger
      */
     public function normalized(array $context): void
     {
-        Log::info('upload.normalized', $context);
+        $this->logger->debug('media.pipeline.normalized', $context);
     }
 
     /**
@@ -100,7 +108,7 @@ final class UploadSecurityLogger
      */
     public function persisted(array $context): void
     {
-        Log::info('upload.persisted', $context);
+        $this->logger->info('media.pipeline.persisted', $context);
     }
 
     /**
@@ -110,7 +118,7 @@ final class UploadSecurityLogger
      */
     public function validationFailed(array $context): void
     {
-        Log::warning('upload.validation_failed', $context);
+        $this->logger->error('media.pipeline.failed', $context);
     }
 
     /**
@@ -118,7 +126,7 @@ final class UploadSecurityLogger
      */
     public function accessed(array $context): void
     {
-        Log::info('media.accessed', $context);
+        $this->logger->debug('media.accessed', $context);
     }
 
     /**
@@ -126,7 +134,7 @@ final class UploadSecurityLogger
      */
     public function yaraRulesValidated(array $context): void
     {
-        Log::info('upload.yara_rules_valid', $context);
+        $this->logger->debug('media.security.yara_rules_valid', $context);
     }
 
     /**
@@ -134,6 +142,6 @@ final class UploadSecurityLogger
      */
     public function yaraRulesFailed(array $context): void
     {
-        Log::critical('upload.yara_rules_failed', $context);
+        $this->logger->critical('media.security.yara_rules_failed', $context);
     }
 }

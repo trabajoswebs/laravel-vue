@@ -23,11 +23,11 @@ use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessUploadJob;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Support\ImageUploadReporter;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\HasMedia as HasMediaContract;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -56,6 +56,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
         private readonly ScanCoordinatorInterface $scanCoordinator,
         private readonly ImageUploadReporter $reporter,
         private readonly UploadSecurityLogger $securityLogger,
+        private readonly MediaSecurityLogger $mediaLogger,
         private readonly AsyncJobDispatcherInterface $jobs,
     ) {}
 
@@ -557,13 +558,13 @@ final class DefaultUploadService implements UploadService, MediaUploader
     ): void {
         try {
             $this->quarantineManager->transition($token, $from, $to, $metadata);
-            Log::info('quarantine.transitioned', array_merge($context, [
+            $this->mediaLogger->debug('media.security.quarantine_transitioned', array_merge($context, [
                 'from' => $from->value,
                 'to' => $to->value,
                 'quarantine_id' => $token->identifier(),
             ], $metadata));
         } catch (\Throwable $transitionException) {
-            Log::warning('quarantine.transition_failed', array_merge($context, [
+            $this->mediaLogger->warning('media.security.quarantine_transition_failed', array_merge($context, [
                 'from' => $from->value,
                 'to' => $to->value,
                 'quarantine_id' => $token->identifier(),

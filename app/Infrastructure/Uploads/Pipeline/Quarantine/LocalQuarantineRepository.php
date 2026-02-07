@@ -7,6 +7,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Quarantine;
 // Importamos las clases necesarias
 use App\Infrastructure\Uploads\Pipeline\Exceptions\QuarantineException; // Excepción para fallos en cuarentena
 use App\Infrastructure\Uploads\Pipeline\Exceptions\QuarantineIntegrityException; // Excepción para fallos de integridad
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Filesystem\FilesystemAdapter; // Adaptador de sistema de archivos de Laravel
 use RuntimeException; // Excepción estándar de PHP
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
@@ -149,7 +150,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
             $this->storeMetadata($token, QuarantineState::PENDING, $metadata, ['hash' => $hash]);
             $persisted = true;
             // Registramos la operación
-            logger()->info('quarantine.put', ['path' => $relative, 'correlation_id' => $token->correlationId]);
+            $this->securityLogger()->debug('media.security.quarantine_put', ['path' => $relative, 'correlation_id' => $token->correlationId]);
             return $token;
         } catch (\Throwable $exception) {
             // Limpieza defensiva de artefactos parciales si falla antes de persistir metadatos.
@@ -220,7 +221,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
             $this->storeMetadata($token, QuarantineState::PENDING, $metadata, ['hash' => $hash]);
             $persisted = true;
             // Registramos la operación
-            logger()->info('quarantine.put_stream', [
+            $this->securityLogger()->debug('media.security.quarantine_put_stream', [
                 'path' => $relative,
                 'bytes' => $bytesPersisted,
                 'correlation_id' => $token->correlationId,
@@ -257,7 +258,8 @@ final class LocalQuarantineRepository implements QuarantineRepository
         $relative = $this->toRelativePath($absolutePath);
         if ($relative === null) {
             // Si la ruta está fuera de la raíz de cuarentena, registramos advertencia
-            logger()->warning('quarantine.delete.outside_root', [
+            $this->securityLogger()->warning('media.security.denied', [
+                'reason' => 'quarantine_delete_outside_root',
                 'path' => $this->redactPath($absolutePath),
             ]);
             return;
@@ -284,7 +286,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
         $this->pruneEmptyDirectoriesRoot(); // Limpia todos los directorios vacíos desde la raíz
         $this->deleteMetadataSidecar($relative);
         // Registramos la operación
-        logger()->info('quarantine.delete', ['path' => $relative]);
+        $this->securityLogger()->debug('media.security.quarantine_delete', ['path' => $relative]);
     }
 
     /**
@@ -363,7 +365,7 @@ final class LocalQuarantineRepository implements QuarantineRepository
         $this->cleanupEmptyDirectories($relative);
         $this->pruneEmptyDirectoriesRoot(); // Limpia todos los directorios vacíos desde la raíz
         // Registramos la operación
-        logger()->info('quarantine.promote', [
+        $this->securityLogger()->info('media.security.quarantine_promote', [
             'from' => $relative,
             'to'   => $destinationRelative,
         ]);
@@ -717,7 +719,8 @@ final class LocalQuarantineRepository implements QuarantineRepository
                 $this->filesystem->delete($lock);
             } catch (\Throwable $e) {
                 // Si falla la eliminación del lock, registramos advertencia
-                logger()->warning('quarantine.lock_cleanup_failed', [
+                $this->securityLogger()->warning('media.security.quarantine_cleanup_failed', [
+                    'reason' => 'lock_cleanup_failed',
                     'lock' => $lock,
                     'error' => $e->getMessage(),
                 ]);
@@ -863,14 +866,15 @@ final class LocalQuarantineRepository implements QuarantineRepository
                 $this->filesystem->deleteDirectory($relativeDir);
             } catch (\Throwable $e) {
                 // Si falla, registramos advertencia y paramos
-                logger()->warning('quarantine.cleanup_failed', [
+                $this->securityLogger()->warning('media.security.quarantine_cleanup_failed', [
+                    'reason'    => 'directory_cleanup_failed',
                     'directory' => $this->redactPath($directory),
                     'error'     => $e->getMessage(),
                 ]);
                 break;
             }
             // Registramos la operación
-            logger()->info('quarantine.cleanup', [
+            $this->securityLogger()->debug('media.security.quarantine_cleanup', [
                 'directory' => $this->redactPath($directory),
             ]);
             // Subimos al directorio padre
@@ -1119,7 +1123,8 @@ final class LocalQuarantineRepository implements QuarantineRepository
                 $this->delete($token);
                 ++$pruned;
             } catch (\Throwable $e) {
-                logger()->warning('quarantine.prune_failed', [
+                $this->securityLogger()->warning('media.security.quarantine_cleanup_failed', [
+                    'reason' => 'prune_failed',
                     'path'  => $relative,
                     'error' => $e->getMessage(),
                 ]);
@@ -1152,7 +1157,8 @@ final class LocalQuarantineRepository implements QuarantineRepository
                 $this->filesystem->delete($relative);
                 ++$cleaned;
             } catch (\Throwable $e) {
-                logger()->warning('quarantine.sidecar_cleanup_failed', [
+                $this->securityLogger()->warning('media.security.quarantine_cleanup_failed', [
+                    'reason' => 'sidecar_cleanup_failed',
                     'path'  => $relative,
                     'error' => $e->getMessage(),
                 ]);
@@ -1255,5 +1261,10 @@ final class LocalQuarantineRepository implements QuarantineRepository
         }
         @chmod($absolute, 0600);
         return $bytesCopied;
+    }
+
+    private function securityLogger(): MediaSecurityLogger
+    {
+        return app(MediaSecurityLogger::class);
     }
 }

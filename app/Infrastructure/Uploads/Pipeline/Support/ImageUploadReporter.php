@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Support;
 
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\Facades\Log;
 
@@ -14,6 +15,7 @@ final class ImageUploadReporter
 {
     public function __construct(
         private readonly ExceptionHandler $exceptions,
+        private readonly MediaLogSanitizer $sanitizer,
     ) {}
 
     /**
@@ -21,10 +23,10 @@ final class ImageUploadReporter
      */
     public function report(string $message, \Throwable $exception, array $context = [], string $level = 'error'): void
     {
-        $logContext = array_merge([
-            'exception'       => $exception->getMessage(),
+        $logContext = $this->sanitizer->safeContext(array_merge([
+            'exception'       => $this->sanitizer->safeException($exception),
             'exception_class' => $exception::class,
-        ], $context);
+        ], $context));
 
         if (config('app.debug', false)) {
             $logContext['trace'] = $exception->getTraceAsString();

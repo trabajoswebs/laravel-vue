@@ -12,6 +12,7 @@ use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant para makeCurrent;
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler; // Scheduler de limpieza; ej. flushExpired
 use App\Infrastructure\Models\User; // Modelo User para validar avatar
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob; // Limpieza directa de artefactos
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Contracts\Debug\ExceptionHandler; // Reporta excepciones; ej. app(ExceptionHandler)
 use Illuminate\Support\Facades\Storage; // Acceso a disks; ej. Storage::disk('public')->exists('x.jpg')
 use Spatie\MediaLibrary\Conversions\ConversionCollection; // Lista de conversions; ej. ['thumb']
@@ -111,7 +112,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
             // 3) Si no hay conversions, termina.
             if ($this->conversions->isEmpty()) {
-                $this->logger()->info('media.conversions.no_conversions', [ // Log info
+                $this->logInfo('media.conversions.no_conversions', [ // Log info
                     'media_id' => $freshMedia->getKey(), // Ej. 1863
                     'collection' => $freshMedia->collection_name, // Ej. 'avatar'
                 ]);
@@ -184,7 +185,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
             $freshAfterException = Media::query()->find($mediaId);
 
             if ($freshAfterException === null || !$this->sourceFileExists($freshAfterException)) {
-                $this->logger()->notice('media.conversions.skipped_disappeared_during_processing', [
+                $this->logNotice('media.conversions.skipped_disappeared_during_processing', [
                     'media_id'    => $mediaId,
                     'collection'  => $this->media->collection_name ?? null,
                     'disk'        => $this->media->disk ?? null,
@@ -198,7 +199,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
             // 2) Si el error encaja en “missing file/dir”, también descartamos limpio.
             if ($this->isMissingFileException($exception)) {
-                $this->logger()->notice('media.conversions.skipped_missing_runtime', [
+                $this->logNotice('media.conversions.skipped_missing_runtime', [
                     'media_id'   => $mediaId,
                     'collection' => $this->media->collection_name ?? null,
                     'message'    => $exception->getMessage(),
@@ -267,7 +268,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
      */
     private function report(\Throwable $exception): void
     {
-        $this->logger()->error('media.conversions.failed', [ // Log error
+        $this->logError('media.conversions.failed', [ // Log error
             'media_id' => $this->media->getKey(), // Ej. 1863
             'collection' => $this->media->collection_name ?? null, // Ej. 'avatar'
             'message' => $exception->getMessage(), // Ej. "ImagickException..."
@@ -285,7 +286,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
         try {
             app(MediaCleanupScheduler::class)->flushExpired((string) $this->media->getKey()); // Ej. flushExpired('1863')
         } catch (\Throwable $e) {
-            $this->logger()->warning('media.conversions.cleanup_flush_failed', [ // Log warning
+            $this->logWarning('media.conversions.cleanup_flush_failed', [ // Log warning
                 'media_id' => $this->media->getKey(), // Ej. 1863
                 'error' => $e->getMessage(), // Ej. "Redis timeout"
             ]);
@@ -308,7 +309,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
         $tenantId = $this->tenantId ?? $this->media->getCustomProperty('tenant_id'); // Resuelve tenantId; ej. 1
 
         if ($tenantId === null) {
-            $this->logger()->warning('media.conversions.missing_tenant', [ // Log warning
+            $this->logWarning('media.conversions.missing_tenant', [ // Log warning
                 'media_id' => $this->media->getKey(), // Ej. 1863
                 'collection' => $this->media->collection_name ?? null, // Ej. 'avatar'
             ]);
@@ -317,7 +318,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
         $tenant = Tenant::query()->find($tenantId); // Busca tenant; ej. Tenant #1
         if ($tenant === null) {
-            $this->logger()->warning('media.conversions.tenant_not_found', [ // Log warning
+            $this->logWarning('media.conversions.tenant_not_found', [ // Log warning
                 'tenant_id' => $tenantId, // Ej. 99
                 'media_id' => $this->media->getKey(), // Ej. 1863
             ]);
@@ -330,7 +331,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
     private function staleSkip(string $reason, array $context = []): void
     {
-        $this->logger()->info('job.stale_skipped', array_merge([
+        $this->logInfo('job.stale_skipped', array_merge([
             'reason' => $reason,
             'media_id' => $this->media->getKey(),
             'tenant_id' => $this->tenantId,
@@ -350,13 +351,13 @@ class PerformConversionsJob extends BasePerformConversionsJob
 
             CleanupMediaArtifactsJob::dispatch($artifacts, []);
 
-            $this->logger()->info('media.conversions.cleanup_dispatched', [
+            $this->logInfo('media.conversions.cleanup_dispatched', [
                 'media_id' => $media->getKey(),
                 'reason' => $reason,
                 'disks' => array_keys($artifacts),
             ]);
         } catch (\Throwable $e) {
-            $this->logger()->warning('media.conversions.cleanup_dispatch_failed', [
+            $this->logWarning('media.conversions.cleanup_dispatch_failed', [
                 'media_id' => $media->getKey(),
                 'reason' => $reason,
                 'error' => $e->getMessage(),
@@ -398,5 +399,46 @@ class PerformConversionsJob extends BasePerformConversionsJob
         }
 
         return $artifacts;
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     */
+    private function logInfo(string $message, array $context): void
+    {
+        $this->logger()->info($message, $this->safeContext($context));
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     */
+    private function logNotice(string $message, array $context): void
+    {
+        $this->logger()->notice($message, $this->safeContext($context));
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     */
+    private function logWarning(string $message, array $context): void
+    {
+        $this->logger()->warning($message, $this->safeContext($context));
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     */
+    private function logError(string $message, array $context): void
+    {
+        $this->logger()->error($message, $this->safeContext($context));
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    private function safeContext(array $context): array
+    {
+        return app(MediaLogSanitizer::class)->safeContext($context);
     }
 }

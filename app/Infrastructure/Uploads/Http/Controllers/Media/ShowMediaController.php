@@ -5,14 +5,13 @@ declare(strict_types=1); // Fuerza tipado estricto
 namespace App\Infrastructure\Uploads\Http\Controllers\Media; // Mantiene la convención de Media controllers // Ej: rutas /media
 
 use App\Application\Shared\Contracts\TenantContextInterface; // Permite obtener tenant actual // Ej: app(TenantContextInterface)
+use App\Infrastructure\Uploads\Http\Support\MediaServingResponder;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Contracts\Filesystem\Filesystem; // Tipo para discos de Storage // Ej: FilesystemAdapter
 use Illuminate\Http\Request; // Request HTTP entrante // Ej: path capturado
 use Illuminate\Routing\Controller; // Base Controller de Laravel // Ej: para inyección
-use Illuminate\Support\Facades\Log; // Logging discreto para eventos de seguridad
 use Illuminate\Support\Facades\Storage; // Acceso a discos // Ej: Storage::disk('local')
-use Symfony\Component\HttpFoundation\BinaryFileResponse; // Tipo de respuesta de archivos // Ej: streamed file
 use Symfony\Component\HttpFoundation\Response; // Respuesta base HttpFoundation // Ej: para tipos unificados
-use Symfony\Component\HttpFoundation\StreamedResponse; // Respuesta stream de Storage::response // Ej: entrega de archivos
 
 final class ShowMediaController extends Controller // Controlador invocable // Ej: Route::get('/media/{path}', ShowMediaController::class)
 {
@@ -21,7 +20,11 @@ final class ShowMediaController extends Controller // Controlador invocable // E
      * 
      * @param TenantContextInterface $tenantContext Servicio para obtener tenant actual
      */
-    public function __construct(private readonly TenantContextInterface $tenantContext) // Inyecta contexto tenant // Ej: tenantId()
+    public function __construct(
+        private readonly TenantContextInterface $tenantContext,
+        private readonly MediaServingResponder $responder,
+        private readonly MediaSecurityLogger $securityLogger,
+    ) // Inyecta contexto tenant // Ej: tenantId()
     {
     }
 
@@ -31,9 +34,9 @@ final class ShowMediaController extends Controller // Controlador invocable // E
      * 
      * @param Request $request Solicitud HTTP entrante
      * @param string $path Ruta del archivo dentro del sistema de archivos
-     * @return Response|BinaryFileResponse|StreamedResponse Respuesta con el archivo
+     * @return Response Respuesta con el archivo
      */
-    public function __invoke(Request $request, string $path): Response|BinaryFileResponse|StreamedResponse // Maneja GET /media/{path} // Ej: /media/tenants/1/users/2/avatar.jpg
+    public function __invoke(Request $request, string $path): Response // Maneja GET /media/{path} // Ej: /media/tenants/1/users/2/avatar.jpg
     {
         $tenantId = $this->tenantContext->tenantId(); // Lee tenant actual desde contexto // Ej: 1
         $userId = $request->user()?->getAuthIdentifier(); // Id del usuario autenticado
@@ -78,30 +81,7 @@ final class ShowMediaController extends Controller // Controlador invocable // E
             }
         }
 
-        $driver = (string) config("filesystems.disks.{$disk}.driver", 'local'); // Driver del disk // Ej: local|s3
-
-        if ($driver === 's3' && method_exists($adapter, 'temporaryUrl')) { // Evita streaming por PHP en S3 // Ej: redirect a URL temporal
-            $ttlSeconds = $this->s3TemporaryUrlTtlSeconds(); // TTL único para URL temporal
-            $expiration = now()->addSeconds($ttlSeconds);
-            $cacheControl = 'private, max-age=0, no-store';
-
-            $url = $adapter->temporaryUrl($cleanPath, $expiration, [
-                'ResponseCacheControl' => $cacheControl,
-            ]);
-
-            return redirect()->away($url, 302)->withHeaders([
-                'Cache-Control' => $cacheControl,
-                'X-Content-Type-Options' => 'nosniff',
-            ]);
-        }
-
-        $localMaxAge = $this->localMaxAgeSeconds();
-        $headers = [ // Encabezados para control de cache // Ej: evita cache público
-            'Cache-Control' => 'private, max-age=' . $localMaxAge . ', must-revalidate', // Cache privado con TTL configurable
-            'X-Content-Type-Options' => 'nosniff', // Evita MIME sniffing
-        ];
-
-        return $adapter->response($cleanPath, null, $headers); // Envía archivo como respuesta // Ej: imagen avatar
+        return $this->responder->serve($disk, $cleanPath); // Delega headers y temporalUrl en helper común
     }
 
     /**
@@ -296,30 +276,6 @@ final class ShowMediaController extends Controller // Controlador invocable // E
     }
 
     /**
-     * Obtiene el TTL máximo para cache local de archivos
-     * 
-     * @return int Número de segundos para cache local
-     */
-    private function localMaxAgeSeconds(): int
-    {
-        $seconds = (int) config('media-serving.local_max_age_seconds', 86400);
-
-        return $seconds > 0 ? $seconds : 86400;
-    }
-
-    /**
-     * Obtiene el TTL para URLs temporales de S3
-     * 
-     * @return int Número de segundos para expiración de URLs temporales S3
-     */
-    private function s3TemporaryUrlTtlSeconds(): int
-    {
-        $seconds = (int) config('media-serving.s3_temporary_url_ttl_seconds', 900);
-
-        return $seconds > 0 ? $seconds : 900;
-    }
-
-    /**
      * Registra un evento de denegación de forma discreta (nivel debug o canal dedicado).
      *
      * @param string $reason   Motivo corto de la denegación
@@ -333,25 +289,9 @@ final class ShowMediaController extends Controller // Controlador invocable // E
             'reason'    => $reason,
             'tenant_id' => $tenantId,
             'user_id'   => $userId,
+            'path'      => $path,
         ];
 
-        if ($path !== '') {
-            $payload['path_hash'] = $this->pathHash($path);
-        }
-
-        if (config('logging.channels.media_security')) {
-            Log::channel('media_security')->debug('media_denied', $payload);
-            return;
-        }
-
-        Log::debug('media_denied', $payload);
-    }
-
-    /**
-     * Calcula hash SHA-256 del path normalizado para no exponerlo en logs.
-     */
-    private function pathHash(string $path): string
-    {
-        return hash('sha256', $path);
+        $this->securityLogger->warning('media.security.denied', $payload);
     }
 }

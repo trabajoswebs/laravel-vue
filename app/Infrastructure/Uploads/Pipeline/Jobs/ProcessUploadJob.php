@@ -10,6 +10,7 @@ use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Application\Shared\Contracts\MetricsInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -71,12 +72,12 @@ final class ProcessUploadJob implements ShouldQueue
 
         $owner = $users->lockAndFindById($this->ownerId);
 
-        Log::withContext([
+        Log::withContext($this->safeContext([
             'correlation_id' => $this->correlationId,
-            'quarantine_id' => $this->token->identifier(),
+            'token' => $this->token->identifier(),
             'user_id' => $owner->getKey(),
             'profile' => $profile->collection(),
-        ]);
+        ]));
 
         $upload = new UploadedFile(
             $this->token->path,
@@ -119,5 +120,14 @@ final class ProcessUploadJob implements ShouldQueue
         return [
             'profile' => $profile->collection(),
         ];
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    private function safeContext(array $context): array
+    {
+        return app(MediaLogSanitizer::class)->safeContext($context);
     }
 }

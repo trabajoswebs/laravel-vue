@@ -8,6 +8,7 @@ use App\Application\Shared\Contracts\ClockInterface;
 use App\Application\Shared\Contracts\LoggerInterface;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -79,12 +80,12 @@ final class ProcessLatestAvatar implements ShouldQueue, ShouldBeUnique
         try {
             Redis::setex(self::lastKey($tenantId, $userId), self::LAST_KEY_TTL, $payload ?: '');
         } catch (\Throwable $e) {
-            app(LoggerInterface::class)->info('job.stale_skipped', [
+            app(LoggerInterface::class)->info('job.stale_skipped', app(MediaLogSanitizer::class)->safeContext([
                 'reason' => 'redis_unavailable_last',
                 'tenant_id' => $tenantId,
                 'user_id' => $userId,
                 'error' => $e->getMessage(),
-            ]);
+            ]));
         }
     }
 
@@ -98,12 +99,12 @@ final class ProcessLatestAvatar implements ShouldQueue, ShouldBeUnique
             $acquired = Redis::set($lockKey, '1', 'EX', self::LOCK_TTL, 'NX');
         } catch (\Throwable $e) {
             // En entornos sin Redis (tests) degradar a dispatch directo
-            app(LoggerInterface::class)->info('job.stale_skipped', [
+            app(LoggerInterface::class)->info('job.stale_skipped', app(MediaLogSanitizer::class)->safeContext([
                 'reason' => 'redis_unavailable_lock',
                 'tenant_id' => $tenantId,
                 'user_id' => $userId,
                 'error' => $e->getMessage(),
-            ]);
+            ]));
             self::dispatch($tenantId, $userId);
             return;
         }
@@ -272,7 +273,7 @@ final class ProcessLatestAvatar implements ShouldQueue, ShouldBeUnique
             'correlation' => $corr,
         ], $extra);
 
-        app(LoggerInterface::class)->info('job.stale_skipped', $context);
+        app(LoggerInterface::class)->info('job.stale_skipped', $this->safeContext($context));
     }
 
     /**
@@ -288,19 +289,19 @@ final class ProcessLatestAvatar implements ShouldQueue, ShouldBeUnique
 
             CleanupMediaArtifactsJob::dispatch($artifacts, []);
 
-            app(LoggerInterface::class)->info('avatar.cleanup.direct_dispatched', [
+            app(LoggerInterface::class)->info('avatar.cleanup.direct_dispatched', $this->safeContext([
                 'media_id' => $media->getKey(),
                 'reason'   => $reason,
                 'disks'    => array_keys($artifacts),
                 'tenant_id'=> $this->tenantId,
                 'user_id'  => $this->userId,
-            ]);
+            ]));
         } catch (\Throwable $e) {
-            app(LoggerInterface::class)->warning('avatar.cleanup.direct_failed', [
+            app(LoggerInterface::class)->warning('avatar.cleanup.direct_failed', $this->safeContext([
                 'media_id' => $media->getKey(),
                 'reason'   => $reason,
                 'error'    => $e->getMessage(),
-            ]);
+            ]));
         }
     }
 
@@ -319,12 +320,12 @@ final class ProcessLatestAvatar implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        app(LoggerInterface::class)->info('avatar.cleanup.direct_skipped_payload', [
+        app(LoggerInterface::class)->info('avatar.cleanup.direct_skipped_payload', $this->safeContext([
             'reason'   => $reason,
             'media_id' => $payload['media_id'] ?? null,
             'tenant_id'=> $payload['tenant_id'] ?? null,
             'user_id'  => $payload['user_id'] ?? null,
-        ]);
+        ]));
 
         // Fallback: ejecuta limpieza de huérfanos por usuario/tenant.
         CleanupAvatarOrphans::dispatch($this->tenantId, $this->userId);
@@ -402,5 +403,14 @@ final class ProcessLatestAvatar implements ShouldQueue, ShouldBeUnique
         }
 
         return (int) $latest['media_id'] !== $mediaIdProcessed;
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    private function safeContext(array $context): array
+    {
+        return app(MediaLogSanitizer::class)->safeContext($context);
     }
 }

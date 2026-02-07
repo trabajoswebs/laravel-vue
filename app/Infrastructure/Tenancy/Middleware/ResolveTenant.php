@@ -1,157 +1,151 @@
-<?php // Middleware para resolver y fijar el tenant actual
+<?php
 
-declare(strict_types=1); // Habilita tipado estricto
+declare(strict_types=1);
 
-namespace App\Infrastructure\Tenancy\Middleware; // Namespace del middleware de tenancy
+namespace App\Infrastructure\Tenancy\Middleware;
 
-use App\Infrastructure\Models\User; // Modelo de usuario usado en autenticación
-use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant propio
-use Closure; // Tipo Closure para la firma handle
-use Illuminate\Http\Request; // Request HTTP
-use Illuminate\Support\Facades\Auth; // Facade de autenticación
-use Illuminate\Support\Facades\DB; // Facade para transacciones
-use Symfony\Component\HttpFoundation\Response; // Tipo de respuesta HTTP
+use App\Infrastructure\Models\User;
+use App\Infrastructure\Tenancy\Models\Tenant;
+use Closure;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Resuelve el tenant del usuario autenticado y lo marca como actual.
+ * Middleware que resuelve y establece el tenant activo para la solicitud
+ * Valida que el usuario tenga acceso al tenant configurado y mantiene consistencia de sesión
  */
-class ResolveTenant // Middleware invocable por rutas tenant-aware
+class ResolveTenant
 {
+    private const SESSION_KEY_CONFIG = 'multitenancy.current_tenant_id_key'; // Clave de configuración para session key
+    private const CACHE_TTL = 300;                                           // Tiempo de vida de cache (5 minutos)
+    private const CACHE_PREFIX = 'user_tenant_access:';                     // Prefijo para claves de cache
+
     /**
-     * Maneja la solicitud resolviendo el tenant actual.
-     *
-     * @param Request $request Request entrante
-     * @param Closure $next Siguiente middleware
-     * @return Response Respuesta HTTP
+     * Maneja la solicitud para resolver y establecer el tenant activo
+     * 
+     * @param Request $request Solicitud HTTP entrante
+     * @param Closure $next Callback para continuar la cadena de middleware
+     * @return Response Respuesta generada
+     * @throws AuthenticationException Si el usuario no está autenticado
      */
-    public function handle(Request $request, Closure $next): Response // Firma estándar de middleware
+    public function handle(Request $request, Closure $next): Response
     {
-        $user = Auth::user(); // Obtiene el usuario autenticado actual
+        $user = Auth::user();
 
-        if (!$user instanceof User) { // Si no hay usuario autenticado válido
-            return abort(401, 'Autenticación requerida para resolver tenant'); // Bloquea acceso sin auth
+        if (! $user instanceof User) {
+            // Lanza excepción estándar de Laravel para que el Handler decida (Login redirect o 401 JSON)
+            throw new AuthenticationException('Unauthenticated.');
         }
 
-        // Requiere que el usuario tenga un tenant actual ya establecido; no se auto-provisiona en endpoints sensibles
-        $tenant = $this->resolveExistingTenant($user); // Obtiene el tenant asociado
+        $tenant = $this->resolveTenantForUser($user);
 
-        if (! $tenant) { // Si no pudo resolverse un tenant
-            return abort(403, 'No se pudo asociar un tenant'); // Bloquea acceso por inconsistencia / falta de membresía
+        if (! $tenant) {
+            $this->logSecurityEvent('tenant_resolution_failed', $request, [
+                'user_id' => $user->getKey(),
+                'target_tenant_id' => $user->getCurrentTenantId()
+            ]);
+            
+            return abort(403, 'No tienes acceso al tenant configurado.');
         }
 
-        $this->assertUserBelongsToTenant($user, $tenant); // Verifica pertenencia en tabla pivote
+        $tenant->makeCurrent(); // Establece el tenant como activo para esta solicitud
 
-        $tenant->makeCurrent(); // Marca el tenant como actual en Spatie
-
-        $sessionKey = config('multitenancy.current_tenant_id_key', 'tenant_id'); // Obtiene clave de sesión configurada
-        $sessionTenantId = $request->session()->get($sessionKey); // Lee tenant almacenado en sesión
-        $legacySessionTenantId = $request->session()->get('tenant_id'); // Compatibilidad con tests/legacy
-
-        $candidate = $sessionTenantId ?? $legacySessionTenantId;
-
-        if ($candidate !== null && (string) $candidate !== (string) $tenant->getKey()) { // Detecta sesiones alteradas
-            return abort(403, 'Sesión con tenant inválido'); // Bloquea si la sesión apunta a otro tenant
+        if (! $this->ensureSessionConsistency($request, $tenant)) {
+            $this->logSecurityEvent('session_tenant_mismatch', $request, [
+                'user_id' => $user->getKey(),
+                'expected_tenant' => $tenant->getKey(),
+                'session_tenant' => $request->session()->get('tenant_id')
+            ]);
+            
+            $this->forceLogout($request); // Forzar logout por inconsistencia de seguridad
+            
+            return abort(403, 'Inconsistencia de sesión detectada.');
         }
 
-        $request->session()->put($sessionKey, $tenant->getKey()); // Guarda tenant_id en sesión para validación
-        $request->session()->put('tenant_id', $tenant->getKey()); // Clave legacy para compatibilidad
-
-        return $next($request); // Continúa el pipeline con tenant resuelto
+        return $next($request); // Continúa con la cadena de middleware
     }
 
     /**
-     * Asegura la pertenencia del usuario al tenant seleccionado.
-     *
+     * Resuelve el tenant para el usuario actual con cache
+     * 
      * @param User $user Usuario autenticado
-     * @param Tenant $tenant Tenant resuelto
+     * @return Tenant|null Instancia del tenant o null si no tiene acceso
      */
-    private function assertUserBelongsToTenant(User $user, Tenant $tenant): void // Valida relación en tenant_user
+    private function resolveTenantForUser(User $user): ?Tenant
     {
-        $belongs = DB::table('tenant_user') // Tabla pivote // Ej.: tenant_user
-            ->where('tenant_id', $tenant->getKey()) // Tenant actual // Ej.: 1
-            ->where('user_id', $user->getKey()) // Usuario autenticado // Ej.: 2
-            ->exists(); // true si pertenece
+        $tenantId = $user->getCurrentTenantId(); // Obtiene ID del tenant actual del usuario
 
-        if (! $belongs) { // Si no pertenece
-            abort(403, 'El usuario no pertenece al tenant actual'); // Bloquea acceso
+        if (! $tenantId) {
+            return null;
         }
+
+        // Cache Tagging (Opcional): Si usas Redis/Memcached, tags permiten limpiar caché por usuario específico
+        // return Cache::tags(['tenancy', "user:{$user->getKey()}"])->remember(...
+        return Cache::remember(
+            self::CACHE_PREFIX . "{$user->getKey()}:{$tenantId}", // Clave única de cache
+            self::CACHE_TTL,                                      // Tiempo de vida del cache
+            fn () => $user->tenants()                            // Consulta la relación de tenants
+                ->where($user->tenants()->getRelated()->getQualifiedKeyName(), $tenantId) // Filtra por ID
+                ->first()                                        // Obtiene el primer resultado
+        );
     }
 
     /**
-     * Resuelve el tenant actual o crea uno personal si falta.
-     *
-     * @param User $user Usuario autenticado
-     * @return Tenant|null Tenant resuelto
+     * Asegura la consistencia del tenant en la sesión
+     * 
+     * @param Request $request Solicitud HTTP actual
+     * @param Tenant $tenant Tenant que debe estar activo
+     * @return bool True si la sesión es consistente, false si hay discrepancia
      */
-    private function resolveOrCreateTenantForUser(User $user): ?Tenant // Determina o crea el tenant del usuario
+    private function ensureSessionConsistency(Request $request, Tenant $tenant): bool
     {
-        if ($user->getCurrentTenantId()) { // Si el usuario ya tiene tenant asignado
-            return $this->resolveExistingTenant($user); // Valida y retorna el tenant existente
+        $sessionKey = config(self::SESSION_KEY_CONFIG, 'tenant_id'); // Obtiene clave de sesión configurada
+        $store = $request->session();                                // Obtiene store de sesión
+        
+        $current = $store->get($sessionKey) ?? $store->get('tenant_id'); // Lee tenant actual de sesión
+
+        if ($current !== null && (string) $current !== (string) $tenant->getKey()) {
+            return false; // Hubo discrepancia entre sesión y tenant resuelto
         }
 
-        $existingTenant = $user->tenants()->first(); // Busca primer tenant asociado
+        $store->put($sessionKey, $tenant->getKey());  // Actualiza clave de sesión configurada
+        $store->put('tenant_id', $tenant->getKey());  // Actualiza clave estándar
 
-        if ($existingTenant) { // Si ya existe asociación
-            $this->refreshUserCurrentTenant($user, $existingTenant); // Actualiza current_tenant_id
-            return $existingTenant; // Devuelve tenant encontrado
-        }
-
-        return $this->createPersonalTenant($user); // Crea tenant personal cuando no hay ninguno
+        return true; // Sesión consistente
     }
 
     /**
-     * Resuelve un tenant existente validando pertenencia.
-     *
-     * @param User $user Usuario autenticado
-     * @return Tenant|null Tenant válido o null si no corresponde
+     * Fuerza logout completo del usuario por inconsistencia de seguridad
+     * 
+     * @param Request $request Solicitud HTTP actual
      */
-    private function resolveExistingTenant(User $user): ?Tenant // Valida tenant_id actual y membresía
+    private function forceLogout(Request $request): void
     {
-        $tenant = Tenant::query()->find($user->getCurrentTenantId()); // Busca tenant por PK
-
-        if (! $tenant) { // Si el tenant referenciado no existe
-            return null; // Evita crear otro tenant automáticamente
-        }
-
-        $belongs = $tenant->users()->whereKey($user->getKey())->exists(); // Verifica pertenencia
-
-        if (! $belongs) { // Si el usuario no pertenece al tenant referenciado
-            return null; // Devuelve null para que el middleware bloquee con 403
-        }
-
-        return $tenant; // Devuelve tenant validado
+        // Invalidar primero, logout después para asegurar limpieza
+        $request->session()->invalidate();    // Invalida toda la sesión
+        $request->session()->regenerateToken(); // Regenera token CSRF
+        Auth::logout();                      // Cierra sesión de autenticación
+        Session::flush();                    // Limpia completamente la sesión
     }
 
     /**
-     * Crea un tenant personal y vincula al usuario como propietario.
-     *
-     * @param User $user Usuario autenticado
-     * @return Tenant Tenant creado
+     * Registra evento de seguridad relacionado con tenancy
+     * 
+     * @param string $event Nombre del evento de seguridad
+     * @param Request $request Solicitud HTTP relacionada
+     * @param array $context Información adicional del contexto
      */
-    private function createPersonalTenant(User $user): Tenant // Genera tenant personal del usuario
+    private function logSecurityEvent(string $event, Request $request, array $context): void
     {
-        return DB::transaction(function () use ($user): Tenant { // Ejecuta creación en transacción
-            $tenant = Tenant::query()->create([ // Crea registro del tenant
-                'name' => "{$user->name}'s tenant", // Nombre legible basado en usuario
-                'owner_user_id' => $user->getKey(), // Define dueño del tenant
-            ]); // Fin de creación
-
-            $user->tenants()->syncWithoutDetaching([$tenant->getKey() => ['role' => 'owner']]); // Asegura vínculo en pivote
-
-            $this->refreshUserCurrentTenant($user, $tenant); // Marca tenant como actual en usuario
-
-            return $tenant; // Devuelve tenant recién creado
-        }); // Fin de la transacción
-    }
-
-    /**
-     * Actualiza el campo current_tenant_id de forma atómica.
-     *
-     * @param User $user Usuario autenticado
-     * @param Tenant $tenant Tenant que debe marcarse como actual
-     */
-    private function refreshUserCurrentTenant(User $user, Tenant $tenant): void // Guarda el tenant actual en el usuario
-    {
-        $user->forceFill(['current_tenant_id' => $tenant->getKey()])->saveQuietly(); // Persiste current_tenant_id sin eventos
+        Log::warning("[Tenancy] Security Alert: {$event}", array_merge($context, [ // Registra alerta
+            'ip' => $request->ip(),                           // Dirección IP del cliente
+            'url' => $request->fullUrl(),                     // URL completa de la solicitud
+            'ua' => $request->userAgent(),                    // User Agent del cliente
+        ]));
     }
 }

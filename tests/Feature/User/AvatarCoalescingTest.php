@@ -37,7 +37,7 @@ final class AvatarCoalescingTest extends TestCase
         $mediaOld = Media::query()->create([
             'model_type' => User::class,
             'model_id' => $user->getKey(),
-            'uuid' => 'old',
+            'uuid' => '44444444-4444-4444-4444-444444444444',
             'collection_name' => 'avatar',
             'name' => 'avatar-old',
             'file_name' => 'avatar-old.jpg',
@@ -55,7 +55,7 @@ final class AvatarCoalescingTest extends TestCase
         $mediaNew = Media::query()->create([
             'model_type' => User::class,
             'model_id' => $user->getKey(),
-            'uuid' => 'new',
+            'uuid' => '55555555-5555-5555-5555-555555555555',
             'collection_name' => 'avatar',
             'name' => 'avatar-new',
             'file_name' => 'avatar-new.jpg',
@@ -130,7 +130,7 @@ final class AvatarCoalescingTest extends TestCase
         $mediaOld = Media::query()->create([
             'model_type' => User::class,
             'model_id' => $user->getKey(),
-            'uuid' => 'old',
+            'uuid' => '44444444-4444-4444-4444-444444444444',
             'collection_name' => 'avatar',
             'name' => 'avatar-old',
             'file_name' => 'avatar-old.jpg',
@@ -148,7 +148,7 @@ final class AvatarCoalescingTest extends TestCase
         $mediaNew = Media::query()->create([
             'model_type' => User::class,
             'model_id' => $user->getKey(),
-            'uuid' => 'new',
+            'uuid' => '55555555-5555-5555-5555-555555555555',
             'collection_name' => 'avatar',
             'name' => 'avatar-new',
             'file_name' => 'avatar-new.jpg',

@@ -8,6 +8,7 @@ use App\Application\Shared\Contracts\TenantContextInterface; // Contexto de tena
 use App\Domain\Uploads\UploadProfileId; // VO de perfil
 use App\Infrastructure\Models\User; // Modelo User para fallback de tenant
 use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator; // Generador tenant-first
+use App\Infrastructure\Uploads\Core\Paths\TenantPathLayout; // Layout común tenant-first
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles
 use Illuminate\Support\Str; // Helper de strings
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media de Spatie
@@ -22,6 +23,7 @@ final class TenantAwarePathGenerator implements PathGenerator // Implementa Path
         private readonly TenantContextInterface $tenantContext, // Contexto para tenant_id
         private readonly TenantPathGenerator $paths, // Generador de paths tenant-first
         private readonly UploadProfileRegistry $profiles, // Registro de perfiles
+        private readonly TenantPathLayout $layout, // Layout común para extraer directorios
     ) {
     }
 
@@ -39,9 +41,8 @@ final class TenantAwarePathGenerator implements PathGenerator // Implementa Path
 
         $unique = $media->getCustomProperty('upload_uuid') ?: $media->uuid; // Usa upload_uuid si existe
         $full = $this->paths->generate($profile, $ownerId, $ext, $versionInt, $unique); // Path completo con filename usando UUID
-        $dir = Str::beforeLast($full, '/'); // Directorio contenedor
 
-        return rtrim($dir, '/') . '/'; // Devuelve directorio con slash final
+        return $this->layout->baseDirectory($full); // Devuelve directorio con slash final
     }
 
     /**

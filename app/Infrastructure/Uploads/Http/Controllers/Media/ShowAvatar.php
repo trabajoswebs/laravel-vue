@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Http\Controllers\Media;
 
 use App\Infrastructure\Http\Controllers\Controller; // Base controller
+use App\Infrastructure\Uploads\Http\Support\MediaServingResponder;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile; // Perfil avatar
 use App\Infrastructure\Models\User; // Modelo User
-use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant
-use Illuminate\Contracts\Filesystem\Filesystem; // Contrato Filesystem
 use Illuminate\Http\Request; // Request HTTP
 use Illuminate\Support\Facades\Auth; // Facade Auth
 use Illuminate\Support\Facades\Gate; // Facade Gate
-use Illuminate\Support\Facades\Log; // Facade Log
 use Illuminate\Support\Facades\Storage; // Facade Storage
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media Spatie
 use Symfony\Component\HttpFoundation\Response; // Respuesta HTTP
@@ -41,9 +40,12 @@ final class ShowAvatar extends Controller
      * Constructor.
      *
      * @param AvatarProfile $profile The avatar profile containing collection configuration
+     * @param MediaServingResponder $responder Service for serving media files
      */
     public function __construct(
         private readonly AvatarProfile $profile,
+        private readonly MediaServingResponder $responder,
+        private readonly MediaSecurityLogger $securityLogger,
     ) {
     }
 
@@ -69,99 +71,81 @@ final class ShowAvatar extends Controller
      */
     public function __invoke(Request $request, Media $media): Response
     {
-        if (!config('media.signed_serve.enabled', false)) { // Si el serving firmado está deshabilitado
+        // Verifica si el serving firmado está habilitado en la configuración
+        if (!config('media.signed_serve.enabled', false)) {
             throw new NotFoundHttpException(__('media.errors.signed_serve_disabled')); // 404 para ocultar existencia
         }
 
-        $actor = Auth::user(); // Obtiene usuario autenticado
+        // Obtiene el usuario autenticado
+        $actor = Auth::user();
 
-        if (!$actor instanceof User) { // Si no hay user válido
+        if (!$actor instanceof User) { // Si no hay usuario válido
             throw new AccessDeniedHttpException(__('media.errors.invalid_signature')); // Restringe acceso
         }
 
-        $owner = $media->model; // Obtiene propietario del media
+        // Obtiene el propietario del media
+        $owner = $media->model;
 
         if (!$owner instanceof User) { // Valida que el owner sea User
             throw new NotFoundHttpException(__('media.errors.not_avatar_collection')); // Si no, no es avatar esperado
         }
 
-        $this->assertSameTenant($actor, $owner); // Verifica pertenencia al mismo tenant
-        $this->authorizeViewing($actor, $owner); // Verifica policy/tenant antes de firma
+        // Verifica que ambos usuarios pertenezcan al mismo tenant
+        $this->assertSameTenant($actor, $owner);
+        // Verifica autorización antes de validar la firma
+        $this->authorizeViewing($actor, $owner);
 
-        if (!$request->hasValidSignature()) { // Valida firma después de policy
+        // Valida la firma de la URL firmada
+        if (!$request->hasValidSignature()) {
             throw new AccessDeniedHttpException(__('media.errors.invalid_signature')); // Firma inválida
         }
 
-        $conversion = $this->resolveConversion($request); // Valida conversión solicitada
-        $this->assertBelongsToAvatarCollection($media); // Verifica colección avatar
-        [$disk, $relativePath] = $this->assertConversionExists($media, $conversion); // Verifica conversión y obtiene path
+        // Resuelve y valida el tipo de conversión solicitado
+        $conversion = $this->resolveConversion($request);
+        // Verifica que el media pertenece a la colección de avatar
+        $this->assertBelongsToAvatarCollection($media);
+        // Verifica que la conversión existe y obtiene los detalles de almacenamiento
+        [$disk, $relativePath] = $this->assertConversionExists($media, $conversion);
 
-        // Security hardening: normalize path and prevent directory traversal
+        // Refuerzo de seguridad: normaliza la ruta y previene traversals
         $relativePath = $this->sanitizePath($relativePath);
         
         /** @var \Illuminate\Filesystem\FilesystemAdapter $adapter */
         $adapter = Storage::disk($disk);
         $driver  = (string) config("filesystems.disks.{$disk}.driver");
 
-        // Detect MIME type with fallbacks
+        // Detecta tipo MIME con fallback a la ruta
         $mimeByPath = $this->guessMimeByPathname($relativePath)
             ?? $media->mime_type
             ?? 'application/octet-stream';
-        $localCacheControl = 'private, max-age=' . $this->localMaxAgeSeconds() . ', must-revalidate';
-        $s3CacheControl = 'private, max-age=0, no-store';
 
-        // Handle S3 storage with temporary signed URLs
-        if ($driver === 's3') {
-            try {
-                $ttlSeconds = $this->s3TemporaryUrlTtlSeconds(); // TTL único para URL temporal
-                $url = $adapter->temporaryUrl(
-                    $relativePath,
-                    now()->addSeconds($ttlSeconds), // TTL de URL temporal
-                    [
-                        'ResponseContentType'  => $mimeByPath,
-                        'ResponseCacheControl' => $s3CacheControl,
-                    ]
-                );
-                return redirect()->away($url, 302)->withHeaders([
-                    'Cache-Control' => $s3CacheControl,
-                    'X-Content-Type-Options' => 'nosniff',
-                ]);
-            } catch (\Throwable $e) {
+        try {
+            // Sirve el archivo usando el responder adecuado
+            return $this->responder->serve($disk, $relativePath, [
+                'Content-Type' => $mimeByPath,
+            ]);
+        } catch (\Throwable $e) {
+            if ($driver === 's3') {
                 // Nunca hacer streaming en S3: loguea y devuelve 404
-                logger()->warning('avatar_signed_url_failed', [
+                $this->securityLogger->warning('media.pipeline.failed', [
+                    'reason'  => 'avatar_signed_url_failed',
                     'message' => $e->getMessage(),
                     'disk'    => $disk,
                     'path'    => $relativePath,
                 ]);
-                throw new NotFoundHttpException(__('media.errors.missing_conversion'));
-            }
-        }
-
-        // Handle local and other filesystem drivers
-        $absolutePath = $adapter->path($relativePath);
-        $mime = $this->guessMimeLocal($absolutePath) ?? $mimeByPath;
-
-        try {
-            $response = response()->file($absolutePath, [
-                'Content-Type'            => $mime, // MIME final
-                'X-Content-Type-Options'  => 'nosniff', // Evita sniffing
-                'Cache-Control'           => $localCacheControl, // Cache local configurable
-            ]);
-            // BinaryFileResponse marca como public por defecto; forzamos privado.
-            $response->setPrivate();
-            $response->headers->set('Cache-Control', $localCacheControl);
-
-            return $response;
-        } catch (\Throwable $e) {
-            // Handle race condition where file disappeared between exists() and file()
-            if (config('app.debug')) {
-                report($e);
             } else {
-                logger()->warning('avatar_local_file_serve_failed', [
-                    'message' => $e->getMessage(),
-                    'path'    => $absolutePath,
-                ]);
+                // Maneja condición de carrera donde el archivo desapareció entre exists() y response()
+                if (config('app.debug')) {
+                    report($e);
+                } else {
+                    $this->securityLogger->warning('media.pipeline.failed', [
+                        'reason'  => 'avatar_local_file_serve_failed',
+                        'message' => $e->getMessage(),
+                        'path'    => $adapter->path($relativePath),
+                    ]);
+                }
             }
+
             throw new NotFoundHttpException(__('media.errors.missing_conversion'));
         }
     }
@@ -175,9 +159,11 @@ final class ShowAvatar extends Controller
      */
     private function resolveConversion(Request $request): string
     {
+        // Obtiene el tipo de conversión de la query string, por defecto 'thumb'
         $conversion = strtolower((string) $request->query('c', 'thumb'));
 
-        if (!in_array($conversion, self::ALLOWED_CONVERSIONS, true)) { // Conversion no permitida
+        // Verifica que la conversión esté en la lista permitida
+        if (!in_array($conversion, self::ALLOWED_CONVERSIONS, true)) { // Conversión no permitida
             throw new NotFoundHttpException(__('media.errors.invalid_conversion')); // 404 para ocultar
         }
 
@@ -192,8 +178,10 @@ final class ShowAvatar extends Controller
      */
     private function assertBelongsToAvatarCollection(Media $media): void
     {
+        // Obtiene el nombre de la colección del perfil de avatar
         $collection = $this->profile->collection();
 
+        // Verifica que el nombre de la colección del media coincida
         if ($media->collection_name !== $collection) { // Si la colección no coincide
             throw new NotFoundHttpException(__('media.errors.not_avatar_collection')); // 404 para ocultar existencia
         }
@@ -209,22 +197,26 @@ final class ShowAvatar extends Controller
      */
     private function assertConversionExists(Media $media, string $conversion): array
     {
+        // Determina el disco de conversiones o fallback al disco principal
         $disk = $media->conversions_disk
             ?: (string) config('media-library.conversions_disk', '')
             ?: $media->disk;
         $relativePath = '';
 
         try {
+            // Intenta obtener la ruta relativa de la conversión
             $relativePath = $media->getPathRelativeToRoot($conversion);
         } catch (\Throwable) {
+            // Si falla, se asigna cadena vacía
             $relativePath = '';
         }
 
+        // Verifica si la conversión existe y está disponible
         if ($relativePath !== '' && Storage::disk($disk)->exists($relativePath)) {
             return [$disk, $relativePath];
         }
 
-        // Fallback al original si la conversión no existe o no está lista aún.
+        // Fallback al archivo original si la conversión no existe o no está lista aún.
         $disk = $media->disk;
         try {
             $relativePath = $media->getPathRelativeToRoot();
@@ -248,16 +240,21 @@ final class ShowAvatar extends Controller
      */
     private function sanitizePath(string $path): string
     {
-        $path = str_replace('\\', '/', $path); // Normaliza separadores
-        $segments = array_filter(explode('/', $path), static fn($s) => $s !== '' && $s !== '.'); // Limpia segmentos
+        // Normaliza los separadores de directorio a '/'
+        $path = str_replace('\\', '/', $path);
+        // Filtra los segmentos de la ruta, eliminando vacíos y '.'
+        $segments = array_filter(explode('/', $path), static fn($s) => $s !== '' && $s !== '.'); 
 
-        if (in_array('..', $segments, true)) { // Bloquea traversal
+        // Bloquea intentos de traversals con '../'
+        if (in_array('..', $segments, true)) {
             throw new NotFoundHttpException(__('media.errors.invalid_path')); // 404 para ocultar
         }
 
-        $clean = implode('/', $segments); // Reconstruye path
+        // Reconstruye la ruta limpia
+        $clean = implode('/', $segments);
 
-        if (!str_contains($clean, $this->profile->collection())) { // Verifica prefijo colección
+        // Verifica que la ruta contenga el prefijo de la colección de avatar
+        if (!str_contains($clean, $this->profile->collection())) {
             throw new AccessDeniedHttpException(__('media.errors.invalid_path')); // Bloquea si no es avatar
         }
 
@@ -266,9 +263,13 @@ final class ShowAvatar extends Controller
 
     /**
      * Verifica que actor y owner compartan tenant o tengan override.
+     * 
+     * @param User $actor Usuario autenticado
+     * @param User $owner Propietario del media
      */
     private function assertSameTenant(User $actor, User $owner): void // Garantiza pertenencia a tenant
     {
+        // Obtiene los IDs de tenant del actor y del owner
         $actorTenant = $actor->current_tenant_id; // Tenant del actor
         $ownerTenant = $owner->current_tenant_id; // Tenant del owner
 
@@ -276,10 +277,12 @@ final class ShowAvatar extends Controller
             throw new AccessDeniedHttpException(__('media.errors.invalid_signature')); // Bloquea acceso
         }
 
-        if (!Gate::forUser($actor)->allows('use-current-tenant', $actor)) { // Valida que el actor pertenece a su tenant
+        // Valida que el actor pertenezca a su tenant actual
+        if (!Gate::forUser($actor)->allows('use-current-tenant', $actor)) {
             throw new AccessDeniedHttpException(__('media.errors.invalid_signature')); // Bloquea acceso
         }
 
+        // Verifica que ambos usuarios pertenezcan al mismo tenant
         if ((string) $actorTenant !== (string) $ownerTenant) { // Si tenants difieren
             throw new AccessDeniedHttpException(__('media.errors.invalid_signature')); // Bloquea acceso cross-tenant
         }
@@ -287,70 +290,16 @@ final class ShowAvatar extends Controller
 
     /**
      * Autoriza la visualización del avatar vía policy de usuario.
+     * 
+     * @param User $actor Usuario autenticado
+     * @param User $owner Propietario del media
      */
     private function authorizeViewing(User $actor, User $owner): void // Verifica policy de usuario
     {
+        // Verifica si el actor tiene permiso para ver al owner usando la policy
         if (!Gate::forUser($actor)->allows('view', $owner)) { // Usa policy User@view
             throw new AccessDeniedHttpException(__('media.errors.invalid_signature')); // Bloquea acceso
         }
-    }
-
-    /**
-     * Stream file content from disk for remote drivers without redirection support.
-     *
-     * @param Filesystem $adapter The filesystem adapter
-     * @param string $relativePath The relative path to the file
-     * @param string $mime The MIME type of the file
-     * @return Response Streamed response with file content
-     */
-    private function streamFromDisk(Filesystem $adapter, string $relativePath, string $mime, string $cacheControl): Response
-    {
-        $size = null;
-        try {
-            $size = $adapter->size($relativePath);
-        } catch (\Throwable) {
-            // Optional: continue without content length
-        }
-
-        /** @var Filesystem $adapter */
-        /** @var string $relativePath */
-        return response()->stream(function () use ($adapter, $relativePath): void {
-            $stream = $adapter->readStream($relativePath);
-            if ($stream === false || !is_resource($stream)) {
-                throw new NotFoundHttpException(__('media.errors.missing_conversion'));
-            }
-            try {
-                fpassthru($stream);
-            } finally {
-                if (is_resource($stream)) {
-                    fclose($stream);
-                }
-            }
-        }, 200, array_filter([
-            'Content-Type'            => $mime,
-            'X-Content-Type-Options'  => 'nosniff',
-            'Cache-Control'           => $cacheControl,
-            'Content-Length'          => is_int($size) ? (string) $size : null,
-        ]));
-    }
-
-    /**
-     * TTL en segundos para URLs/firmas y caché asociada.
-     */
-    private function localMaxAgeSeconds(): int
-    {
-        $seconds = (int) config('media-serving.local_max_age_seconds', 86400);
-        $seconds = $seconds > 0 ? $seconds : 86400;
-
-        return $seconds;
-    }
-
-    private function s3TemporaryUrlTtlSeconds(): int
-    {
-        $seconds = (int) config('media-serving.s3_temporary_url_ttl_seconds', 900);
-        $seconds = $seconds > 0 ? $seconds : 900;
-
-        return $seconds;
     }
 
     /**
@@ -361,70 +310,19 @@ final class ShowAvatar extends Controller
      */
     private function guessMimeByPathname(string $pathname): ?string
     {
+        // Obtiene la extensión del archivo y la convierte a minúsculas
         $extension = strtolower((string) pathinfo($pathname, PATHINFO_EXTENSION));
         if ($extension === '') {
             return null;
         }
 
+        // Crea instancia del detector de MIME types de Symfony
         $mimeTypes = new MimeTypes();
+        // Obtiene los tipos MIME posibles para la extensión
         $candidates = $mimeTypes->getMimeTypes($extension);
+        // Toma el primer candidato
         $detected = $candidates[0] ?? null;
 
         return is_string($detected) && $detected !== '' ? $detected : null;
-    }
-
-    /**
-     * Guess MIME type for local files with guaranteed resource cleanup.
-     *
-     * Uses multiple detection methods in order of reliability:
-     * 1. Symfony MimeTypes by extension
-     * 2. PHP finfo extension
-     * 3. PHP mime_content_type function
-     *
-     * @param string $absolutePath Absolute path to the local file
-     * @return string|null Detected MIME type or null if unknown
-     */
-    private function guessMimeLocal(string $absolutePath): ?string
-    {
-        if (!is_file($absolutePath)) {
-            return null;
-        }
-
-        $mimeTypes = new MimeTypes();
-        $detected = $mimeTypes->guessMimeType($absolutePath);
-        if (is_string($detected) && $detected !== '') {
-            return $detected;
-        }
-
-        // Use finfo extension if available
-        if (function_exists('finfo_open')) {
-            $resource = finfo_open(FILEINFO_MIME_TYPE);
-            if ($resource) {
-                try {
-                    $detected = finfo_file($resource, $absolutePath) ?: null;
-                } finally {
-                    finfo_close($resource);
-                }
-                if (is_string($detected) && $detected !== '') {
-                    return $detected;
-                }
-            }
-        }
-
-        // Fall back to mime_content_type with error suppression
-        if (function_exists('mime_content_type')) {
-            // Don't use @; install temporary error handler and always restore
-            set_error_handler(static fn() => true);
-            try {
-                $detected = mime_content_type($absolutePath) ?: null;
-            } finally {
-                restore_error_handler(); // always restore
-            }
-            if (is_string($detected) && $detected !== '') {
-                return $detected;
-            }
-        }
-
-        return null;
     }
 }

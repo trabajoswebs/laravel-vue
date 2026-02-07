@@ -7,6 +7,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Optimizer;
 use App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters\LocalOptimizationAdapter;
 use App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters\RemoteDownloader;
 use App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters\RemoteUploader;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
@@ -173,7 +174,8 @@ class OptimizerService
             $msg = (string) Str::of($e->getMessage())->limit(160);
             $reason = $this->resolveReasonCode($e);
 
-            Log::warning('optimizer_service_failed', [
+            $this->logWarning('media.pipeline.failed', [
+                'reason'   => 'optimizer_service_failed',
                 'media_id' => $media->id,
                 'disk'     => $diskName,
                 'target'   => $label,
@@ -293,7 +295,7 @@ class OptimizerService
                 try {
                     $disk->setVisibility($relativePath, $context['visibility']);
                 } catch (Throwable $e) {
-                    Log::debug('optimizer_service_restore_visibility_failed', [
+                    $this->logDebug('optimizer_service_restore_visibility_failed', [
                         'disk'      => $diskName,
                         'path'      => $relativePath,
                         'error'     => (string) Str::of($e->getMessage())->limit(120),
@@ -365,7 +367,7 @@ class OptimizerService
                 return $media->getPath();
             }
         } catch (Throwable $e) {
-            Log::debug('optimizer_service_safe_get_path_failed', [
+            $this->logDebug('optimizer_service_safe_get_path_failed', [
                 'media_id' => $media->id,
                 'error' => (string) Str::of($e->getMessage())->limit(120),
             ]);
@@ -391,7 +393,7 @@ class OptimizerService
             $name = Arr::get($media->toArray(), 'file_name');
             return $dir && $name ? trim((string) $dir, '/') . '/' . $name : null;
         } catch (Throwable $e) {
-            Log::debug('optimizer_service_safe_get_rel_failed', [
+            $this->logDebug('optimizer_service_safe_get_rel_failed', [
                 'media_id' => $media->id,
                 'error' => (string) Str::of($e->getMessage())->limit(120),
             ]);
@@ -416,7 +418,7 @@ class OptimizerService
                 $full = $media->getPath($conversion);
             }
         } catch (Throwable $e) {
-            Log::debug('optimizer_service_safe_get_conv_full_failed', [
+            $this->logDebug('optimizer_service_safe_get_conv_full_failed', [
                 'media_id' => $media->id,
                 'conv'     => $conversion,
                 'error'    => (string) Str::of($e->getMessage())->limit(120),
@@ -436,7 +438,7 @@ class OptimizerService
                 }
             }
         } catch (Throwable $e) {
-            Log::debug('optimizer_service_safe_get_conv_rel_failed', [
+            $this->logDebug('optimizer_service_safe_get_conv_rel_failed', [
                 'media_id' => $media->id,
                 'conv'     => $conversion,
                 'error'    => (string) Str::of($e->getMessage())->limit(120),
@@ -496,7 +498,7 @@ class OptimizerService
                     $options['visibility'] = $visibilityValue;
                 }
             } catch (Throwable $e) {
-                Log::debug('optimizer_service_visibility_lookup_failed', [
+                $this->logDebug('optimizer_service_visibility_lookup_failed', [
                     'disk' => $diskName,
                     'path' => $path,
                     'error' => (string) Str::of($e->getMessage())->limit(120),
@@ -565,6 +567,31 @@ class OptimizerService
 
         $normalized = strtolower(Str::slug($message, '_'));
         return $normalized !== '' ? $normalized : null;
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     */
+    private function logDebug(string $message, array $context): void
+    {
+        Log::debug($message, $this->safeContext($context));
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     */
+    private function logWarning(string $message, array $context): void
+    {
+        Log::warning($message, $this->safeContext($context));
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    private function safeContext(array $context): array
+    {
+        return app(MediaLogSanitizer::class)->safeContext($context);
     }
 
     /**

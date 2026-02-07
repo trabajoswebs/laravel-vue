@@ -33,16 +33,16 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
-            'throw' => false,
-            'report' => false,
+            'serve' => true,           // Permite servir archivos directamente
+            'throw' => false,          // No lanza excepciones si falla
+            'report' => false,         // No reporta errores al logger
         ],
 
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => env('APP_URL').'/storage',
-            'visibility' => 'public',
+            'url' => env('APP_URL').'/storage',  // URL base para archivos públicos
+            'visibility' => 'public',            // Archivos accesibles públicamente
             'throw' => false,
             'report' => false,
         ],
@@ -50,13 +50,13 @@ return [
         'avatars' => [
             'driver' => 'local',
             'root' => storage_path('app/private/avatars'),
-            'visibility' => 'private',
-            'permissions' => [
+            'visibility' => 'private',           // Archivos privados, acceso controlado
+            'permissions' => [                   // Permisos específicos para archivos privados
                 'file' => [
-                    'private' => 0600,
+                    'private' => 0600,          // Lectura/escritura solo para owner
                 ],
                 'dir' => [
-                    'private' => 0700,
+                    'private' => 0700,          // Lectura/escritura/ejecución solo para owner
                 ],
             ],
             'throw' => false,
@@ -66,8 +66,8 @@ return [
         'media_private' => [
             'driver' => 'local',
             'root' => storage_path('app/private/media'),
-            'visibility' => 'private',
-            'permissions' => [
+            'visibility' => 'private',           // Archivos multimedia privados
+            'permissions' => [                   // Permisos restringidos para media
                 'file' => [
                     'private' => 0600,
                 ],
@@ -75,7 +75,7 @@ return [
                     'private' => 0700,
                 ],
             ],
-            'serve' => false,
+            'serve' => false,                    // No se sirven directamente por Laravel
             'throw' => false,
             'report' => false,
         ],
@@ -83,8 +83,8 @@ return [
         'gallery' => [
             'driver' => 'local',
             'root' => storage_path('app/private/gallery'),
-            'visibility' => 'private',
-            'permissions' => [
+            'visibility' => 'private',           // Galería de imágenes privadas
+            'permissions' => [                   // Permisos restringidos para galería
                 'file' => [
                     'private' => 0600,
                 ],
@@ -96,11 +96,11 @@ return [
             'report' => false,
         ],
 
-        'quarantine' => [
+        'quarantine' => [                        // Disco para archivos en cuarentena
             'driver' => 'local',
             'root' => storage_path('app/private/quarantine'),
-            'visibility' => 'private',
-            'permissions' => [
+            'visibility' => 'private',           // Acceso altamente restringido
+            'permissions' => [                   // Máxima restricción para seguridad
                 'file' => [
                     'private' => 0600,
                 ],
@@ -112,30 +112,30 @@ return [
             'report' => false,
         ],
 
-        's3' => [
+        's3' => [                               // Disco principal en AWS S3
             'driver' => 's3',
-            'key' => env('AWS_ACCESS_KEY_ID'),
-            'secret' => env('AWS_SECRET_ACCESS_KEY'),
-            'region' => env('AWS_DEFAULT_REGION'),
-            'bucket' => env('AWS_BUCKET'),
-            'url' => env('AWS_URL'),
-            'endpoint' => env('AWS_ENDPOINT'),
-            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'visibility' => 'private',
+            'key' => env('AWS_ACCESS_KEY_ID'),  // Clave de acceso AWS
+            'secret' => env('AWS_SECRET_ACCESS_KEY'), // Secreto de acceso AWS
+            'region' => env('AWS_DEFAULT_REGION'),    // Región AWS
+            'bucket' => env('AWS_BUCKET'),            // Bucket S3
+            'url' => env('AWS_URL'),                  // URL personalizada (opcional)
+            'endpoint' => env('AWS_ENDPOINT'),        // Endpoint personalizado (opcional)
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false), // Formato de URL
+            'visibility' => 'private',                // Archivos privados por defecto
             'throw' => false,
             'report' => false,
         ],
 
-        's3_private' => [
+        's3_private' => [                       // Disco alternativo en AWS S3 para privados
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
             'secret' => env('AWS_SECRET_ACCESS_KEY'),
             'region' => env('AWS_DEFAULT_REGION'),
-            'bucket' => env('AWS_PRIVATE_BUCKET', env('AWS_BUCKET')),
-            'url' => env('AWS_PRIVATE_URL', env('AWS_URL')),
+            'bucket' => env('AWS_PRIVATE_BUCKET', env('AWS_BUCKET')), // Bucket privado o fallback al principal
+            'url' => env('AWS_PRIVATE_URL', env('AWS_URL')),         // URL privada o fallback
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'visibility' => 'private',
+            'visibility' => 'private',           // Asegura visibilidad privada
             'throw' => false,
             'report' => false,
         ],
@@ -154,7 +154,7 @@ return [
     */
 
     'links' => [
-        public_path('storage') => storage_path('app/public'),
+        public_path('storage') => storage_path('app/public'), // Enlace simbólico para acceder a archivos públicos
     ],
 
 ];

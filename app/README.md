@@ -44,6 +44,11 @@ Mapa rápido:
 3. Exponer endpoint: FormRequest específico + Controller que invoque `UploadFile` o `ReplaceFile`, pasando el `UploadProfile` resuelto desde el registry y el `HttpUploadedMedia`.
 4. Si `UploadKind::IMAGE`, definir colección/conversions en `Infrastructure/Uploads/Profiles/*` (y, si requiere, ajustes en `Pipeline/Image/*`); si no es imagen, solo ajustar políticas de descarga/visibilidad.
 
+## Nota rápida sobre tests y `config:cache`
+- No caches configuración antes de correr `artisan test`. `config:cache` fija la config del `.env` actual y los tests necesitan la de `phpunit.xml/.env.testing`.  
+- Antes de test: `./vendor/bin/sail artisan config:clear` (o `php artisan config:clear` sin Sail).  
+- Si cacheas para producción, limpia de nuevo antes de ejecutar la suite.
+
 ## Componentes deprecados/eliminados
 - `Infrastructure/Media/` → DEPRECATED. Vacío salvo `README.md`; toda la lógica vive en `Infrastructure/Uploads`.
 - Eliminados: `Application/Media/*` y `Domain/Media/*` (puertos/DTOs) fueron absorbidos por `Infrastructure/Uploads/Core/{Contracts,DTO,Services}`.

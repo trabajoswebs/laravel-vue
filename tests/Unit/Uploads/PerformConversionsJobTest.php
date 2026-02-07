@@ -27,7 +27,7 @@ final class PerformConversionsJobTest extends TestCase
         $media = Media::query()->create([
             'model_type' => User::class,
             'model_id' => $user->getKey(),
-            'uuid' => 'abc',
+            'uuid' => '33333333-3333-3333-3333-333333333333',
             'collection_name' => 'avatar',
             'name' => 'avatar',
             'file_name' => 'avatar.jpg',

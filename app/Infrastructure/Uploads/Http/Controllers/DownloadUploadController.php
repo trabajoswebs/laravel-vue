@@ -7,6 +7,7 @@ namespace App\Infrastructure\Uploads\Http\Controllers;
 use App\Application\Shared\Contracts\TenantContextInterface;
 use App\Infrastructure\Http\Controllers\Controller;
 use App\Infrastructure\Uploads\Core\Models\Upload;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -29,6 +30,7 @@ final class DownloadUploadController extends Controller
      */
     public function __construct(
         private readonly TenantContextInterface $tenantContext,
+        private readonly MediaSecurityLogger $securityLogger,
     ) {}
 
     /**
@@ -65,6 +67,11 @@ final class DownloadUploadController extends Controller
         if ($upload->profile_id === 'certificate_secret') {
             try {
                 Log::warning('secret_download_attempt', [
+                    'tenant_id' => (string) $tenantId,
+                    'upload_id' => (string) $upload->getKey(),
+                    'user_id' => (string) ($request->user()?->getKey() ?? ''),
+                ]);
+                $this->securityLogger->warning('media.security.secret_download_attempt', [
                     'tenant_id' => (string) $tenantId,
                     'upload_id' => (string) $upload->getKey(),
                     'user_id' => (string) ($request->user()?->getKey() ?? ''),

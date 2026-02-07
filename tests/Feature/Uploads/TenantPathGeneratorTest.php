@@ -25,7 +25,7 @@ class TenantPathGeneratorTest extends TestCase
         $media = Media::query()->create([
             'model_type' => \App\Infrastructure\Models\User::class,
             'model_id' => 7,
-            'uuid' => 'uuid-avatar',
+            'uuid' => '11111111-1111-1111-1111-111111111111',
             'collection_name' => 'avatar',
             'name' => 'avatar',
             'file_name' => 'v1.jpg',
