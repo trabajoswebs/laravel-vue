@@ -15,7 +15,8 @@ use Illuminate\Http\UploadedFile; // Clase para manejar archivos subidos
 use Illuminate\Cache\RedisStore; // Store de Redis para cache
 use Illuminate\Contracts\Cache\LockTimeoutException; // Excepción para timeout de lock
 use Illuminate\Support\Facades\Cache; // Facade para manejar cache
-use Illuminate\Support\Facades\Log; // Facade para registrar logs
+use App\Support\Logging\SecurityLogger;
+// Facade para registrar logs
 
 /**
  * Coordina la ejecución de escáneres y el circuito de disponibilidad.
@@ -33,6 +34,9 @@ final class ScanCoordinator implements ScanCoordinatorInterface
     private string $scanCircuitCacheKey; // Clave de cache para el circuit breaker
     private int $scanCircuitMaxFailures; // Número máximo de fallos antes de abrir el circuito
     private int $scanCircuitDecaySeconds; // Tiempo de decaimiento del circuit breaker en segundos
+    private int $scanRetryAttempts; // Reintentos para fallos transitorios de AV
+    private int $scanRetryBackoffMs; // Backoff base entre reintentos
+    private int $scanRetryJitterMs; // Jitter máximo sumado al backoff
 
     /**
      * Constructor del coordinador de escaneo.
@@ -54,6 +58,9 @@ final class ScanCoordinator implements ScanCoordinatorInterface
         $this->scanCircuitCacheKey    = (string) ($circuit['cache_key'] ?? 'image_scan:circuit_failures');
         $this->scanCircuitMaxFailures = max(1, (int) ($circuit['max_failures'] ?? 5));
         $this->scanCircuitDecaySeconds = max(60, (int) ($circuit['decay_seconds'] ?? 900));
+        $this->scanRetryAttempts = max(1, (int) (($this->scanConfig['retry_attempts'] ?? 1)));
+        $this->scanRetryBackoffMs = max(0, (int) ($this->scanConfig['retry_backoff_ms'] ?? 200));
+        $this->scanRetryJitterMs = max(0, (int) ($this->scanConfig['retry_jitter_ms'] ?? 100));
     }
 
     /**
@@ -63,7 +70,15 @@ final class ScanCoordinator implements ScanCoordinatorInterface
      */
     public function enabled(): bool
     {
-        return (bool) ($this->scanConfig['enabled'] ?? false);
+        $enabled = (bool) ($this->scanConfig['enabled'] ?? false);
+        $legacyEnabled = config('uploads.virus_scanning.enabled');
+
+        // Compatibilidad temporal: si el flag legacy está definido en false, deshabilita scanning.
+        if (is_bool($legacyEnabled) && $legacyEnabled === false) {
+            return false;
+        }
+
+        return $enabled;
     }
 
     /**
@@ -90,7 +105,7 @@ final class ScanCoordinator implements ScanCoordinatorInterface
         $this->resetScanFailures();
 
         // Registramos que el escaneo pasó
-        Log::info('image_upload.scan_passed', array_merge([
+        SecurityLogger::info('image_upload.scan_passed', array_merge([
             'scanners' => $this->activeScannerKeys(),
         ], $context));
     }
@@ -109,7 +124,7 @@ final class ScanCoordinator implements ScanCoordinatorInterface
 
         // Si el circuito está abierto, lanzamos excepción
         if ($this->isCircuitOpen()) {
-            Log::warning('image_upload.scan_circuit_open', [
+            SecurityLogger::warning('image_upload.scan_circuit_open', [
                 'max_failures' => $this->scanCircuitMaxFailures,
             ]);
 
@@ -146,7 +161,7 @@ final class ScanCoordinator implements ScanCoordinatorInterface
                 // Actualizamos el TTL del contador de fallos
                 $store->connection()->expire($this->scanCircuitCacheKey, $this->scanCircuitDecaySeconds);
             } catch (\Throwable $exception) {
-                Log::debug('image_upload.circuit_ttl_refresh_failed', ['error' => $exception->getMessage()]);
+                SecurityLogger::debug('image_upload.circuit_ttl_refresh_failed', ['error' => $exception->getMessage()]);
             }
 
             return;
@@ -215,25 +230,12 @@ final class ScanCoordinator implements ScanCoordinatorInterface
      */
     private function runScanners(UploadedFile $file, string $path, array $context = []): void
     {
-        static $skipLogged = false;
-
-        if (! config('uploads.virus_scanning.enabled', true)) {
-            if (! $skipLogged) {
-                Log::info('image_upload.scan_skipped', array_merge([
-                    'reason' => 'scan_disabled',
-                    'env' => app()->environment(),
-                ], $context));
-                $skipLogged = true;
-            }
-            return;
-        }
-
         $scanners = $this->resolveScanners();
 
         if ($scanners === []) {
             // Si no hay escáneres configurados, es un fallo técnico
             $this->recordScanFailure();
-            Log::error('image_upload.scan_missing_handlers', $context);
+            SecurityLogger::error('image_upload.scan_missing_handlers', $context);
             throw new ScanFailedException(__('media.uploads.scan_unavailable'));
         }
 
@@ -247,15 +249,18 @@ final class ScanCoordinator implements ScanCoordinatorInterface
 
         foreach ($scanners as $scanner) {
             try {
-                // Ejecutamos el escáner
-                $clean = $scanner($file, $context);
+                // Ejecutamos el escáner con reintentos acotados para errores transitorios.
+                $clean = $this->scanWithRetries($scanner, $file, $context);
             } catch (AntivirusException $exception) {
                 // Fallo crítico de antivirus (fail-closed)
                 $this->recordScanFailure();
+                $classification = $this->classifyAntivirusFailure($exception);
 
-                Log::error('image_upload.scanner_unavailable', array_merge([
+                SecurityLogger::error('image_upload.scanner_unavailable', array_merge([
                     'scanner' => $this->scannerName($scanner),
                     'reason' => $exception->reason(),
+                    'error_type' => $classification['error_type'],
+                    'retryable' => $classification['retryable'],
                     'fail_closed' => true,
                 ], $context));
 
@@ -264,8 +269,10 @@ final class ScanCoordinator implements ScanCoordinatorInterface
                 // Si el escáner falla técnicamente, registramos el fallo
                 $this->recordScanFailure();
 
-                Log::error('image_upload.scanner_failure', array_merge([
+                SecurityLogger::error('image_upload.scanner_failure', array_merge([
                     'scanner' => $this->scannerName($scanner),
+                    'error_type' => 'infra_unknown',
+                    'retryable' => false,
                     'error'   => $exception->getMessage(),
                 ], $context));
 
@@ -274,11 +281,48 @@ final class ScanCoordinator implements ScanCoordinatorInterface
 
             // Si el escáner devuelve false, hay malware
             if (!$clean) {
-                Log::warning('image_upload.scan_blocked', array_merge([
+                SecurityLogger::warning('image_upload.scan_blocked', array_merge([
                     'scanner' => $this->scannerName($scanner),
                 ], $context));
 
                 throw new VirusDetectedException(__('media.uploads.scan_blocked'));
+            }
+        }
+    }
+
+    /**
+     * @param callable(UploadedFile,array<string,mixed>):bool $scanner
+     * @param array<string,mixed> $context
+     */
+    private function scanWithRetries(callable $scanner, UploadedFile $file, array $context): bool
+    {
+        $attempt = 0;
+
+        while (true) {
+            ++$attempt;
+
+            try {
+                return (bool) $scanner($file, $context + ['attempt' => $attempt]);
+            } catch (AntivirusException $exception) {
+                $classification = $this->classifyAntivirusFailure($exception);
+                $canRetry = $classification['retryable'] && $attempt < $this->scanRetryAttempts;
+
+                if (! $canRetry) {
+                    throw $exception;
+                }
+
+                $retryDelayMs = $this->nextRetryDelayMs();
+                SecurityLogger::warning('image_upload.scanner_retry', array_merge([
+                    'scanner' => $this->scannerName($scanner),
+                    'attempt' => $attempt,
+                    'max_attempts' => $this->scanRetryAttempts,
+                    'reason' => $exception->reason(),
+                    'error_type' => $classification['error_type'],
+                    'retryable' => true,
+                    'retry_delay_ms' => $retryDelayMs,
+                ], $context));
+
+                $this->sleepBeforeRetry($retryDelayMs);
             }
         }
     }
@@ -303,11 +347,69 @@ final class ScanCoordinator implements ScanCoordinatorInterface
     /**
      * Obtiene el nombre de la clase del escáner sin namespace.
      *
-     * @param object $scanner Instancia del escáner
+     * @param object|callable $scanner Instancia del escáner
      * @return string Nombre del escáner en minúsculas
      */
-    private static function scannerName(object $scanner): string
+    private static function scannerName(object|callable $scanner): string
     {
+        if (! is_object($scanner)) {
+            return 'callable_scanner';
+        }
+
         return strtolower(class_basename($scanner));
+    }
+
+    /**
+     * @return array{error_type:string,retryable:bool}
+     */
+    private function classifyAntivirusFailure(AntivirusException $exception): array
+    {
+        $reason = strtolower(trim($exception->reason()));
+
+        if (in_array($reason, ['timeout', 'process_timeout'], true)) {
+            return ['error_type' => 'infra_timeout', 'retryable' => true];
+        }
+
+        if (in_array($reason, ['unreachable', 'connection_refused'], true)) {
+            return ['error_type' => 'infra_unavailable', 'retryable' => true];
+        }
+
+        if (in_array($reason, ['ruleset_invalid', 'ruleset_missing', 'rules_integrity_failed', 'rules_path_invalid', 'rules_missing'], true)) {
+            return ['error_type' => 'infra_ruleset', 'retryable' => false];
+        }
+
+        if (in_array($reason, ['binary_missing', 'build_failed'], true)) {
+            return ['error_type' => 'infra_config', 'retryable' => false];
+        }
+
+        if (in_array($reason, ['target_handle_invalid', 'target_handle_unseekable', 'target_missing_display_name', 'target_missing'], true)) {
+            return ['error_type' => 'infra_input', 'retryable' => false];
+        }
+
+        if (in_array($reason, ['process_exception', 'process_failed'], true)) {
+            return ['error_type' => 'infra_processing', 'retryable' => true];
+        }
+
+        if ($reason === 'file_too_large') {
+            return ['error_type' => 'infra_limits', 'retryable' => false];
+        }
+
+        return ['error_type' => 'infra_unknown', 'retryable' => false];
+    }
+
+    private function nextRetryDelayMs(): int
+    {
+        $jitter = $this->scanRetryJitterMs > 0 ? random_int(0, $this->scanRetryJitterMs) : 0;
+
+        return $this->scanRetryBackoffMs + $jitter;
+    }
+
+    private function sleepBeforeRetry(int $delayMs): void
+    {
+        if ($delayMs <= 0) {
+            return;
+        }
+
+        usleep($delayMs * 1000);
     }
 }

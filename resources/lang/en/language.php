@@ -14,6 +14,8 @@ return [
     'detection_error' => 'We couldn’t detect the language.',
     'cache_clear_error' => 'We couldn’t clear the translation cache.',
     'cache_prewarm_error' => 'We couldn’t preload the translation cache.',
+    'cache_clear_only_dev' => 'Translation cache can only be cleared in development or testing environments.',
+    'cache_clear_permission_denied' => 'You do not have permission to clear the translation cache.',
 
     // Informative messages
     'fallback_used' => 'Falling back to :locale',
@@ -37,6 +39,8 @@ return [
     'state_changed' => 'Language updated.',
     'state_error' => 'Couldn’t change the language.',
     'state_unsupported' => 'Language not available.',
+    'rate_limited' => 'Too many language changes. Please wait :seconds seconds before trying again.',
+    'invalid_locale' => 'The selected language is not valid.',
 
     // Language names
     'languages' => [

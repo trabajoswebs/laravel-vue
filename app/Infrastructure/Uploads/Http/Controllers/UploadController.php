@@ -15,7 +15,7 @@ use App\Infrastructure\Uploads\Http\Requests\ReplaceUploadRequest;
 use App\Infrastructure\Uploads\Http\Requests\StoreUploadRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use Symfony\Component\HttpFoundation\Response as HttpStatus;
 
 /**
@@ -62,7 +62,7 @@ final class UploadController extends Controller
             );
         } catch (\Throwable $e) {
             // Registra errores durante la subida de archivos
-            Log::error('uploads.store_failed', [
+            SecurityLogger::error('uploads.store_failed', [
                 'profile' => (string) $profile->id,
                 'error' => $e->getMessage(),
             ]);
@@ -135,7 +135,7 @@ final class UploadController extends Controller
             );
         } catch (\Throwable $e) {
             // Registra errores durante la operación de reemplazo
-            Log::error('uploads.replace_failed', [
+            SecurityLogger::error('uploads.replace_failed', [
                 'upload_id' => $uploadId,
                 'profile' => (string) $upload->profile_id,
                 'error' => $e->getMessage(),

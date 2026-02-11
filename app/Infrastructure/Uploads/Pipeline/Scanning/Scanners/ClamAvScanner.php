@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
 
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 
 /**
  * Escáner concreto que utiliza ClamAV para detectar malware o virus en archivos subidos.
@@ -144,7 +145,7 @@ final class ClamAvScanner extends AbstractScanner
         $allowlist = $this->allowedBinaries();
         if ($allowlist === []) {
             if (! $loggedMissing) {
-                Log::error('image_scan.clamav_binary_not_allowlisted', ['reason' => 'empty_allowlist']);
+                $this->logScan('error', 'image_scan.clamav_binary_not_allowlisted', ['reason' => 'empty_allowlist']);
                 $loggedMissing = true;
             }
             return null;
@@ -161,7 +162,7 @@ final class ClamAvScanner extends AbstractScanner
             $resolved = realpath($path);
             if ($resolved === false || $resolved === '') {
                 $failures[] = [
-                    'binary' => $path,
+                    'binary_path' => $path,
                     'reason' => 'missing',
                     'source' => $candidate['source'],
                 ];
@@ -172,7 +173,7 @@ final class ClamAvScanner extends AbstractScanner
 
             if (! in_array($normalized, $allowlist, true)) {
                 $failures[] = [
-                    'binary' => $normalized,
+                    'binary_path' => $normalized,
                     'reason' => 'not_allowlisted',
                     'source' => $candidate['source'],
                 ];
@@ -181,7 +182,7 @@ final class ClamAvScanner extends AbstractScanner
 
             if (! is_executable($resolved)) {
                 $failures[] = [
-                    'binary' => $normalized,
+                    'binary_path' => $normalized,
                     'reason' => 'not_executable',
                     'source' => $candidate['source'],
                 ];
@@ -189,8 +190,8 @@ final class ClamAvScanner extends AbstractScanner
             }
 
             if ($candidate['source'] !== 'primary') {
-                Log::info('image_scan.clamav_binary_selected', [
-                    'binary' => $normalized,
+                $this->logScan('debug', 'image_scan.clamav_binary_selected', [
+                    'binary_path' => $normalized,
                     'source' => $candidate['source'],
                 ]);
             }
@@ -198,7 +199,10 @@ final class ClamAvScanner extends AbstractScanner
             return $resolved;
         }
 
-        Log::error('image_scan.clamav_binary_unavailable', ['candidates' => $failures]);
+        $this->logScan('error', 'image_scan.clamav_binary_unavailable', [
+            'candidates' => $failures,
+            'result' => 'scan_failed',
+        ]);
 
         return null;
     }
@@ -226,12 +230,12 @@ final class ClamAvScanner extends AbstractScanner
         array $scannerConfig,
     ): ?array {
         if (! isset($target['handle']) || ! is_resource($target['handle'])) {
-            Log::error('image_scan.clamav_invalid_target_handle', ['target' => array_keys($target)]);
+            $this->logScan('error', 'image_scan.clamav_invalid_target_handle', ['target' => array_keys($target)]);
             return null;
         }
 
         if (! isset($target['display_name']) || ! is_string($target['display_name'])) {
-            Log::error('image_scan.clamav_invalid_target_display_name');
+            $this->logScan('error', 'image_scan.clamav_invalid_target_display_name');
             return null;
         }
 
@@ -404,7 +408,7 @@ final class ClamAvScanner extends AbstractScanner
         $stats = fstat($handle);
         restore_error_handler();
         if ($stats === false) {
-            Log::warning('image_scan.clamav_temp_stat_failed', [
+            $this->logScan('warning', 'image_scan.clamav_temp_stat_failed', [
                 'file' => $displayName,
                 'error' => $fstatError,
             ]);
@@ -417,7 +421,7 @@ final class ClamAvScanner extends AbstractScanner
             && isset($stats['size'])
             && $stats['size'] > $sizeLimit
         ) {
-            Log::warning('image_scan.clamav_temp_size_exceeded', [
+            $this->logScan('warning', 'image_scan.clamav_temp_size_exceeded', [
                 'file' => $displayName,
                 'size' => $stats['size'],
                 'limit' => $sizeLimit,
@@ -440,13 +444,13 @@ final class ClamAvScanner extends AbstractScanner
             $copySucceeded = $this->copyStreamWithLimit($handle, $out, $sizeLimit, $displayName);
         } finally {
             if (fclose($out) === false) {
-                Log::error('image_scan.clamav_temp_close_failed', ['file' => $displayName]);
+                $this->logScan('error', 'image_scan.clamav_temp_close_failed', ['file' => $displayName]);
                 $copySucceeded = false;
             }
 
             if (! $copySucceeded) {
                 if (file_exists($tempPath) && ! unlink($tempPath)) {
-                    Log::warning('image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
+                    $this->logScan('warning', 'image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
                 }
             }
         }
@@ -457,22 +461,25 @@ final class ClamAvScanner extends AbstractScanner
 
         if (! chmod($tempPath, 0600)) { // Solo lectura/escritura para el propietario.
             if (file_exists($tempPath) && ! unlink($tempPath)) {
-                Log::warning('image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
+                $this->logScan('warning', 'image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
             }
-            Log::error('image_scan.clamav_temp_chmod_failed', ['file' => $displayName]);
+            $this->logScan('error', 'image_scan.clamav_temp_chmod_failed', ['file' => $displayName]);
             return null;
         }
 
         // Cierra el handle original después de la copia
         if (fclose($handle) === false) {
-            Log::warning('image_scan.clamav_source_close_failed', ['file' => $displayName]);
+            $this->logScan('warning', 'image_scan.clamav_source_close_failed', ['file' => $displayName]);
         }
 
         return [
             'path' => $tempPath,
             'cleanup' => static function () use ($tempPath): void {
                 if (file_exists($tempPath) && ! unlink($tempPath)) {
-                    Log::warning('image_scan.clamav_temp_cleanup_failed', ['path' => $tempPath]);
+                    app(MediaSecurityLogger::class)->warning('image_scan.clamav_temp_cleanup_failed', [
+                        'scanner_name' => 'clamav',
+                        'path' => $tempPath,
+                    ]);
                 }
             },
         ];
@@ -488,7 +495,7 @@ final class ClamAvScanner extends AbstractScanner
     {
         $directory = rtrim((string) sys_get_temp_dir(), DIRECTORY_SEPARATOR);
         if ($directory === '') {
-            Log::error('image_scan.clamav_temp_dir_invalid', ['file' => $displayName]);
+            $this->logScan('error', 'image_scan.clamav_temp_dir_invalid', ['file' => $displayName]);
             return null;
         }
 
@@ -498,7 +505,7 @@ final class ClamAvScanner extends AbstractScanner
             try {
                 $name = 'clam_scan_' . bin2hex(random_bytes(16));
             } catch (\Throwable $exception) {
-                Log::error('image_scan.clamav_temp_random_failed', [
+                $this->logScan('error', 'image_scan.clamav_temp_random_failed', [
                     'file' => $displayName,
                     'message' => $exception->getMessage(),
                 ]);
@@ -524,7 +531,7 @@ final class ClamAvScanner extends AbstractScanner
             $lastOpenError = $openError;
         }
 
-        Log::error('image_scan.clamav_temp_open_failed', [
+        $this->logScan('error', 'image_scan.clamav_temp_open_failed', [
             'file' => $displayName,
             'error' => $lastOpenError,
         ]);
@@ -591,7 +598,7 @@ final class ClamAvScanner extends AbstractScanner
         while (! feof($source)) {
             $chunk = fread($source, $chunkSize);
             if ($chunk === false) {
-                Log::error('image_scan.clamav_temp_read_failed', ['file' => $displayName]);
+                $this->logScan('error', 'image_scan.clamav_temp_read_failed', ['file' => $displayName]);
                 return false;
             }
 
@@ -599,12 +606,12 @@ final class ClamAvScanner extends AbstractScanner
                 $emptyReads++;
                 $meta = stream_get_meta_data($source);
                 if (is_array($meta) && ! empty($meta['timed_out'])) {
-                    Log::warning('image_scan.clamav_temp_source_timeout', ['file' => $displayName]);
+                    $this->logScan('warning', 'image_scan.clamav_temp_source_timeout', ['file' => $displayName]);
                     return false;
                 }
 
                 if ($emptyReads >= $maxEmptyReads) {
-                    Log::warning('image_scan.clamav_temp_empty_reads_limit', [
+                    $this->logScan('warning', 'image_scan.clamav_temp_empty_reads_limit', [
                         'file' => $displayName,
                         'attempts' => $emptyReads,
                     ]);
@@ -618,7 +625,7 @@ final class ClamAvScanner extends AbstractScanner
             $emptyReads = 0;
             $chunkLength = strlen($chunk);
             if ($maxBytes !== null && ($bytesCopied + $chunkLength) > $maxBytes) {
-                Log::warning('image_scan.clamav_temp_size_exceeded', [
+                $this->logScan('warning', 'image_scan.clamav_temp_size_exceeded', [
                     'file' => $displayName,
                     'limit' => $maxBytes,
                     'copied_bytes' => $bytesCopied,
@@ -628,7 +635,7 @@ final class ClamAvScanner extends AbstractScanner
 
             $written = fwrite($destination, $chunk);
             if ($written === false || $written !== $chunkLength) {
-                Log::error('image_scan.clamav_temp_write_failed', ['file' => $displayName]);
+                $this->logScan('error', 'image_scan.clamav_temp_write_failed', ['file' => $displayName]);
                 return false;
             }
 

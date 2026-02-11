@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Providers;
 
+use App\Support\Logging\SecurityLogger;
 use App\Infrastructure\Uploads\Http\Middleware\RateLimitUploads;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Routing\Router;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -20,6 +22,9 @@ use InvalidArgumentException;
  */
 final class ImagePipelineServiceProvider extends ServiceProvider
 {
+    private ?MediaSecurityLogger $securityLogger = null;
+    private ?MediaLogSanitizer $logSanitizer = null;
+
     public function boot(): void
     {
         /** @var Router $router */
@@ -84,7 +89,7 @@ final class ImagePipelineServiceProvider extends ServiceProvider
             }
 
             // En producción, registra un log crítico y aplica valores seguros.
-            Log::critical('image_pipeline.invalid_configuration', [
+            $this->securityLogger()->critical('image_pipeline.invalid_configuration', [
                 'issues' => array_unique($failures),
             ]);
         }
@@ -115,7 +120,11 @@ final class ImagePipelineServiceProvider extends ServiceProvider
             }
 
             config(['image-pipeline.scan.allowed_base_path' => rtrim($fallbackPath, DIRECTORY_SEPARATOR)]);
-            Log::warning('image_pipeline.base_path_fallback', ['base' => $base, 'fallback' => $fallbackPath]);
+            $this->securityLogger()->debug('media.pipeline.boot', [
+                'event' => 'image_pipeline.base_path_fallback',
+                'base_path' => $base,
+                'fallback_path' => $fallbackPath,
+            ]);
         }
     }
 
@@ -144,7 +153,11 @@ final class ImagePipelineServiceProvider extends ServiceProvider
             }
 
             config(['image-pipeline.scan.allowed_rules_base_path' => rtrim($fallbackBase, DIRECTORY_SEPARATOR)]);
-            Log::warning('image_pipeline.rules_base_fallback', ['base' => $rulesBase, 'fallback' => $fallbackBase]);
+            $this->securityLogger()->debug('media.pipeline.boot', [
+                'event' => 'image_pipeline.rules_base_fallback',
+                'base_path' => $rulesBase,
+                'fallback_path' => $fallbackBase,
+            ]);
         }
     }
 
@@ -210,7 +223,7 @@ final class ImagePipelineServiceProvider extends ServiceProvider
         }
 
         $normalized = array_values(array_unique($normalized));
-        $customAllowlist = trim((string) env('IMG_SCAN_BIN_ALLOWLIST', '')) !== '';
+        $customAllowlist = (bool) ($scanConfig['bin_allowlist_from_env'] ?? false);
         $strict = (bool) ($scanConfig['strict'] ?? false);
 
         if ($normalized === []) {
@@ -244,9 +257,10 @@ final class ImagePipelineServiceProvider extends ServiceProvider
                 }
 
                 if ($hadInput && ! $loggedInvalid) {
-                    Log::warning('image_pipeline.binary_allowlist_invalid', [
+                    $this->securityLogger()->warning('media.pipeline.boot', [
+                        'event' => 'image_pipeline.binary_allowlist_invalid',
                         'custom' => $customAllowlist,
-                        'candidates' => $invalidEntries,
+                        'candidates' => $this->hashBinaryEntries($invalidEntries),
                     ]);
                     $loggedInvalid = true;
                 }
@@ -254,10 +268,14 @@ final class ImagePipelineServiceProvider extends ServiceProvider
                 return;
             }
 
-            Log::info('image_pipeline.binary_allowlist_fallback', [
-                'used_fallbacks' => $normalized,
+            $this->securityLogger()->debug('media.pipeline.boot', [
+                'event' => 'image_pipeline.binary_allowlist_fallback',
+                'used_fallback_hashes' => array_map(
+                    fn (string $path): string => $this->logSanitizer()->hashPath($path),
+                    $normalized
+                ),
                 'custom' => $customAllowlist,
-                'discarded' => $invalidEntries,
+                'discarded' => $this->hashBinaryEntries($invalidEntries),
             ]);
         }
 
@@ -266,14 +284,15 @@ final class ImagePipelineServiceProvider extends ServiceProvider
 
         if ($invalidEntries !== []) {
             $payload = [
+                'event' => 'image_pipeline.binary_allowlist_filtered',
                 'discarded_total' => count($invalidEntries),
-                'filtered' => array_slice($invalidEntries, 0, 5),
+                'filtered' => array_slice($this->hashBinaryEntries($invalidEntries), 0, 5),
             ];
 
             if ($customAllowlist) {
-                Log::info('image_pipeline.binary_allowlist_filtered', $payload);
+                $this->securityLogger()->warning('media.pipeline.boot', $payload);
             } else {
-                Log::debug('image_pipeline.binary_allowlist_filtered', $payload);
+                $this->securityLogger()->debug('media.pipeline.boot', $payload);
             }
         }
     }
@@ -291,5 +310,33 @@ final class ImagePipelineServiceProvider extends ServiceProvider
         $normalized = preg_replace('#/\./#', '/', $normalized) ?? $normalized;
 
         return rtrim($normalized, '/') ?: '/';
+    }
+
+    /**
+     * @param list<array{binary: string, reason: string}> $entries
+     * @return list<array{binary_hash: string, reason: string}>
+     */
+    private function hashBinaryEntries(array $entries): array
+    {
+        $hashed = [];
+
+        foreach ($entries as $entry) {
+            $hashed[] = [
+                'binary_hash' => $this->logSanitizer()->hashPath((string) ($entry['binary'] ?? '')),
+                'reason' => (string) ($entry['reason'] ?? 'unknown'),
+            ];
+        }
+
+        return $hashed;
+    }
+
+    private function securityLogger(): MediaSecurityLogger
+    {
+        return $this->securityLogger ??= $this->app->make(MediaSecurityLogger::class);
+    }
+
+    private function logSanitizer(): MediaLogSanitizer
+    {
+        return $this->logSanitizer ??= $this->app->make(MediaLogSanitizer::class);
     }
 }

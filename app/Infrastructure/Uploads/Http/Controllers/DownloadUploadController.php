@@ -10,7 +10,7 @@ use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -66,12 +66,7 @@ final class DownloadUploadController extends Controller
         // Log y bloqueo explícito de secretos antes de la policy para auditoría
         if ($upload->profile_id === 'certificate_secret') {
             try {
-                Log::warning('secret_download_attempt', [
-                    'tenant_id' => (string) $tenantId,
-                    'upload_id' => (string) $upload->getKey(),
-                    'user_id' => (string) ($request->user()?->getKey() ?? ''),
-                ]);
-                $this->securityLogger->warning('media.security.secret_download_attempt', [
+                SecurityLogger::warning('secret_download_attempt', [
                     'tenant_id' => (string) $tenantId,
                     'upload_id' => (string) $upload->getKey(),
                     'user_id' => (string) ($request->user()?->getKey() ?? ''),

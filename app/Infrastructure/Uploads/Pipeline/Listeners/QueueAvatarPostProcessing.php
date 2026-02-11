@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Listeners;
 
-use App\Application\Shared\Contracts\ClockInterface;
 use App\Application\Shared\Contracts\LoggerInterface;
-use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia; // Job de post-proceso; ej. optimiza media
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor por usuario
-use Illuminate\Support\Facades\Redis; // Redis para lock/coalescing por usuario
 use Illuminate\Support\Str; // Generar UUIDs; ej. Str::uuid()
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media; ej. Media #5
 
@@ -18,7 +15,7 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media; ej. Medi
  *
  * Características:
  * - No implementa ShouldQueue para reducir overhead y puntos de fallo.
- * - Implementa debounce con Cache::add() para evitar múltiples dispatchs rápidos (1 job por media cada 30s).
+ * - Implementa debounce/coalescing vía ProcessLatestAvatar::enqueueOnce() (lock Redis por tenant/user).
  * - Utiliza configuración centralizada vía config/image-pipeline.php (colecciones y conversiones).
  * - Incluye Correlation ID para trazabilidad end-to-end con el Job.
  *
@@ -52,7 +49,6 @@ final class QueueAvatarPostProcessing
      */
     public function __construct(
         private readonly LoggerInterface $logger,
-        private readonly ClockInterface $clock,
     ) {
         // Resuelve y almacena las colecciones y conversiones desde la configuración
         $this->collections = $this->resolveCollectionsFromConfig();
@@ -165,6 +161,17 @@ final class QueueAvatarPostProcessing
             return; // Sale si la colección no está permitida
         }
 
+        // 3) Si el evento trae conversionName explícito y no está permitido, ignora.
+        if (is_string($conversionName) && $conversionName !== '' && !in_array($conversionName, $this->conversions, true)) {
+            $this->logger->debug('ppam_listener_skip_conversion', [
+                'media_id'         => $media->id,
+                'collection'       => $collection,
+                'conversion_fired' => $conversionName,
+                'expected'         => $this->conversions,
+            ]);
+            return;
+        }
+
         // 3) Genera un Correlation ID para trazabilidad entre el listener y el job
         $correlationId = (string) Str::uuid();
 
@@ -187,25 +194,10 @@ final class QueueAvatarPostProcessing
             $media->getCustomProperty('correlation_id') ?? $correlationId
         );
 
-        // 5) Intentar adquirir el lock por (tenant,user); si se obtiene, encola el job.
+        // 5) Reutiliza el coalescing centralizado para evitar drift entre listeners.
         $lockKey = sprintf('ppam:avatar:lock:%s:%s', $tenantId, $media->model_id);
-        try {
-            $acquired = Redis::set($lockKey, '1', 'EX', 60, 'NX');
-        } catch (\Throwable $e) {
-            $this->logger->warning('ppam_listener_cache_unavailable', [
-                'media_id'         => $media->id,
-                'user_id'          => $media->model_id,
-                'tenant_id'        => $tenantId,
-                'error'            => $e->getMessage(),
-                'degraded'         => true,
-                'conversion_fired' => $conversionName,
-            ]);
-            $acquired = true; // degradar a dispatch para no perder el procesamiento
-        }
-
-        if ($acquired) {
-            ProcessLatestAvatar::dispatch($tenantId, $media->model_id);
-        } else {
+        $enqueued = ProcessLatestAvatar::enqueueOnce($tenantId, $media->model_id);
+        if (!$enqueued) {
             $this->logger->debug('ppam_listener_debounced', [
                 'media_id'         => $media->id,
                 'user_id'          => $media->model_id,
@@ -235,6 +227,7 @@ final class QueueAvatarPostProcessing
             'latest_key'       => sprintf('ppam:avatar:last:%s:%s', $tenantId, $media->model_id),
             'lock_key'         => $lockKey,
             'coalesced'        => true,
+            'enqueued'         => $enqueued,
         ]);
     }
 }

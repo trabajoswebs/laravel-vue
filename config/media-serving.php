@@ -35,5 +35,8 @@ return [
     |
     */
     'local_max_age_seconds' => (int) env('MEDIA_LOCAL_MAX_AGE_SECONDS', 86400),
-    's3_temporary_url_ttl_seconds' => (int) env('MEDIA_S3_TEMPORARY_URL_TTL_SECONDS', 900),
+    'temporary_url_ttl_seconds' => (int) env(
+        'MEDIA_TEMPORARY_URL_TTL_SECONDS',
+        env('MEDIA_S3_TEMPORARY_URL_TTL_SECONDS', 900),
+    ),
 ];

@@ -21,7 +21,9 @@ use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;
+use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
+use App\Infrastructure\Uploads\Profiles\GalleryProfile;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -145,8 +147,8 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
 
         $raw = $mediaResult->raw();
 
-        if (!method_exists($raw, 'getPath')) {
-            throw new RuntimeException('Media result is incompatible with Spatie path resolution');
+        if (!method_exists($raw, 'getPathRelativeToRoot')) {
+            throw new RuntimeException('Media result is incompatible with tenant-first path requirements');
         }
 
         $tenantId = $this->tenantContext->requireTenantId();
@@ -163,7 +165,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
 
         $raw->save();
 
-        $path = $raw->getPath(); // Ojo: en Spatie suele ser path absoluto; para downloads normalmente quieres path relativo+disk.
+        $path = $this->resolveTenantFirstMediaPath($raw, $tenantId);
         $disk = (string) $raw->disk;
         $mime = (string) ($raw->mime_type ?? 'application/octet-stream');
         $size = (int) ($raw->size ?? 0);
@@ -219,29 +221,45 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
         $path = $this->paths->generate($profile, $ownerId, $extension);
         $storage = Storage::disk($disk);
 
-        $checksum = null;
-        $finalSize = 0;
+        $realPath = $quarantined->getRealPath();
+        if (!is_string($realPath) || $realPath === '' || !is_file($realPath)) {
+            throw new RuntimeException('No se pudo resolver el archivo en cuarentena');
+        }
+
+        $checksum = hash_file('sha256', $realPath) ?: null;
+        $finalSize = (int) ($quarantined->getSize() ?? 0);
+        $stored = false;
 
         try {
-            if ($profile->scanMode !== ScanMode::DISABLED && config('uploads.virus_scanning.enabled', true)) {
+            if ($profile->scanMode !== ScanMode::DISABLED) {
                 $this->scanner->scan($quarantined, $token->path, [
                     'profile' => (string) $profile->id,
                     'correlation_id' => $correlationId,
                 ]);
             }
 
-            $handle = fopen($quarantined->getRealPath(), 'rb');
+            $handle = fopen($realPath, 'rb');
             if ($handle === false) {
                 throw new RuntimeException('No se pudo abrir el archivo en cuarentena');
             }
 
-            $storage->put($path, $handle);
-            fclose($handle);
+            try {
+                $writeOk = $storage->put($path, $handle);
+                if ($writeOk === false) {
+                    throw new RuntimeException('No se pudo persistir el archivo en storage');
+                }
+                $stored = true;
+            } finally {
+                fclose($handle);
+            }
 
-            $absolute = $storage->path($path);
-            if (is_string($absolute) && is_file($absolute)) {
-                $checksum = hash_file('sha256', $absolute);
-                $finalSize = filesize($absolute) ?: 0;
+            try {
+                $remoteSize = $storage->size($path);
+                if (is_int($remoteSize) && $remoteSize > 0) {
+                    $finalSize = $remoteSize;
+                }
+            } catch (\Throwable) {
+                // Algunos adapters no resuelven size() de forma consistente.
             }
 
             $metadata = new UploadMetadata(
@@ -274,6 +292,15 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
             $this->uploads->store($result, $profile, $actor, $ownerId);
 
             return $result;
+        } catch (\Throwable $exception) {
+            if ($stored) {
+                try {
+                    $storage->delete($path);
+                } catch (\Throwable) {
+                    // rollback best-effort
+                }
+            }
+            throw $exception;
         } finally {
             $this->quarantine->delete($token);
         }
@@ -289,7 +316,6 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
     private function extensionFor(UploadProfile $profile, UploadedFile $file): string
     {
         $clientExt = strtolower((string) $file->getClientOriginalExtension());
-        $mime = strtolower((string) ($file->getMimeType() ?? ''));
 
         return match ((string) $profile->pathCategory) {
             'documents' => 'pdf',
@@ -311,53 +337,38 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
      */
     private function validateDocument(UploadProfile $profile, UploadedFile $file): void
     {
-        $size = $file->getSize();
-
-        if ($size === null && is_string($file->getRealPath()) && is_file($file->getRealPath())) {
-            $size = filesize((string) $file->getRealPath());
-        }
-
-        $size = (int) ($size ?? 0);
-
-        if ($size <= 0 || $size > (int) $profile->maxBytes) {
-            if (!app()->runningUnitTests()) {
-                throw new InvalidArgumentException('Tamaño de archivo no permitido para el perfil');
-            }
-            return;
-        }
-
-        $mime = strtolower((string) ($file->getMimeType() ?? ''));
-
-        if ($mime === '' && $file->getClientMimeType()) {
-            $mime = strtolower((string) $file->getClientMimeType());
-        }
-
-        if ($mime === '' || !in_array($mime, array_map('strtolower', $profile->allowedMimes), true)) {
-            if (!app()->runningUnitTests()) {
-                throw new InvalidArgumentException('MIME no permitido para el perfil');
-            }
-            return;
-        }
-
-        $handle = fopen($file->getRealPath(), 'rb');
-        if ($handle === false) {
+        $realPath = $file->getRealPath();
+        if (!is_string($realPath) || $realPath === '' || !is_file($realPath)) {
             throw new InvalidArgumentException('No se pudo leer el archivo subido');
         }
 
-        $magic = fread($handle, 4);
-        fclose($handle);
-
-        if (app()->environment('testing')) {
-            return;
+        $size = $file->getSize();
+        if ($size === null) {
+            $size = filesize($realPath);
         }
 
-        $bytes = $magic !== false ? bin2hex($magic) : '';
+        $size = (int) ($size ?? 0);
+        if ($size <= 0 || $size > (int) $profile->maxBytes) {
+            throw new InvalidArgumentException('Tamaño de archivo no permitido para el perfil');
+        }
+
+        $mime = $this->detectTrustedDocumentMime($file, $realPath);
+        $allowedMimes = array_values(array_unique(array_filter(array_map(
+            static fn(string $value): ?string => MimeNormalizer::normalize($value),
+            $profile->allowedMimes
+        ))));
+        if ($mime === null || !in_array($mime, $allowedMimes, true)) {
+            throw new InvalidArgumentException('MIME no permitido para el perfil');
+        }
+
+        $magic = $this->readMagicPrefix($realPath, 8);
+        $bytes = $magic !== '' ? bin2hex($magic) : '';
 
         $signatureOk = match ((string) $profile->pathCategory) {
-            'documents' => str_starts_with(strtoupper((string) $magic), '%PDF'),
-            'spreadsheets' => $bytes === '504b0304',
+            'documents' => str_starts_with($magic, '%PDF'),
+            'spreadsheets' => str_starts_with($bytes, '504b0304'),
             'imports' => $mime === 'text/csv' || $mime === 'text/plain',
-            'secrets' => $bytes !== '',
+            'secrets' => $this->isAcceptedSecretPayload($mime, (string) $file->getClientOriginalExtension(), $bytes),
             default => false,
         };
 
@@ -374,7 +385,87 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
      */
     private function resolveMediaProfile(UploadProfile $profile): MediaProfile
     {
-        return $this->avatarProfile;
+        return match ((string) $profile->id) {
+            'avatar_image' => $this->avatarProfile,
+            'gallery_image' => app(GalleryProfile::class),
+            default => throw new InvalidArgumentException('Perfil de imagen no soportado: ' . (string) $profile->id),
+        };
+    }
+
+    private function resolveTenantFirstMediaPath(object $media, int|string $tenantId): string
+    {
+        if (!method_exists($media, 'getPathRelativeToRoot')) {
+            throw new RuntimeException('Media result is incompatible with tenant-first path requirements');
+        }
+
+        $rawPath = (string) $media->getPathRelativeToRoot();
+        $normalized = str_replace('\\', '/', trim($rawPath));
+        $segments = array_values(array_filter(explode('/', $normalized), static fn(string $segment): bool => $segment !== '' && $segment !== '.'));
+
+        if ($segments === [] || in_array('..', $segments, true)) {
+            throw new RuntimeException('Invalid media relative path');
+        }
+
+        $clean = implode('/', $segments);
+        $expectedPrefix = 'tenants/' . (string) $tenantId . '/';
+        if (!str_starts_with($clean, $expectedPrefix)) {
+            throw new RuntimeException('Media path must be tenant-first');
+        }
+
+        return $clean;
+    }
+
+    private function detectTrustedDocumentMime(UploadedFile $file, string $realPath): ?string
+    {
+        $trusted = null;
+        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo !== false) {
+            try {
+                $mime = finfo_file($finfo, $realPath);
+                $trusted = MimeNormalizer::normalize(is_string($mime) ? $mime : null);
+            } finally {
+                finfo_close($finfo);
+            }
+        }
+
+        $fallback = MimeNormalizer::normalize($file->getMimeType());
+
+        if ($trusted === null || ($trusted === 'application/octet-stream' && $fallback !== null && $fallback !== 'application/octet-stream')) {
+            return $fallback;
+        }
+
+        return $trusted;
+    }
+
+    private function readMagicPrefix(string $path, int $bytes): string
+    {
+        $handle = fopen($path, 'rb');
+        if ($handle === false) {
+            return '';
+        }
+
+        try {
+            $data = fread($handle, $bytes);
+        } finally {
+            fclose($handle);
+        }
+
+        return is_string($data) ? $data : '';
+    }
+
+    private function isAcceptedSecretPayload(?string $mime, string $clientExtension, string $magicHex): bool
+    {
+        $normalizedExtension = strtolower(trim($clientExtension));
+        if ($normalizedExtension === '' || !in_array($normalizedExtension, ['p12', 'pfx'], true)) {
+            return false;
+        }
+
+        if ($mime !== null && !in_array($mime, ['application/x-pkcs12', 'application/octet-stream'], true)) {
+            return false;
+        }
+
+        // PKCS#12 suele venir como ASN.1 DER SEQUENCE con longitud explícita (30 82 ...).
+        return str_starts_with($magicHex, '3082');
     }
 
     /**

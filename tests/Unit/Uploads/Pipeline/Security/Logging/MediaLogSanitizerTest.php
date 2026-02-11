@@ -61,4 +61,16 @@ final class MediaLogSanitizerTest extends TestCase
         self::assertStringNotContainsString('/tmp/private/file.jpg', $safe['message']);
         self::assertStringNotContainsString('https://s3.test/signed?x=1', $safe['message']);
     }
+
+    public function test_safe_context_hashes_trace_payload(): void
+    {
+        $sanitizer = new MediaLogSanitizer();
+
+        $safe = $sanitizer->safeContext([
+            'trace' => "at /var/www/html/private/file.php\n#0 /var/www/html/secret.php",
+        ]);
+
+        self::assertArrayNotHasKey('trace', $safe);
+        self::assertArrayHasKey('trace_hash', $safe);
+    }
 }

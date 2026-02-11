@@ -22,13 +22,17 @@ return [
     |
     */
 
+    'dev_server_url' => env('VITE_DEV_SERVER_URL', 'http://127.0.0.1:5174'),
+
     'dev_server_urls' => [
         env('VITE_DEV_SERVER_URL', 'http://127.0.0.1:5173'),
         'http://127.0.0.1:5174',
         'http://127.0.0.1:5175',
+        'http://127.0.0.1:4000',
         'http://localhost:5173',
         'http://localhost:5174',
         'http://localhost:5175',
+        'http://localhost:4000',
     ],
 
     /*
@@ -56,6 +60,4 @@ return [
         'style-src',
         'connect-src',
     ],
-
 ];
-

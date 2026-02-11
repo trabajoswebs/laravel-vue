@@ -46,4 +46,44 @@ final class PerformConversionsJobTest extends TestCase
 
         $this->assertSame($tenant->getKey(), $job->tenantId);
     }
+
+    public function test_handle_restores_previous_tenant_context_after_execution(): void
+    {
+        $user = User::factory()->create();
+
+        $tenantA = Tenant::query()->create([
+            'name' => 'Tenant A',
+            'owner_user_id' => $user->getKey(),
+        ]);
+        $tenantB = Tenant::query()->create([
+            'name' => 'Tenant B',
+            'owner_user_id' => $user->getKey(),
+        ]);
+
+        $media = Media::query()->create([
+            'model_type' => User::class,
+            'model_id' => $user->getKey(),
+            'uuid' => '77777777-7777-7777-7777-777777777777',
+            'collection_name' => 'avatar',
+            'name' => 'avatar',
+            'file_name' => 'avatar.jpg',
+            'mime_type' => 'image/jpeg',
+            'disk' => 'public',
+            'conversions_disk' => null,
+            'size' => 1024,
+            'manipulations' => [],
+            'custom_properties' => ['tenant_id' => $tenantB->getKey()],
+            'generated_conversions' => [],
+            'responsive_images' => [],
+            'order_column' => 1,
+        ]);
+
+        $tenantA->makeCurrent();
+        $job = new PerformConversionsJob(new ConversionCollection(), $media, false);
+        $fileManipulator = $this->createMock(\Spatie\MediaLibrary\Conversions\FileManipulator::class);
+
+        $job->handle($fileManipulator);
+
+        $this->assertSame($tenantA->getKey(), tenant()?->getKey());
+    }
 }

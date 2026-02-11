@@ -18,6 +18,8 @@ use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadService;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
+use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Infrastructure\Uploads\Pipeline\Exceptions\ScanFailedException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
@@ -40,6 +42,20 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  */
 final class DefaultUploadService implements UploadService, MediaUploader
 {
+    /**
+     * Errores AV transitorios que merecen reintento de job.
+     *
+     * @var list<string>
+     */
+    private const RETRYABLE_ANTIVIRUS_REASONS = [
+        'timeout',
+        'process_timeout',
+        'unreachable',
+        'connection_refused',
+        'process_exception',
+        'process_failed',
+    ];
+
     /**
      * Constructor del servicio de subida.
      * 
@@ -73,12 +89,13 @@ final class DefaultUploadService implements UploadService, MediaUploader
         ?string $correlationId = null
     ): QueuedUploadResult {
         $correlation = $this->resolveCorrelationId($correlationId);
+        $ownerKey = $this->resolveOwnerKey($owner);
         $uploadedFile = $this->unwrap($file);
 
         $logContext = [
             'correlation_id' => $correlation,
             'profile' => $profile->collection(),
-            'user_id' => $owner->getKey(),
+            'user_id' => $ownerKey,
             'filename' => $this->sanitizeFilenameForLog($uploadedFile->getClientOriginalName()),
             'size' => $uploadedFile->getSize(),
             'mime' => $uploadedFile->getMimeType(),
@@ -92,20 +109,32 @@ final class DefaultUploadService implements UploadService, MediaUploader
         );
         $this->securityLogger->quarantined($logContext + ['quarantine_id' => $token?->identifier()]);
 
-        $this->jobs->dispatch(new ProcessUploadJob(
-            token: $token,
-            ownerId: (string) $owner->getKey(),
-            profileClass: $profile::class,
-            correlationId: $correlation,
-            originalName: $uploadedFile->getClientOriginalName(),
-            clientMime: $uploadedFile->getClientMimeType() ?? $uploadedFile->getMimeType(),
-        ));
+        try {
+            $this->jobs->dispatch(new ProcessUploadJob(
+                token: $token,
+                ownerId: (string) $ownerKey,
+                profileClass: $profile::class,
+                correlationId: $correlation,
+                originalName: $uploadedFile->getClientOriginalName(),
+                clientMime: $uploadedFile->getClientMimeType() ?? $uploadedFile->getMimeType(),
+                tenantId: $this->resolveOwnerTenantId($owner),
+            ));
+        } catch (\Throwable $exception) {
+            $queueConnection = (string) config('queue.default', '');
+            $queueDriver = (string) config("queue.connections.{$queueConnection}.driver", $queueConnection);
+            if ($queueDriver === 'sync') {
+                throw $exception;
+            }
+
+            $this->quarantineManager->delete($token);
+            throw UploadException::fromThrowable('Unable to enqueue upload processing job.', $exception);
+        }
 
         return new QueuedUploadResult(
             status: 'processing',
             correlationId: $correlation,
             quarantineId: $token->identifier(),
-            ownerId: $owner->getKey(),
+            ownerId: $ownerKey,
             profile: $profile->collection(),
         );
     }
@@ -141,6 +170,8 @@ final class DefaultUploadService implements UploadService, MediaUploader
      * @param QuarantineToken $token Token de cuarentena asociado
      * @param MediaProfile $profile Perfil de media
      * @param string $correlationId Correlation ID propagado
+     * @param bool $preserveRetryableFailure Si true, preserva cuarentena en fallos reintentables
+     * @param int|null $retryAttempt Número de intento actual cuando se ejecuta desde cola
      * @return MediaResource Media persistido tras procesar
      */
     public function processQuarantined(
@@ -148,12 +179,15 @@ final class DefaultUploadService implements UploadService, MediaUploader
         UploadedFile $quarantinedFile,
         QuarantineToken $token,
         MediaProfile $profile,
-        string $correlationId
+        string $correlationId,
+        bool $preserveRetryableFailure = false,
+        ?int $retryAttempt = null,
     ): MediaResource {
+        $ownerKey = $this->resolveOwnerKey($owner);
         $logContext = [
             'correlation_id' => $correlationId,
             'profile' => $profile->collection(),
-            'user_id' => $owner->getKey(),
+            'user_id' => $ownerKey,
             'filename' => $this->sanitizeFilenameForLog($quarantinedFile->getClientOriginalName()),
             'size' => $quarantinedFile->getSize(),
             'mime' => $quarantinedFile->getMimeType(),
@@ -162,54 +196,21 @@ final class DefaultUploadService implements UploadService, MediaUploader
         $this->securityLogger->started($logContext);
 
         $artifact = null;
-        $currentState = QuarantineState::PENDING;
-        $promoted = false;
+        $currentState = $this->resolveCurrentState($token);
+        $removeQuarantine = true;
 
         try {
             $this->securityLogger->quarantined($logContext + ['quarantine_id' => $token->identifier()]);
             $this->assertConstraints($quarantinedFile, $profile);
 
-            // Si se requiere antivirus, escanea el archivo
-            if ($profile->usesAntivirus()) {
-                $this->transitionWithLogging(
-                    $token,
-                    $currentState,
-                    QuarantineState::SCANNING,
-                    $logContext,
-                    ['correlation_id' => $correlationId]
-                );
-                $currentState = QuarantineState::SCANNING;
-
-                $this->securityLogger->scanStarted($logContext + ['quarantine_id' => $token->identifier()]);
-                $this->scanCoordinator->scan($quarantinedFile, $token->path, $logContext);
-                $this->securityLogger->scanPassed($logContext + ['quarantine_id' => $token->identifier()]);
-
-                $this->transitionWithLogging(
-                    $token,
-                    QuarantineState::SCANNING,
-                    QuarantineState::CLEAN,
-                    $logContext,
-                    ['correlation_id' => $correlationId]
-                );
-                $currentState = QuarantineState::CLEAN;
-            } else {
-                // Si no se requiere antivirus, marca como limpio
-                $this->transitionWithLogging(
-                    $token,
-                    $currentState,
-                    QuarantineState::CLEAN,
-                    [
-                        'correlation_id' => $correlationId,
-                        'profile' => $profile->collection(),
-                        'user_id' => $owner->getKey(),
-                    ],
-                    [
-                        'correlation_id' => $correlationId,
-                        'metadata' => ['scan' => 'disabled'],
-                    ]
-                );
-                $currentState = QuarantineState::CLEAN;
-            }
+            $currentState = $this->transitionToCleanState(
+                token: $token,
+                profile: $profile,
+                file: $quarantinedFile,
+                currentState: $currentState,
+                logContext: $logContext,
+                correlationId: $correlationId,
+            );
 
             // Procesa el archivo a través del pipeline
             $artifact = $this->pipeline->process($quarantinedFile, $profile, $correlationId);
@@ -226,7 +227,8 @@ final class DefaultUploadService implements UploadService, MediaUploader
                 $artifact,
                 $profile->collection(),
                 $profile->disk(),
-                $profile->isSingleFile()
+                $profile->isSingleFile(),
+                $correlationId
             );
             $this->securityLogger->persisted($logContext + [
                 'quarantine_id' => $token->identifier(),
@@ -243,8 +245,6 @@ final class DefaultUploadService implements UploadService, MediaUploader
                 ['correlation_id' => $correlationId]
             );
             $currentState = QuarantineState::PROMOTED;
-            $promoted = true;
-
             return new SpatieMediaResource($media);
         } catch (VirusDetectedException $exception) {
             // Si se detecta virus, marca como infectado
@@ -253,16 +253,29 @@ final class DefaultUploadService implements UploadService, MediaUploader
             $this->reporter->report('upload.virus_detected', $exception, $logContext, 'warning');
             throw $exception;
         } catch (\Throwable $exception) {
-            // En caso de cualquier otro error, marca como fallido
-            $this->safeTransition($token, $currentState, QuarantineState::FAILED, $logContext, $exception);
-            $this->reporter->report('image_upload.failed', $exception, $logContext);
-            $this->securityLogger->validationFailed($logContext + ['error' => $exception->getMessage()]);
+            $isRetryableFailure = $preserveRetryableFailure && $this->isRetryableProcessingException($exception);
+            if ($isRetryableFailure) {
+                $removeQuarantine = false;
+                $this->recordRetryableFailure($token, $currentState, $logContext, $exception, $retryAttempt);
+                $this->reporter->report('image_upload.retryable_failure', $exception, $logContext, 'warning');
+                $this->securityLogger->validationFailed($logContext + [
+                    'error' => $exception->getMessage(),
+                    'retryable' => true,
+                    'retry_count' => $retryAttempt,
+                ]);
+            } else {
+                // En caso de error terminal, marca como fallido.
+                $this->safeTransition($token, $currentState, QuarantineState::FAILED, $logContext, $exception);
+                $this->reporter->report('image_upload.failed', $exception, $logContext);
+                $this->securityLogger->validationFailed($logContext + ['error' => $exception->getMessage()]);
+            }
+
             throw $exception;
         } finally {
-            // Limpia el artefacto de cuarentena
-            // Siempre elimina la cuarentena (incluso en fallos) para evitar zombies de binarios.
-            $removeQuarantine = true;
             $this->quarantineManager->cleanupArtifact($artifact, $removeQuarantine);
+            if ($artifact === null && $removeQuarantine) {
+                $this->quarantineManager->delete($token);
+            }
         }
     }
 
@@ -325,7 +338,8 @@ final class DefaultUploadService implements UploadService, MediaUploader
         InternalPipelineResult $artifact,
         string $profile,
         ?string $disk = null,
-        bool $singleFile = false
+        bool $singleFile = false,
+        ?string $correlationId = null
     ): Media {
         $metadata = $artifact->metadata;
 
@@ -351,7 +365,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
                 'height' => $metadata->dimensions['height'] ?? null,
                 'original_filename' => $metadata->originalFilename,
                 'quarantine_id' => $artifact->quarantineId?->identifier(),
-                'correlation_id' => $logContext['correlation_id'] ?? null,
+                'correlation_id' => $correlationId,
                 'headers' => $headers,
                 'size' => $artifact->size,
             ]);
@@ -496,6 +510,69 @@ final class DefaultUploadService implements UploadService, MediaUploader
     }
 
     /**
+     * @return int|string
+     */
+    private function resolveOwnerKey(MediaOwner $owner): int|string
+    {
+        if (!method_exists($owner, 'getKey')) {
+            throw new UploadValidationException('Media owner key is unavailable');
+        }
+
+        $key = $owner->getKey();
+        if (is_int($key)) {
+            return $key;
+        }
+
+        if (is_string($key)) {
+            $trimmed = trim($key);
+            if ($trimmed !== '') {
+                return $trimmed;
+            }
+        }
+
+        throw new UploadValidationException('Media owner key is unavailable');
+    }
+
+    /**
+     * @return int|string|null
+     */
+    private function resolveOwnerTenantId(MediaOwner $owner): int|string|null
+    {
+        if (method_exists($owner, 'getCurrentTenantId')) {
+            $tenantId = $owner->getCurrentTenantId();
+            if (is_int($tenantId) && $tenantId > 0) {
+                return $tenantId;
+            }
+            if (is_string($tenantId) && trim($tenantId) !== '') {
+                return trim($tenantId);
+            }
+        }
+
+        if (property_exists($owner, 'current_tenant_id')) {
+            $tenantId = $owner->current_tenant_id;
+            if (is_int($tenantId) && $tenantId > 0) {
+                return $tenantId;
+            }
+            if (is_string($tenantId) && trim($tenantId) !== '') {
+                return trim($tenantId);
+            }
+        }
+
+        $currentTenant = function_exists('tenant') ? tenant() : null;
+        if ($currentTenant !== null && method_exists($currentTenant, 'getKey')) {
+            $tenantId = $currentTenant->getKey();
+            if (is_int($tenantId) && $tenantId > 0) {
+                return $tenantId;
+            }
+            if (is_string($tenantId) && trim($tenantId) !== '') {
+                return trim($tenantId);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Sanitiza nombres antes de usarlos en logs para evitar caracteres peligrosos.
      */
     private function sanitizeFilenameForLog(?string $name): ?string
@@ -572,6 +649,164 @@ final class DefaultUploadService implements UploadService, MediaUploader
             ], $metadata));
 
             throw $transitionException;
+        }
+    }
+
+    private function resolveCurrentState(QuarantineToken $token): QuarantineState
+    {
+        try {
+            return $this->quarantineManager->getState($token);
+        } catch (\Throwable) {
+            return QuarantineState::PENDING;
+        }
+    }
+
+    /**
+     * Garantiza estado CLEAN con reentrada segura de reintentos.
+     *
+     * @param array<string,mixed> $logContext
+     */
+    private function transitionToCleanState(
+        QuarantineToken $token,
+        MediaProfile $profile,
+        UploadedFile $file,
+        QuarantineState $currentState,
+        array $logContext,
+        string $correlationId
+    ): QuarantineState {
+        if (in_array($currentState, [QuarantineState::PROMOTED, QuarantineState::INFECTED, QuarantineState::EXPIRED], true)) {
+            throw new UploadValidationException('Quarantine artifact is in terminal state.');
+        }
+
+        if ($profile->usesAntivirus()) {
+            if ($currentState !== QuarantineState::CLEAN) {
+                if ($currentState !== QuarantineState::SCANNING) {
+                    $this->transitionWithLogging(
+                        $token,
+                        $currentState,
+                        QuarantineState::SCANNING,
+                        $logContext,
+                        ['correlation_id' => $correlationId]
+                    );
+                    $currentState = QuarantineState::SCANNING;
+                }
+
+                $this->securityLogger->scanStarted($logContext + ['quarantine_id' => $token->identifier()]);
+                $this->scanCoordinator->scan($file, $token->path, $logContext);
+                $this->securityLogger->scanPassed($logContext + ['quarantine_id' => $token->identifier()]);
+
+                $this->transitionWithLogging(
+                    $token,
+                    QuarantineState::SCANNING,
+                    QuarantineState::CLEAN,
+                    $logContext,
+                    ['correlation_id' => $correlationId]
+                );
+            }
+
+            return QuarantineState::CLEAN;
+        }
+
+        if ($currentState !== QuarantineState::CLEAN) {
+            $this->transitionWithLogging(
+                $token,
+                $currentState,
+                QuarantineState::CLEAN,
+                [
+                    'correlation_id' => $correlationId,
+                    'profile' => $profile->collection(),
+                    'user_id' => $logContext['user_id'] ?? null,
+                ],
+                [
+                    'correlation_id' => $correlationId,
+                    'metadata' => ['scan' => 'disabled'],
+                ]
+            );
+        }
+
+        return QuarantineState::CLEAN;
+    }
+
+    private function isRetryableProcessingException(\Throwable $exception): bool
+    {
+        if ($exception instanceof ScanFailedException) {
+            return true;
+        }
+
+        if ($exception instanceof UploadValidationException) {
+            $antivirus = $this->findAntivirusException($exception);
+            if (! $antivirus instanceof AntivirusException) {
+                return false;
+            }
+
+            return in_array(
+                strtolower(trim($antivirus->reason())),
+                self::RETRYABLE_ANTIVIRUS_REASONS,
+                true
+            );
+        }
+
+        if ($exception instanceof UploadException) {
+            $previous = $exception->getPrevious();
+            if ($previous instanceof UploadValidationException || $previous instanceof VirusDetectedException) {
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private function findAntivirusException(\Throwable $exception): ?AntivirusException
+    {
+        $cursor = $exception;
+
+        while ($cursor !== null) {
+            if ($cursor instanceof AntivirusException) {
+                return $cursor;
+            }
+
+            $cursor = $cursor->getPrevious();
+        }
+
+        return null;
+    }
+
+    /**
+     * Registra el fallo reintentable sin llevar el artefacto a estado terminal.
+     *
+     * @param array<string,mixed> $context
+     */
+    private function recordRetryableFailure(
+        QuarantineToken $token,
+        QuarantineState $currentState,
+        array $context,
+        \Throwable $exception,
+        ?int $retryAttempt,
+    ): void {
+        $metadata = [
+            'correlation_id' => $context['correlation_id'] ?? null,
+            'metadata' => [
+                'status' => 'retrying',
+                'retryable' => true,
+                'retry_count' => $retryAttempt,
+                'reason' => $exception->getMessage(),
+                'exception' => $exception::class,
+            ],
+        ];
+
+        try {
+            // Mantiene el estado actual para preservar el artefacto de cuarentena entre reintentos.
+            $this->transitionWithLogging(
+                $token,
+                $currentState,
+                $currentState,
+                $context + ['retry_count' => $retryAttempt, 'retryable' => true],
+                $metadata,
+            );
+        } catch (\Throwable) {
+            // Best-effort: no bloquea la propagación del error reintentable.
         }
     }
 }

@@ -7,7 +7,7 @@ namespace App\Infrastructure\Uploads\Profiles;
 use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\Conversions\Conversion;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -215,7 +215,7 @@ final class GalleryProfile implements MediaProfile
         foreach ($raw as $name => $definition) {
             // Validar que el nombre sea una cadena válida
             if (!is_string($name) || trim($name) === '') {
-                Log::warning('media.gallery_sizes.invalid_name', [
+                SecurityLogger::warning('media.gallery_sizes.invalid_name', [
                     'name' => is_scalar($name) ? (string) $name : gettype($name),
                 ]);
                 continue;
@@ -270,7 +270,7 @@ final class GalleryProfile implements MediaProfile
             }
         } else {
             // Si no es un array, registrar advertencia y usar fallback
-            Log::warning('media.gallery_sizes.invalid_definition', [
+            SecurityLogger::warning('media.gallery_sizes.invalid_definition', [
                 'name' => $name,
                 'type' => gettype($definition),
             ]);
@@ -284,7 +284,7 @@ final class GalleryProfile implements MediaProfile
 
         // Si algún valor es inválido, registrar advertencia y usar fallback
         if ($width === null || $height === null || $fit === null) {
-            Log::warning('media.gallery_sizes.invalid_entry', [
+            SecurityLogger::warning('media.gallery_sizes.invalid_entry', [
                 'name'   => $name,
                 'width'  => $width,
                 'height' => $height,

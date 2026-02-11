@@ -26,7 +26,7 @@ final class DocumentPdfProfile extends UploadProfile // Configuración para PDFs
             scanMode: ScanMode::REQUIRED, // Escaneo obligatorio
             processingMode: ProcessingMode::NONE, // Sin procesamiento adicional
             servingMode: ServingMode::CONTROLLER_SIGNED, // Se sirve vía controlador con firma
-            disk: config('filesystems.default', 'public'), // Disco por defecto
+            disk: (string) config('uploads.private_disk', config('filesystems.default', 'public')), // Disco privado de SSOT
             pathCategory: 'documents', // Categoría de path para documentos
             requiresOwner: false, // Owner opcional
         );

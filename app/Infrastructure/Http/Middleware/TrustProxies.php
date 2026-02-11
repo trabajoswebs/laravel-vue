@@ -2,10 +2,11 @@
 
 namespace App\Infrastructure\Http\Middleware;
 
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 // Importamos las clases necesarias para el middleware
 use Illuminate\Http\Middleware\TrustProxies as Middleware; // Clase base de Laravel para confianza en proxies
 use Illuminate\Http\Request; // Clase para manejar las solicitudes HTTP
-use Illuminate\Support\Facades\Log; // Facade para registrar logs
 
 /**
  * Class TrustProxies
@@ -20,6 +21,9 @@ use Illuminate\Support\Facades\Log; // Facade para registrar logs
  */
 class TrustProxies extends Middleware
 {
+    private ?MediaSecurityLogger $securityLogger = null;
+    private ?MediaLogSanitizer $logSanitizer = null;
+
     /**
      * Tabla de alias a máscaras de cabeceras permitidas.
      * 
@@ -183,8 +187,9 @@ class TrustProxies extends Middleware
 
         // Si hay proxies inválidos, registramos un warning
         if ($invalid !== []) {
-            Log::warning('Ignorando proxies no válidos en la configuración de confianza.', [
-                'invalid' => $invalid,
+            $this->securityLogger()->warning('http.trust_proxies.invalid_proxies', [
+                'invalid_count' => count($invalid),
+                'invalid_hash' => $this->logSanitizer()->hashName(implode('|', $invalid)),
             ]);
         }
 
@@ -242,7 +247,7 @@ class TrustProxies extends Middleware
             if ($mask > 0 && ($mask & ~$maxMask) === 0) {
                 return $mask;
             }
-            Log::warning("Máscara de headers inválida, usando default", ['mask' => $mask]);
+            $this->securityLogger()->warning('http.trust_proxies.invalid_headers_mask', ['headers_mask' => $mask]);
             return self::DEFAULT_HEADER_MASK;
         }
 
@@ -286,8 +291,9 @@ class TrustProxies extends Middleware
 
         // Si hay tokens inválidos, registramos un warning
         if ($invalid !== []) {
-            Log::warning('Ignorando cabeceras desconocidas en trusted proxies.', [
-                'invalid' => $invalid,
+            $this->securityLogger()->warning('http.trust_proxies.unknown_header_aliases', [
+                'invalid_count' => count($invalid),
+                'headers_mask' => $mask,
             ]);
         }
 
@@ -318,9 +324,10 @@ class TrustProxies extends Middleware
         self::$configurationLogged = true;
 
         // Registramos la configuración resuelta
-        Log::info('Middleware de proxies de confianza inicializado.', [
-            'proxies' => $this->proxies, // Lista de proxies confiables
-            'headers_mask' => $this->headers, // Máscara de cabeceras
+        $this->securityLogger()->info('http.trust_proxies.initialized', [
+            'proxies_mode' => $this->proxiesMode(),
+            'proxies_count' => is_array($this->proxies) ? count($this->proxies) : null,
+            'headers_mask' => $this->headers,
         ]);
     }
 
@@ -444,6 +451,29 @@ class TrustProxies extends Middleware
         self::$wildcardWarningLogged = true;
 
         // Registramos el aviso de seguridad
-        Log::warning('Se ha habilitado el comodín "*" para proxies confiables en producción. Verifica que tu red esté protegida.');
+        $this->securityLogger()->warning('http.trust_proxies.wildcard_enabled_in_production');
+    }
+
+    private function securityLogger(): MediaSecurityLogger
+    {
+        return $this->securityLogger ??= app(MediaSecurityLogger::class);
+    }
+
+    private function logSanitizer(): MediaLogSanitizer
+    {
+        return $this->logSanitizer ??= app(MediaLogSanitizer::class);
+    }
+
+    private function proxiesMode(): string
+    {
+        if ($this->proxies === '*') {
+            return 'wildcard';
+        }
+
+        if (is_array($this->proxies) && $this->proxies !== []) {
+            return 'list';
+        }
+
+        return 'none';
     }
 }

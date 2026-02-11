@@ -13,13 +13,14 @@ use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler; // Schedule
 use App\Infrastructure\Models\User; // Modelo User para validar avatar
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob; // Limpieza directa de artefactos
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 use Illuminate\Contracts\Debug\ExceptionHandler; // Reporta excepciones; ej. app(ExceptionHandler)
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage; // Acceso a disks; ej. Storage::disk('public')->exists('x.jpg')
 use Spatie\MediaLibrary\Conversions\ConversionCollection; // Lista de conversions; ej. ['thumb']
 use Spatie\MediaLibrary\Conversions\FileManipulator; // Ejecuta conversions; ej. performConversions()
 use Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob as BasePerformConversionsJob; // Extiende base Spatie; ej. job original
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media; ej. Media #5
-use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator; // Genera paths por media
 
 /**
  * Variante defensiva del job de conversions.
@@ -30,6 +31,8 @@ use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator; // Genera paths por
  */
 class PerformConversionsJob extends BasePerformConversionsJob
 {
+    private const MEDIA_LOCK_TTL_SECONDS = 120;
+
     /**
      * Límite de reintentos (para errores reales, no para “missing file”).
      * Nota: si quieres menos ruido en local, ponlo a 1.
@@ -72,7 +75,23 @@ class PerformConversionsJob extends BasePerformConversionsJob
      */
     public function handle(FileManipulator $fileManipulator): bool
     {
+        $lock = Cache::lock('media:conversions:' . $this->media->getKey(), self::MEDIA_LOCK_TTL_SECONDS);
+        if (! $lock->get()) {
+            $this->staleSkip('locked', [
+                'media_id' => $this->media->getKey(),
+            ]);
+            return true;
+        }
+
+        $previousTenant = function_exists('tenant') ? tenant() : null;
+
         if (!$this->ensureTenantContext()) { // Intenta fijar tenant antes de procesar
+            try {
+                $lock->release();
+            } catch (\Throwable) {
+                // Ignorado: lock TTL evita bloqueo eterno.
+            }
+            $this->restoreTenantContext($previousTenant);
             return true; // Si no hay tenant, termina sin error para evitar bucles
         }
 
@@ -213,6 +232,13 @@ class PerformConversionsJob extends BasePerformConversionsJob
             // 3) Error real: se reporta y se deja fallar.
             $this->report($exception);
             throw $exception;
+        } finally {
+            try {
+                $lock->release();
+            } catch (\Throwable) {
+                // Ignorado: lock TTL evita bloqueo eterno.
+            }
+            $this->restoreTenantContext($previousTenant);
         }
     }
 
@@ -344,7 +370,7 @@ class PerformConversionsJob extends BasePerformConversionsJob
     private function dispatchDirectCleanup(Media $media, string $reason): void
     {
         try {
-            $artifacts = $this->artifactsForMedia($media);
+            $artifacts = app(MediaCleanupArtifactsBuilder::class)->forMedia($media);
             if ($artifacts === []) {
                 return;
             }
@@ -363,42 +389,6 @@ class PerformConversionsJob extends BasePerformConversionsJob
                 'error' => $e->getMessage(),
             ]);
         }
-    }
-
-    /**
-     * Construye artefactos por media usando el PathGenerator actual.
-     *
-     * @return array<string,list<array{dir:string,mediaId:string}>>
-     */
-    private function artifactsForMedia(Media $media): array
-    {
-        $disk = (string) ($media->disk ?? '');
-        if ($disk === '') {
-            return [];
-        }
-
-        $conversionDisk = (string) ($media->conversions_disk ?: $media->disk);
-        $pathGenerator = app(PathGenerator::class);
-        $mediaId = (string) $media->getKey();
-
-        $baseDir = rtrim($pathGenerator->getPath($media), '/');
-        $convDir = rtrim($pathGenerator->getPathForConversions($media), '/');
-        $respDir = rtrim($pathGenerator->getPathForResponsiveImages($media), '/');
-
-        $artifacts = [
-            $disk => [
-                ['dir' => $baseDir, 'mediaId' => $mediaId],
-            ],
-        ];
-
-        if ($conversionDisk !== '') {
-            $artifacts[$conversionDisk] = array_merge($artifacts[$conversionDisk] ?? [], [
-                ['dir' => $convDir, 'mediaId' => $mediaId],
-                ['dir' => $respDir, 'mediaId' => $mediaId],
-            ]);
-        }
-
-        return $artifacts;
     }
 
     /**
@@ -440,5 +430,19 @@ class PerformConversionsJob extends BasePerformConversionsJob
     private function safeContext(array $context): array
     {
         return app(MediaLogSanitizer::class)->safeContext($context);
+    }
+
+    private function restoreTenantContext(mixed $previousTenant): void
+    {
+        try {
+            if ($previousTenant instanceof Tenant) {
+                $previousTenant->makeCurrent();
+                return;
+            }
+
+            Tenant::forgetCurrent();
+        } catch (\Throwable) {
+            // No propagar errores de restauración de contexto.
+        }
     }
 }

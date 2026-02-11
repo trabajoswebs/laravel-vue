@@ -50,15 +50,18 @@ Route::middleware(['auth', 'tenant'])->group(function (): void {
 Route::middleware(['auth', 'tenant'])->group(function (): void {
     // Almacena nuevos uploads
     Route::post('uploads', [UploadController::class, 'store'])
+        ->middleware('rate.uploads')
         ->name('uploads.store');
     
     // Actualiza información de un upload existente
     Route::patch('uploads/{uploadId}', [UploadController::class, 'update'])
+        ->middleware('rate.uploads')
         ->whereUuid('uploadId') // Asegura que el ID sea UUID
         ->name('uploads.update');
     
     // Elimina un upload
     Route::delete('uploads/{uploadId}', [UploadController::class, 'destroy'])
+        ->middleware('rate.uploads')
         ->whereUuid('uploadId') // Asegura que el ID sea UUID
         ->name('uploads.destroy');
 });

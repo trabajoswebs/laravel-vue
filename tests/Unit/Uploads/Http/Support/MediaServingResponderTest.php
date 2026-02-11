@@ -6,6 +6,7 @@ namespace Tests\Unit\Uploads\Http\Support;
 
 use App\Infrastructure\Uploads\Http\Support\MediaServingResponder;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Tests\Support\TemporaryUrlFilesystem;
 use Tests\TestCase;
 
@@ -47,6 +48,13 @@ final class MediaServingResponderTest extends TestCase
         
         // Verifica que el header de seguridad esté presente
         self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        self::assertSame('same-origin', $response->headers->get('Cross-Origin-Resource-Policy'));
+        self::assertStringContainsString(
+            "default-src 'none'",
+            (string) $response->headers->get('Content-Security-Policy')
+        );
+        self::assertNull($response->headers->get('Pragma'));
+        self::assertNull($response->headers->get('Expires'));
     }
 
     /**
@@ -61,7 +69,7 @@ final class MediaServingResponderTest extends TestCase
     {
         // Configura el driver de disco S3 y el tiempo de vida de URLs temporales
         config()->set('filesystems.disks.s3.driver', 's3');
-        config()->set('media-serving.s3_temporary_url_ttl_seconds', 300);
+        config()->set('media-serving.temporary_url_ttl_seconds', 300);
 
         // Crea un adaptador falso que simula un filesystem con URL temporal
         $adapter = new TemporaryUrlFilesystem('https://s3.test/media  ', ['tenants/1/users/1/avatars/avatar.jpg']);
@@ -82,5 +90,32 @@ final class MediaServingResponderTest extends TestCase
         
         // Verifica que el header de seguridad esté presente
         self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        self::assertSame('same-origin', $response->headers->get('Cross-Origin-Resource-Policy'));
+        self::assertStringContainsString(
+            "default-src 'none'",
+            (string) $response->headers->get('Content-Security-Policy')
+        );
+        self::assertSame('no-cache', $response->headers->get('Pragma'));
+        self::assertSame('0', $response->headers->get('Expires'));
+    }
+
+    public function test_rejects_paths_with_traversal_segments(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('tenants/1/users/1/avatars/avatar.jpg', 'img');
+
+        $this->expectException(RuntimeException::class);
+
+        (new MediaServingResponder())->serve('local', 'tenants/1/users/1/avatars/../secrets.txt');
+    }
+
+    public function test_rejects_paths_outside_tenant_namespace(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('avatars/avatar.jpg', 'img');
+
+        $this->expectException(RuntimeException::class);
+
+        (new MediaServingResponder())->serve('local', 'avatars/avatar.jpg');
     }
 }

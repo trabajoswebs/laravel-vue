@@ -27,7 +27,11 @@ final class GenericUploadTest extends TestCase
         $this->withoutExceptionHandling();
         Storage::fake('public');
         Storage::fake('quarantine');
-        config(['uploads.virus_scanning.enabled' => false, 'image-pipeline.scan.enabled' => false]);
+        config([
+            'uploads.virus_scanning.enabled' => false,
+            'uploads.private_disk' => 'public',
+            'image-pipeline.scan.enabled' => false,
+        ]);
         $this->app->singleton(
             \App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository::class,
             fn() => new \App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository(Storage::disk('quarantine'))
@@ -50,6 +54,13 @@ final class GenericUploadTest extends TestCase
         return [$user, $tenant];
     }
 
+    private function fakePdf(string $name = 'doc.pdf', int $bytes = 2048): UploadedFile
+    {
+        $payload = "%PDF-1.4\n" . str_repeat('A', max(0, $bytes - 9));
+
+        return UploadedFile::fake()->createWithContent($name, $payload, 'application/pdf');
+    }
+
     public function test_store_document_upload_succeeds(): void
     {
         [$user, $tenant] = $this->makeTenantUser();
@@ -59,7 +70,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', str_repeat('A', 2048), 'application/pdf'),
+                'file' => $this->fakePdf('doc.pdf', 2048),
             ]);
 
         $response->assertCreated()
@@ -75,7 +86,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', str_repeat('A', 2048), 'application/pdf'),
+                'file' => $this->fakePdf('doc.pdf', 2048),
             ])
             ->assertCreated()
             ->json('id');
@@ -85,7 +96,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->patch(route('uploads.update', ['uploadId' => $store]), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', str_repeat('B', 3072), 'application/pdf'),
+                'file' => $this->fakePdf('doc2.pdf', 3072),
             ])
             ->assertCreated()
             ->assertJsonStructure(['id', 'profile_id', 'status', 'correlation_id']);
@@ -100,7 +111,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', str_repeat('A', 2048), 'application/pdf'),
+                'file' => $this->fakePdf('doc.pdf', 2048),
             ])
             ->assertCreated()
             ->json('id');
@@ -134,7 +145,7 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', str_repeat('A', 2048), 'application/pdf'),
+                'file' => $this->fakePdf('doc.pdf', 2048),
             ])
             ->json('id');
 
@@ -143,7 +154,7 @@ final class GenericUploadTest extends TestCase
             ->withExceptionHandling()
             ->post(route('uploads.store'), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc.pdf', str_repeat('A', 2048), 'application/pdf'),
+                'file' => $this->fakePdf('doc.pdf', 2048),
             ])
             ->assertStatus(403);
 
@@ -152,7 +163,7 @@ final class GenericUploadTest extends TestCase
             ->withExceptionHandling()
             ->patch(route('uploads.update', ['uploadId' => $uploadId]), [
                 'profile_id' => 'document_pdf',
-                'file' => UploadedFile::fake()->createWithContent('doc2.pdf', str_repeat('B', 3072), 'application/pdf'),
+                'file' => $this->fakePdf('doc2.pdf', 3072),
             ])
             ->assertStatus(403);
 
@@ -172,7 +183,8 @@ final class GenericUploadTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'certificate_secret',
-                'file' => UploadedFile::fake()->createWithContent('cert.p12', str_repeat('S', 2048))->mimeType('application/octet-stream'),
+                // Cabecera DER tipo PKCS#12 (0x30...) para pasar validación de firma mínima.
+                'file' => UploadedFile::fake()->createWithContent('cert.p12', "\x30\x82\x04\x00" . random_bytes(2044))->mimeType('application/octet-stream'),
             ])
             ->json('id');
 
@@ -199,7 +211,7 @@ final class GenericUploadTest extends TestCase
         $result = $upload(
             $profile,
             $user,
-            new HttpUploadedMedia(UploadedFile::fake()->createWithContent('doc.pdf', str_repeat('A', 2048), 'application/pdf')),
+            new HttpUploadedMedia($this->fakePdf('doc.pdf', 2048)),
             null,
             'cid-integration',
             [],

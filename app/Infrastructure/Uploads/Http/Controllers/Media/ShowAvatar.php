@@ -108,10 +108,12 @@ final class ShowAvatar extends Controller
         [$disk, $relativePath] = $this->assertConversionExists($media, $conversion);
 
         // Refuerzo de seguridad: normaliza la ruta y previene traversals
-        $relativePath = $this->sanitizePath($relativePath);
+        $relativePath = $this->sanitizePath(
+            $relativePath,
+            $actor->current_tenant_id,
+            $owner->getAuthIdentifier()
+        );
         
-        /** @var \Illuminate\Filesystem\FilesystemAdapter $adapter */
-        $adapter = Storage::disk($disk);
         $driver  = (string) config("filesystems.disks.{$disk}.driver");
 
         // Detecta tipo MIME con fallback a la ruta
@@ -123,15 +125,21 @@ final class ShowAvatar extends Controller
             // Sirve el archivo usando el responder adecuado
             return $this->responder->serve($disk, $relativePath, [
                 'Content-Type' => $mimeByPath,
+                'Content-Disposition' => 'inline; filename="' . $this->safeInlineFilename($media->file_name) . '"',
             ]);
         } catch (\Throwable $e) {
             if ($driver === 's3') {
                 // Nunca hacer streaming en S3: loguea y devuelve 404
                 $this->securityLogger->warning('media.pipeline.failed', [
                     'reason'  => 'avatar_signed_url_failed',
+                    'media_id' => $media->id,
+                    'actor_id' => $actor->getAuthIdentifier(),
+                    'tenant_id' => $actor->current_tenant_id,
+                    'conversion' => $conversion,
+                    'exception_class' => $e::class,
                     'message' => $e->getMessage(),
                     'disk'    => $disk,
-                    'path'    => $relativePath,
+                    'path_hash' => substr(hash('sha256', $relativePath), 0, 16),
                 ]);
             } else {
                 // Maneja condición de carrera donde el archivo desapareció entre exists() y response()
@@ -140,8 +148,13 @@ final class ShowAvatar extends Controller
                 } else {
                     $this->securityLogger->warning('media.pipeline.failed', [
                         'reason'  => 'avatar_local_file_serve_failed',
+                        'media_id' => $media->id,
+                        'actor_id' => $actor->getAuthIdentifier(),
+                        'tenant_id' => $actor->current_tenant_id,
+                        'conversion' => $conversion,
+                        'exception_class' => $e::class,
                         'message' => $e->getMessage(),
-                        'path'    => $adapter->path($relativePath),
+                        'path_hash' => substr(hash('sha256', $relativePath), 0, 16),
                     ]);
                 }
             }
@@ -201,6 +214,8 @@ final class ShowAvatar extends Controller
         $disk = $media->conversions_disk
             ?: (string) config('media-library.conversions_disk', '')
             ?: $media->disk;
+        $driver = (string) config("filesystems.disks.{$disk}.driver", 'local');
+        $isRemote = $driver !== 'local';
         $relativePath = '';
 
         try {
@@ -211,8 +226,8 @@ final class ShowAvatar extends Controller
             $relativePath = '';
         }
 
-        // Verifica si la conversión existe y está disponible
-        if ($relativePath !== '' && Storage::disk($disk)->exists($relativePath)) {
+        // En remoto evitamos exists() extra; el responder/driver validará durante el serve().
+        if ($relativePath !== '' && ($isRemote || Storage::disk($disk)->exists($relativePath))) {
             return [$disk, $relativePath];
         }
 
@@ -234,16 +249,34 @@ final class ShowAvatar extends Controller
     /**
      * Normalize path separators and prevent directory traversal attacks.
      *
+     * Expected strict format:
+     * - tenants/{tenantId}/users/{ownerId}/avatars/{filename}
+     * - tenants/{tenantId}/users/{ownerId}/avatars/{uuid}/{filename}
+     * - tenants/{tenantId}/users/{ownerId}/avatars/{uuid}/conversions/{filename}
+     *
      * @param string $path The path to sanitize
      * @return string The sanitized path
      * @throws NotFoundHttpException When path contains traversal attempts
      */
-    private function sanitizePath(string $path): string
+    private function sanitizePath(string $path, int|string|null $tenantId, int|string|null $ownerId): string
     {
+        $decoded = $path;
+        for ($i = 0; $i < 3; $i++) {
+            if (preg_match('/%2f|%5c/i', $decoded) === 1) {
+                throw new NotFoundHttpException(__('media.errors.invalid_path')); // 404 uniforme para evitar bypass por encoded separators
+            }
+
+            $next = rawurldecode($decoded);
+            if ($next === $decoded) {
+                break;
+            }
+            $decoded = $next;
+        }
+
         // Normaliza los separadores de directorio a '/'
-        $path = str_replace('\\', '/', $path);
+        $path = str_replace('\\', '/', $decoded);
         // Filtra los segmentos de la ruta, eliminando vacíos y '.'
-        $segments = array_filter(explode('/', $path), static fn($s) => $s !== '' && $s !== '.'); 
+        $segments = array_values(array_filter(explode('/', $path), static fn($s) => $s !== '' && $s !== '.'));
 
         // Bloquea intentos de traversals con '../'
         if (in_array('..', $segments, true)) {
@@ -253,12 +286,25 @@ final class ShowAvatar extends Controller
         // Reconstruye la ruta limpia
         $clean = implode('/', $segments);
 
-        // Verifica que la ruta contenga el prefijo de la colección de avatar
-        if (!str_contains($clean, $this->profile->collection())) {
-            throw new AccessDeniedHttpException(__('media.errors.invalid_path')); // Bloquea si no es avatar
+        $expectedPrefix = $this->tenantPrefix($tenantId);
+        if ($expectedPrefix === '' || !str_starts_with($clean, $expectedPrefix)) {
+            throw new NotFoundHttpException(__('media.errors.invalid_path')); // 404 uniforme para paths inválidos
+        }
+
+        if (! $this->isOwnerAvatarPath($clean, (string) $ownerId)) {
+            throw new NotFoundHttpException(__('media.errors.invalid_path')); // 404 uniforme para paths inválidos
         }
 
         return $clean; // Devuelve path sanitizado
+    }
+
+    private function tenantPrefix(int|string|null $tenantId): string
+    {
+        if ($tenantId === null || (is_string($tenantId) && trim($tenantId) === '')) {
+            return '';
+        }
+
+        return 'tenants/' . (string) $tenantId . '/';
     }
 
     /**
@@ -324,5 +370,57 @@ final class ShowAvatar extends Controller
         $detected = $candidates[0] ?? null;
 
         return is_string($detected) && $detected !== '' ? $detected : null;
+    }
+
+    private function safeInlineFilename(?string $fileName): string
+    {
+        $fallback = 'avatar';
+        $name = is_string($fileName) ? basename($fileName) : $fallback;
+        $name = str_replace(["\r", "\n", '"'], '', $name);
+
+        return $name !== '' ? $name : $fallback;
+    }
+
+    private function isOwnerAvatarPath(string $cleanPath, string $ownerId): bool
+    {
+        if ($ownerId === '') {
+            return false;
+        }
+
+        $parts = explode('/', $cleanPath);
+        if (count($parts) < 6) {
+            return false;
+        }
+
+        if (
+            $parts[0] !== 'tenants'
+            || $parts[2] !== 'users'
+            || $parts[3] !== $ownerId
+            || $parts[4] !== 'avatars'
+        ) {
+            return false;
+        }
+
+        $tail = array_slice($parts, 5);
+        if ($tail === []) {
+            return false;
+        }
+
+        // tenants/{t}/users/{u}/avatars/{file}
+        if (count($tail) === 1) {
+            return $tail[0] !== '' && $tail[0] !== 'conversions';
+        }
+
+        // tenants/{t}/users/{u}/avatars/{uuid}/{file}
+        if (count($tail) === 2) {
+            return $tail[0] !== '' && $tail[0] !== 'conversions' && $tail[1] !== '';
+        }
+
+        // tenants/{t}/users/{u}/avatars/{uuid}/conversions/{file}
+        if (count($tail) === 3) {
+            return $tail[0] !== '' && $tail[0] !== 'conversions' && $tail[1] === 'conversions' && $tail[2] !== '';
+        }
+
+        return false;
     }
 }

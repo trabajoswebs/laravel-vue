@@ -15,6 +15,7 @@ use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UnexpectedUploadException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
 use Illuminate\Http\UploadedFile;
 use SplFileObject;
@@ -78,6 +79,8 @@ final class DefaultUploadPipeline implements UploadPipeline
         $startedAt = microtime(true);
         $resultTag = 'success';
         $normalizedPath = null;
+        $snapshotPath = null;
+        $sourceHash = null;
         $originalFilename = $this->resolveOriginalFilename($source);
         $securityContext = [
             'correlation_id' => $correlationId,
@@ -98,20 +101,25 @@ final class DefaultUploadPipeline implements UploadPipeline
             // Resuelve el archivo como un SplFileObject
             $file = $this->resolveFileObject($source);
 
-            $this->withSharedFileLock($file, function (SplFileObject $lockedFile) use ($originalFilename, $constraints): void {
-                $baselineHash = $this->validateFileProperties($lockedFile, $originalFilename, $constraints);
-                $this->analyze($lockedFile);
-                $this->ensureChecksumUnchanged($lockedFile, $baselineHash);
-            });
-            // Valida magic bytes/anti-polyglot sobre la copia a procesar dentro del lock.
-            $realPath = $file->getRealPath();
-            if (!is_string($realPath) || $realPath === '') {
-                throw new UploadValidationException('Unable to resolve upload path for magic bytes validation.');
-            }
-            $this->magicBytes->validate($realPath, $constraints, $securityContext);
+            $this->withSharedFileLock($file, function (SplFileObject $lockedFile) use ($originalFilename, $constraints, $securityContext, &$snapshotPath, &$sourceHash): void {
+                $snapshotPath = $this->copyToWorkingFile($lockedFile);
+                $snapshotFile = new SplFileObject($snapshotPath, 'rb');
+                $snapshotFile->rewind();
 
-            // Normaliza el archivo (limpieza, metadata, etc.)
-            $normalizedPath = $this->normalize($file);
+                $baselineHash = $this->validateFileProperties($snapshotFile, $originalFilename, $constraints);
+                $this->analyze($snapshotFile);
+                $this->ensureChecksumUnchanged($snapshotFile, $baselineHash);
+                $this->magicBytes->validate($snapshotPath, $constraints, $securityContext);
+                $sourceHash = $baselineHash;
+            });
+            if (!is_string($snapshotPath) || $snapshotPath === '' || !is_file($snapshotPath)) {
+                throw new UploadValidationException('Unable to create immutable upload snapshot.');
+            }
+
+            // Normaliza usando snapshot inmutable para evitar TOCTOU con el source original.
+            $snapshotFile = new SplFileObject($snapshotPath, 'rb');
+            $snapshotFile->rewind();
+            $normalizedPath = $this->normalize($snapshotFile);
             $normalizedFile = new SplFileObject($normalizedPath, 'rb');
             $normalizedFile->rewind();
             $this->validateFileProperties($normalizedFile, $originalFilename, $constraints);
@@ -127,7 +135,7 @@ final class DefaultUploadPipeline implements UploadPipeline
             $metadata = new UploadMetadata(
                 mime: $mime,
                 extension: $this->guessExtension($normalizedPath, $originalFilename, $mime, $constraints),
-                hash: hash_file('sha256', $normalizedPath),
+                hash: $sourceHash ?? $this->computeSha256($normalizedPath),
                 dimensions: $dimensions,
                 originalFilename: $originalFilename,
             );
@@ -165,6 +173,9 @@ final class DefaultUploadPipeline implements UploadPipeline
 
             throw UploadException::fromThrowable('Upload pipeline failed.', $exception);
         } finally {
+            if (is_string($snapshotPath)) {
+                $this->deleteFileSilently($snapshotPath);
+            }
             $this->metrics->timing('upload.pipeline.duration_ms', (microtime(true) - $startedAt) * 1000, [
                 'profile' => $profile->collection(),
                 'result' => $resultTag,
@@ -264,6 +275,32 @@ final class DefaultUploadPipeline implements UploadPipeline
             $this->deleteFileSilently($target);
 
             throw UploadException::fromThrowable('Unable to normalize uploaded file.', $exception);
+        }
+    }
+
+    private function copyToWorkingFile(SplFileObject $source): string
+    {
+        $source->rewind();
+        $target = $this->createWorkingFile();
+        $destination = null;
+
+        try {
+            $destination = new SplFileObject($target, 'wb');
+            while (!$source->eof()) {
+                $chunk = $source->fread(self::CHUNK_SIZE);
+                if ($chunk === '' || $chunk === false) {
+                    continue;
+                }
+                $destination->fwrite($chunk);
+            }
+            $destination = null;
+            $source->rewind();
+
+            return $target;
+        } catch (Throwable $exception) {
+            $destination = null;
+            $this->deleteFileSilently($target);
+            throw UploadException::fromThrowable('Unable to create immutable upload snapshot.', $exception);
         }
     }
 
@@ -494,9 +531,6 @@ final class DefaultUploadPipeline implements UploadPipeline
             throw new UploadValidationException("MIME type {$mime} is not allowed.");
         }
 
-        // Valida la firma binaria del archivo
-        $this->validateMagicBytes($file, $mime);
-
         $extension = strtolower((string) pathinfo($originalFilename ?? $path, PATHINFO_EXTENSION));
         if ($extension !== '' && $constraints->allowedExtensions !== [] && !in_array($extension, $constraints->allowedExtensions, true)) {
             throw new UploadValidationException("Extension .{$extension} is not permitted.");
@@ -549,86 +583,6 @@ final class DefaultUploadPipeline implements UploadPipeline
         $map = $constraints->allowedMimeMap();
 
         return $map[$mime] ?? null;
-    }
-
-    /**
-     * Valida la firma binaria del archivo.
-     *
-     * Comprueba que el archivo tenga la firma binaria correcta
-     * según su tipo MIME para evitar falsificaciones.
-     *
-     * @param SplFileObject $file Archivo a validar.
-     * @param string $mime Tipo MIME del archivo.
-     */
-    private function validateMagicBytes(SplFileObject $file, string $mime): void
-    {
-        $signatures = [
-            'image/jpeg' => ["\xFF\xD8\xFF"],
-            'image/png' => ["\x89PNG\r\n\x1a\n"],
-            'image/gif' => ['GIF87a', 'GIF89a'],
-        ];
-
-        $file->rewind();
-        $prefix = $file->fread(64);
-        $file->rewind();
-
-        if ($mime === 'image/webp') {
-            if (!$this->isWebpSignature($prefix)) {
-                throw new UploadValidationException('Unexpected binary signature for WebP file.');
-            }
-
-            return;
-        }
-
-        if ($mime === 'image/avif' && $this->isAvifSignature($prefix)) {
-            return;
-        }
-
-        if (!isset($signatures[$mime])) {
-            return;
-        }
-
-        foreach ($signatures[$mime] as $signature) {
-            if (str_starts_with($prefix, $signature)) {
-                return;
-            }
-        }
-
-        throw new UploadValidationException('Unexpected binary signature for uploaded file.');
-    }
-
-    /**
-     * Valida la cabecera WebP.
-     */
-    private function isWebpSignature(string $prefix): bool
-    {
-        if (!str_starts_with($prefix, 'RIFF')) {
-            return false;
-        }
-
-        if (substr($prefix, 8, 4) !== 'WEBP') {
-            return false;
-        }
-
-        $chunk = substr($prefix, 12, 4);
-        return in_array($chunk, ['VP8 ', 'VP8L', 'VP8X'], true);
-    }
-
-    /**
-     * Valida la cabecera AVIF.
-     */
-    private function isAvifSignature(string $prefix): bool
-    {
-        if (strlen($prefix) < 12) {
-            return false;
-        }
-
-        if (substr($prefix, 4, 4) !== 'ftyp') {
-            return false;
-        }
-
-        $brand = substr($prefix, 8, 4);
-        return in_array($brand, ['avif', 'avis', 'mif1'], true);
     }
 
     /**
@@ -751,5 +705,15 @@ final class DefaultUploadPipeline implements UploadPipeline
         if ($current === false || $current !== $expectedHash) {
             throw new UploadValidationException('Upload content changed during processing.');
         }
+    }
+
+    private function computeSha256(string $path): string
+    {
+        $hash = hash_file('sha256', $path);
+        if (!is_string($hash) || $hash === '') {
+            throw new UploadValidationException('Unable to hash uploaded file.');
+        }
+
+        return $hash;
     }
 }

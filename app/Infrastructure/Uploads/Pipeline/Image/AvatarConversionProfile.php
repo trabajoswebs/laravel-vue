@@ -7,7 +7,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Image;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\Conversions\Conversion;
 use Spatie\MediaLibrary\HasMedia;
@@ -39,7 +39,7 @@ final class AvatarConversionProfile
         $profile ??= app(AvatarProfile::class);
 
         if (!$model instanceof HasMedia) {
-            Log::warning('avatar_conversion_skipped_missing_trait', [
+            SecurityLogger::warning('avatar_conversion_skipped_missing_trait', [
                 'model'      => get_class($model),
                 'media_id'   => $media?->id,
                 'collection' => $profile->collection(),
@@ -56,7 +56,7 @@ final class AvatarConversionProfile
 
         foreach ($definitions as $name => $definition) {
             if (!self::definitionIsValid($definition)) {
-                Log::warning('avatar_conversion_invalid_definition', [
+                SecurityLogger::warning('avatar_conversion_invalid_definition', [
                     'conversion' => $name,
                     'definition' => $definition,
                 ]);
@@ -82,7 +82,7 @@ final class AvatarConversionProfile
 
                 self::applyWebpFormatting($conversion, $width, $height, $fit, $webpQuality);
             } catch (\Throwable $e) {
-                Log::error('avatar_conversion_profile_failed', [
+                SecurityLogger::error('avatar_conversion_profile_failed', [
                     'conversion' => $name,
                     'width'      => $width,
                     'height'     => $height,

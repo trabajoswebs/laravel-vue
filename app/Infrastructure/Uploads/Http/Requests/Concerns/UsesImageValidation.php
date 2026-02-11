@@ -28,21 +28,17 @@ trait UsesImageValidation // Trait reutilizable para FormRequests
 
         $maxBytes = min($constraints->maxBytes, FC::MAX_BYTES); // Límite de bytes permitido
         $maxKb = (int) ceil($maxBytes / 1024); // Límite en KB para File::max
-        $minDim = max($constraints->minDimension, FC::MIN_WIDTH); // Dimensión mínima
-        $maxDim = min($constraints->maxDimension, FC::MAX_WIDTH); // Dimensión máxima
         $allowedExt = $constraints->allowedExtensions(); // Extensiones permitidas
-        $allowedMimes = $constraints->allowedMimeTypes(); // MIMEs permitidos
         $disallowedExt = array_map('strtolower', (array) config('image-pipeline.disallowed_extensions', [])); // Ext prohibidas
         $disallowedMimes = array_map('strtolower', (array) config('image-pipeline.disallowed_mimes', [])); // MIMEs prohibidos
-        $maxMegapixels = $constraints->maxMegapixels; // Límite de megapíxeles
 
         return [
             'bail', // Corta en el primer fallo
             'required', // Campo obligatorio
             'file', // Debe ser archivo
             File::types($allowedExt)->max($maxKb), // Limita extensión/tamaño (evita fallo en drivers sin soporte AVIF)
-            'mimetypes:' . implode(',', $allowedMimes), // MIME real permitido
-            "dimensions:min_width={$minDim},min_height={$minDim},max_width={$maxDim},max_height={$maxDim}", // Guard de dimensiones
+            // La validación profunda de MIME/dimensiones se mantiene en SecureImageValidation
+            // para evitar divergencias y falsos positivos por doble validación.
             new SecureImageValidation( // Validación profunda de imagen
                 maxFileSizeBytes: $maxBytes, // Límite de bytes
                 normalize: true, // Normaliza la imagen
@@ -50,8 +46,7 @@ trait UsesImageValidation // Trait reutilizable para FormRequests
             ),
             static function (string $attribute, mixed $value, Closure $fail) use ( // Validación inline adicional
                 $disallowedExt,
-                $disallowedMimes,
-                $maxMegapixels
+                $disallowedMimes
             ): void {
                 if (!$value instanceof UploadedFile) { // Si no es UploadedFile
                     return; // No aplica validación
@@ -69,16 +64,6 @@ trait UsesImageValidation // Trait reutilizable para FormRequests
                     return;
                 }
 
-                $path = $value->getRealPath(); // Ruta temporal
-                if ($path !== false) { // Si hay ruta
-                    $info = @getimagesize($path); // Lee dimensiones
-                    if (is_array($info) && isset($info[0], $info[1])) { // Si hay ancho/alto
-                        $megapixels = ($info[0] * $info[1]) / 1_000_000; // Calcula megapíxeles
-                        if ($megapixels > $maxMegapixels) { // Excede límite
-                            $fail(__('file-constraints.megapixels_exceeded', ['max' => $maxMegapixels])); // Rechaza
-                        }
-                    }
-                }
             },
         ];
     }

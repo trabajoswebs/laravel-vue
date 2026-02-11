@@ -32,13 +32,24 @@ final class TrackMediaAccess
                 $this->logger->accessed([
                     'media_id' => (string) $media->getKey(),
                     'user_id' => optional($request->user())->getAuthIdentifier(),
-                    'ip' => $request->ip(),
-                    'user_agent' => (string) $request->header('User-Agent'),
+                    'ip_hash' => $this->hashValue((string) ($request->ip() ?? '')),
+                    'user_agent_hash' => $this->hashValue((string) $request->header('User-Agent')),
                     'correlation_id' => $media->getCustomProperty('correlation_id'),
                 ]);
             }
         }
 
         return $response;
+    }
+
+    private function hashValue(string $value): ?string
+    {
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $key = (string) config('app.key', 'app');
+        return substr(hash_hmac('sha256', $trimmed, $key), 0, 16);
     }
 }

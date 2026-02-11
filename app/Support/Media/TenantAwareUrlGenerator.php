@@ -7,6 +7,7 @@ namespace App\Support\Media; // Namespace de soporte para media // Ej: app('medi
 use DateTimeInterface; // Tipo para expiraciones de temporaryUrl // Ej: now()->addMinutes(15)
 use Illuminate\Contracts\Filesystem\Filesystem; // Contrato de discos Laravel // Ej: Storage::disk('s3')
 use Illuminate\Support\Facades\Storage; // Facade de Storage para disco actual // Ej: Storage::disk($name)
+use RuntimeException;
 use Spatie\MediaLibrary\Support\UrlGenerator\DefaultUrlGenerator; // UrlGenerator base de Spatie // Ej: getUrl()
 
 final class TenantAwareUrlGenerator extends DefaultUrlGenerator // Extiende generador por defecto // Ej: se usa vía config
@@ -22,7 +23,7 @@ final class TenantAwareUrlGenerator extends DefaultUrlGenerator // Extiende gene
     {
         $diskName = $this->getDiskName(); // Nombre del disk actual (original o conversions) // Ej: avatars
         $driver = (string) config("filesystems.disks.{$diskName}.driver", 'local'); // Driver del disk // Ej: local|s3
-        $relativePath = $this->getPathRelativeToRoot(); // Path relativo con tenant incluido // Ej: tenants/1/users/2/abc.jpg
+        $relativePath = $this->sanitizeRelativePath($this->getPathRelativeToRoot()); // Path relativo con tenant incluido // Ej: tenants/1/users/2/abc.jpg
 
         if ($driver === 'local') { // Para discos locales evitamos /storage // Ej: dev sin storage:link
             $encoded = implode('/', array_map('rawurlencode', explode('/', $relativePath))); // Codifica cada segmento sin tocar los slashes
@@ -33,12 +34,14 @@ final class TenantAwareUrlGenerator extends DefaultUrlGenerator // Extiende gene
         $disk = $this->getDisk(); // Obtiene FilesystemAdapter configurado // Ej: S3 adapter
 
         if (method_exists($disk, 'temporaryUrl')) { // Si el driver soporta URLs temporales // Ej: s3
-            $url = $this->buildTemporaryUrl($disk, $relativePath); // Genera temporaryUrl con expiración corta // Ej: firma S3
-            return $this->versionUrl($url); // Retorna con versión opcional // Ej: añade ?v=...
+            // Importante: no mutar query en URLs firmadas remotas (S3/MinIO), invalidaría la firma.
+            return $this->buildTemporaryUrl($disk, $relativePath); // Genera temporaryUrl con expiración corta // Ej: firma S3
         }
 
-        $url = $disk->url($relativePath); // Fallback a URL pública del disk // Ej: CDN configurado
-        return $this->versionUrl($url); // Retorna aplicando versionado // Ej: ?v=timestamp
+        throw new RuntimeException(sprintf(
+            'Disk "%s" must support temporaryUrl for private media serving.',
+            $diskName
+        ));
     }
 
     /**
@@ -52,9 +55,15 @@ final class TenantAwareUrlGenerator extends DefaultUrlGenerator // Extiende gene
     public function getTemporaryUrl(DateTimeInterface $expiration, array $options = []): string // Firma explícita requerida por interfaz // Ej: media->getTemporaryUrl()
     {
         $disk = $this->getDisk(); // Obtiene disk actual // Ej: S3
-        $relativePath = $this->getPathRelativeToRoot(); // Path relativo // Ej: tenants/1/...
+        if (! method_exists($disk, 'temporaryUrl')) {
+            throw new RuntimeException(sprintf(
+                'Disk "%s" does not support temporaryUrl.',
+                $this->getDiskName()
+            ));
+        }
+        $relativePath = $this->sanitizeRelativePath($this->getPathRelativeToRoot()); // Path relativo // Ej: tenants/1/...
         $url = $disk->temporaryUrl($relativePath, $expiration, $options); // Crea URL temporal // Ej: expira en $expiration
-        return $this->versionUrl($url); // Aplica versionado si procede // Ej: ?v=timestamp
+        return $url; // No aplicar versionado en URLs firmadas remotas
     }
 
     /**
@@ -67,7 +76,7 @@ final class TenantAwareUrlGenerator extends DefaultUrlGenerator // Extiende gene
      */
     private function buildTemporaryUrl(Filesystem $disk, string $relativePath): string // Crea temporaryUrl para drivers remotos // Ej: s3
     {
-        $ttlSeconds = (int) config('media-serving.s3_temporary_url_ttl_seconds', 900); // TTL en segundos (config única)
+        $ttlSeconds = (int) config('media-serving.temporary_url_ttl_seconds', 900); // TTL en segundos (config única)
         $ttlSeconds = $ttlSeconds > 0 ? $ttlSeconds : 900;
         $expiration = now()->addSeconds($ttlSeconds); // Asegura TTL positivo // Ej: now()+900s
 
@@ -83,5 +92,22 @@ final class TenantAwareUrlGenerator extends DefaultUrlGenerator // Extiende gene
     protected function getDisk(): Filesystem // Helper protegido para exponer disk, coincide con BaseUrlGenerator // Ej: reutilizar sin duplicar lógica
     {
         return Storage::disk($this->getDiskName()); // Usa Storage facade // Ej: Storage::disk('s3')
+    }
+
+    private function sanitizeRelativePath(string $path): string
+    {
+        $normalized = str_replace('\\', '/', trim($path));
+        $segments = array_values(array_filter(explode('/', $normalized), static fn(string $segment): bool => $segment !== '' && $segment !== '.'));
+
+        if ($segments === [] || in_array('..', $segments, true)) {
+            throw new RuntimeException('Invalid media relative path.');
+        }
+
+        $clean = implode('/', $segments);
+        if (!str_starts_with($clean, 'tenants/')) {
+            throw new RuntimeException('Media path must be tenant-first.');
+        }
+
+        return $clean;
     }
 }

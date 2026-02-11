@@ -7,6 +7,7 @@ namespace Tests\Unit\Services\Upload;
 // Importamos las clases necesarias para los tests
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline de subida por defecto
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException; // Excepción para validación de subida
+use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
@@ -103,6 +104,111 @@ final class DefaultUploadPipelineTest extends TestCase
             $pipeline->process($path, $profile, 'test-correlation');
         } finally {
             @unlink($path);
+        }
+    }
+
+    public function testProcessPreservesVirusDetectedExceptionFromImagePipeline(): void
+    {
+        $workingDirectory = sys_get_temp_dir() . '/upload-pipeline-tests/' . uniqid('', true);
+        if (!is_dir($workingDirectory) && !@mkdir($workingDirectory, 0775, true) && !is_dir($workingDirectory)) {
+            $this->fail('Unable to create working directory for tests.');
+        }
+        $this->tempDirectories[] = $workingDirectory;
+
+        $securityLogger = new UploadSecurityLogger();
+        $magicBytes = new MagicBytesValidator($securityLogger);
+        $metrics = $this->createMock(MetricsInterface::class);
+        $metrics->method('increment')->willReturnCallback(static function (): void {});
+        $metrics->method('timing')->willReturnCallback(static function (): void {});
+
+        $imagePipeline = $this->createMock(ImageUploadPipelineAdapter::class);
+        $imagePipeline->method('process')->willThrowException(new VirusDetectedException('blocked'));
+
+        $constraints = $this->constraints(['image/jpeg'], ['jpg'], 512 * 1024);
+        $profile = new class($constraints) implements MediaProfile {
+            public function __construct(private FileConstraints $constraints) {}
+            public function collection(): string { return 'test'; }
+            public function disk(): ?string { return null; }
+            public function conversions(): array { return []; }
+            public function isSingleFile(): bool { return true; }
+            public function fileConstraints(): FileConstraints { return $this->constraints; }
+            public function fieldName(): string { return 'file'; }
+            public function requiresSquare(): bool { return false; }
+            public function applyConversions(\App\Infrastructure\Uploads\Core\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
+            public function usesQuarantine(): bool { return false; }
+            public function usesAntivirus(): bool { return false; }
+            public function requiresImageNormalization(): bool { return true; }
+            public function getQuarantineTtlHours(): int { return 0; }
+            public function getFailedTtlHours(): int { return 0; }
+        };
+
+        $pipeline = new DefaultUploadPipeline(
+            $workingDirectory,
+            $imagePipeline,
+            $magicBytes,
+            $securityLogger,
+            $metrics
+        );
+
+        $path = $this->createTempFile('jpg', 'fake-image-content');
+
+        try {
+            $this->expectException(VirusDetectedException::class);
+            $pipeline->process($path, $profile, 'test-correlation');
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testProcessUsesImmutableSnapshotWhenSourceChangesAfterValidation(): void
+    {
+        $this->rememberOriginalConfig(['image-pipeline.min_dimension']);
+        config()->set('image-pipeline.min_dimension', 1);
+
+        $original = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6pH1kAAAAASUVORK5CYII=');
+        self::assertIsString($original);
+        $mutated = 'MUTATED_CONTENT';
+        $sourcePath = $this->createTempFile('png', $original);
+        $sourceHash = hash('sha256', $original) ?: '';
+        [$pipeline, $profile] = $this->makePipeline(['image/png'], ['png']);
+
+        $flippingSource = new class($sourcePath, $mutated) extends \SplFileObject {
+            private int $rewindCount = 0;
+            private bool $mutated = false;
+
+            public function __construct(string $path, private readonly string $mutatedContent)
+            {
+                parent::__construct($path, 'rb');
+            }
+
+            public function rewind(): void
+            {
+                parent::rewind();
+                $this->rewindCount++;
+
+                // Mutación controlada tras finalizar la copia inmutable del source.
+                if (!$this->mutated && $this->rewindCount >= 3) {
+                    $realPath = $this->getRealPath();
+                    if (is_string($realPath) && $realPath !== '') {
+                        file_put_contents($realPath, $this->mutatedContent);
+                        $this->mutated = true;
+                    }
+                    parent::rewind();
+                }
+            }
+        };
+
+        try {
+            $result = $pipeline->process($flippingSource, $profile, 'test-correlation');
+
+            $this->assertSame($original, file_get_contents($result->path));
+            $this->assertSame($sourceHash, $result->metadata->hash);
+            $this->assertSame($mutated, file_get_contents($sourcePath));
+        } finally {
+            @unlink($sourcePath);
+            if (isset($result) && is_string($result->path)) {
+                @unlink($result->path);
+            }
         }
     }
 

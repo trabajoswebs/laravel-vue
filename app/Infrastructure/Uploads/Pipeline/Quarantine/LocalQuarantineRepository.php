@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Quarantine;
 
+use App\Support\Logging\SecurityLogger;
 // Importamos las clases necesarias
 use App\Infrastructure\Uploads\Pipeline\Exceptions\QuarantineException; // Excepción para fallos en cuarentena
 use App\Infrastructure\Uploads\Pipeline\Exceptions\QuarantineIntegrityException; // Excepción para fallos de integridad
@@ -264,6 +265,14 @@ final class LocalQuarantineRepository implements QuarantineRepository
             ]);
             return;
         }
+
+        // Contrato: si no existe, operación silenciosa.
+        if (! $this->filesystem->exists($relative)) {
+            $this->deleteStoredHash($relative);
+            $this->deleteMetadataSidecar($relative);
+            return;
+        }
+
         try {
             // Intentamos eliminar el archivo
             $deleted = $this->filesystem->delete($relative);
@@ -274,6 +283,13 @@ final class LocalQuarantineRepository implements QuarantineRepository
             ]));
         }
         if ($deleted === false) {
+            if (! $this->filesystem->exists($relative)) {
+                // Race condition: ya no existe.
+                $this->deleteStoredHash($relative);
+                $this->deleteMetadataSidecar($relative);
+                return;
+            }
+
             // Si la operación devuelve false, lanzamos excepción
             throw new QuarantineException(__('media.uploads.quarantine_delete_failed', [
                 'error' => 'delete operation returned false',
@@ -377,7 +393,11 @@ final class LocalQuarantineRepository implements QuarantineRepository
      */
     public function resolveTokenByIdentifier(string $identifier): ?QuarantineToken
     {
-        $relative = trim(str_replace(['\\', '..'], ['/', ''], $identifier), '/');
+        $relative = trim(str_replace('\\', '/', $identifier), '/');
+
+        if ($relative === '' || str_contains($relative, '..')) {
+            return null;
+        }
 
         if ($relative === '' || preg_match('/[^A-Za-z0-9._\/-]/', $relative) === 1) {
             return null; // Rechaza identificadores sospechosos o vacíos.
@@ -638,8 +658,10 @@ final class LocalQuarantineRepository implements QuarantineRepository
             ));
         }
         $this->storeMetadata($token, $to, $metadata);
-        // Al tocar el archivo, mantenemos coherente lastModified para TTL.
-        @touch($token->path);
+        // Al tocar el archivo, mantenemos coherente lastModified para TTL sin recrear artefactos borrados.
+        if (is_file($token->path)) {
+            @touch($token->path);
+        }
     }
 
     /**

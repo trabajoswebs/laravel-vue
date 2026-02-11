@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
 
+use App\Support\Logging\SecurityLogger;
 use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 use Throwable;
@@ -26,6 +27,14 @@ use Throwable;
  */
 abstract class AbstractScanner
 {
+    private ?MediaSecurityLogger $securityLogger = null;
+
+    /**
+     * @var array<string,mixed>
+     */
+    protected array $currentLogContext = [];
+    protected ?float $currentScanStartedAt = null;
+
     /**
      * Indica si el modo estricto está activo para la ejecución actual del escáner.
      */
@@ -66,6 +75,8 @@ abstract class AbstractScanner
         $scannerConfig = array_merge((array) ($scanConfig[$this->scannerKey()] ?? []), $this->config ?? []);
         $this->currentStrictMode = (bool) ($scanConfig['strict'] ?? true);
         $strictMode = $this->currentStrictMode;
+        $this->currentScanStartedAt = microtime(true);
+        $this->currentLogContext = $this->extractLogContext($context);
 
         // Valida y resuelve el binario del escáner.
         $binary = $this->resolveExecutable($scannerConfig);
@@ -149,17 +160,22 @@ abstract class AbstractScanner
 
             $process->run();
         } catch (ProcessTimedOutException $exception) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_timeout', $this->scannerKey()),
-                ['tmp_path' => $target['display_name']]
+                [
+                    'tmp_path' => $target['display_name'],
+                    'result' => 'scan_failed',
+                    'error' => $exception->getMessage(),
+                ]
             );
 
             return $this->failOpen($strictMode, 'process_timeout');
         } catch (Throwable $exception) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_exception', $this->scannerKey()),
                 [
                     'tmp_path' => $target['display_name'],
+                    'result' => 'scan_failed',
                     'error' => $exception->getMessage(),
                 ]
             );
@@ -187,12 +203,13 @@ abstract class AbstractScanner
 
         if ($exitCode === 1) {
             // Virus o malware detectado.
-            Log::warning(
+            $this->logScan('warning',
                 sprintf('image_scan.%s_detected', $this->scannerKey()),
                 [
                     'tmp_path'     => $target['display_name'],
                     'size_bytes'   => $target['size_bytes'],
-                    'output'       => $sanitizedStdout['preview'],
+                    'result'       => 'infected',
+                    'exit_code'    => $exitCode,
                     'output_hash'  => $sanitizedStdout['hash'],
                 ]
             );
@@ -201,14 +218,13 @@ abstract class AbstractScanner
         }
 
         // Otro error (código de salida != 0 y != 1).
-        Log::error(
+        $this->logScan('error',
             sprintf('image_scan.%s_failed', $this->scannerKey()),
             [
                 'tmp_path'     => $target['display_name'],
-                'code'         => $exitCode,
-                'output'       => $sanitizedStdout['preview'],
+                'result'       => 'scan_failed',
+                'exit_code'    => $exitCode,
                 'output_hash'  => $sanitizedStdout['hash'],
-                'stderr'       => $sanitizedStderr['preview'],
                 'stderr_hash'  => $sanitizedStderr['hash'],
             ]
         );
@@ -276,13 +292,13 @@ abstract class AbstractScanner
     {
         $binary = trim((string) ($scannerConfig['binary'] ?? ''));
         if ($binary === '') {
-            Log::error(sprintf('image_scan.%s_binary_missing', $this->scannerKey()));
+            $this->logScan('error', sprintf('image_scan.%s_binary_missing', $this->scannerKey()));
             return null;
         }
 
         $resolved = realpath($binary);
         if ($resolved === false || $resolved === '') {
-            Log::error(sprintf('image_scan.%s_binary_unavailable', $this->scannerKey()), ['binary' => $binary]);
+            $this->logScan('error', sprintf('image_scan.%s_binary_unavailable', $this->scannerKey()), ['binary_path' => $binary]);
             return null;
         }
 
@@ -290,17 +306,17 @@ abstract class AbstractScanner
         $allowlist = $this->allowedBinaries();
 
         if ($allowlist === [] || ! in_array($normalizedBinary, $allowlist, true)) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_binary_not_allowlisted', $this->scannerKey()),
-                ['binary' => $normalizedBinary]
+                ['binary_path' => $normalizedBinary]
             );
             return null;
         }
 
         if (! is_executable($resolved)) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_binary_unavailable', $this->scannerKey()),
-                ['binary' => basename($resolved)]
+                ['binary_path' => $resolved]
             );
             return null;
         }
@@ -324,13 +340,13 @@ abstract class AbstractScanner
     {
         $rawPath = $context['path'] ?? null;
         if (! is_string($rawPath) || $rawPath === '') {
-            Log::error(sprintf('image_scan.%s_missing_path', $this->scannerKey()));
+            $this->logScan('error', sprintf('image_scan.%s_missing_path', $this->scannerKey()));
             return null;
         }
 
         $rawNormalized = str_replace('\\', '/', $rawPath);
         if (str_contains($rawNormalized, '..')) {
-            Log::error(sprintf('image_scan.%s_relative_path', $this->scannerKey()), ['path' => basename($rawPath)]);
+            $this->logScan('error', sprintf('image_scan.%s_relative_path', $this->scannerKey()), ['path' => $rawPath]);
             return null;
         }
 
@@ -343,9 +359,9 @@ abstract class AbstractScanner
         restore_error_handler();
 
         if ($handle === false) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_open_failed', $this->scannerKey()),
-                ['path' => basename($rawPath), 'error' => $error]
+                ['path' => $rawPath, 'error' => $error]
             );
             return null;
         }
@@ -354,16 +370,16 @@ abstract class AbstractScanner
         $uri = $meta['uri'] ?? null;
         if (is_string($uri) && is_link($uri)) {
             $this->closeHandle($handle);
-            Log::error(sprintf('image_scan.%s_target_is_symlink', $this->scannerKey()), ['path' => basename($uri)]);
+            $this->logScan('error', sprintf('image_scan.%s_target_is_symlink', $this->scannerKey()), ['path' => $uri]);
             return null;
         }
 
         $realPath = is_string($uri) ? realpath($uri) : false;
         if ($realPath === false) {
             $this->closeHandle($handle);
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_unreachable_path', $this->scannerKey()),
-                ['path' => basename($rawPath)]
+                ['path' => $rawPath]
             );
             return null;
         }
@@ -371,9 +387,9 @@ abstract class AbstractScanner
         $stat = fstat($handle);
         if ($stat === false || (($stat['mode'] ?? 0) & 0xF000) !== 0x8000) {
             $this->closeHandle($handle);
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_not_regular_file', $this->scannerKey()),
-                ['path' => basename($realPath)]
+                ['path' => $realPath]
             );
             return null;
         }
@@ -386,9 +402,9 @@ abstract class AbstractScanner
 
             if ($normalizedReal !== $normalizedBase && ! str_starts_with($normalizedReal, $prefix)) {
                 $this->closeHandle($handle);
-                Log::error(
+                $this->logScan('error',
                     sprintf('image_scan.%s_outside_base', $this->scannerKey()),
-                    ['path' => basename($realPath), 'base' => $normalizedBase]
+                    ['path' => $realPath, 'base_path' => $normalizedBase]
                 );
                 return null;
             }
@@ -401,10 +417,10 @@ abstract class AbstractScanner
 
         if ($maxFileBytes > 0 && is_int($size) && $size > $maxFileBytes) {
             $this->closeHandle($handle);
-            Log::warning(
+            $this->logScan('warning',
                 sprintf('image_scan.%s_file_too_large', $this->scannerKey()),
                 [
-                    'path'       => basename($realPath),
+                    'path'       => $realPath,
                     'size_bytes' => $size,
                     'max_bytes'  => $maxFileBytes,
                 ]
@@ -482,9 +498,9 @@ abstract class AbstractScanner
         }
 
         if (! is_dir($base) || is_link($base)) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_base_invalid', $this->scannerKey()),
-                ['base' => $this->normalizePath($base)]
+                ['base_path' => $this->normalizePath($base)]
             );
             return null;
         }
@@ -561,11 +577,17 @@ abstract class AbstractScanner
     protected function failOpen(bool $strictMode, string $reason): bool
     {
         if ($strictMode) {
-            Log::alert(sprintf('image_scan.%s_fail_closed', $this->scannerKey()), ['reason' => $reason]);
+            $this->securityLogger()->critical(sprintf('image_scan.%s_fail_closed', $this->scannerKey()), $this->baseLogContext([
+                'reason' => $reason,
+                'result' => 'scan_failed',
+            ]));
             throw new AntivirusException($this->scannerKey(), $reason);
         }
 
-        Log::warning(sprintf('image_scan.%s_fail_open', $this->scannerKey()), ['reason' => $reason]);
+        $this->logScan('warning', sprintf('image_scan.%s_fail_open', $this->scannerKey()), [
+            'reason' => $reason,
+            'result' => 'fail_open',
+        ]);
 
         return true;
     }
@@ -581,7 +603,7 @@ abstract class AbstractScanner
         try {
             $cleanup();
         } catch (Throwable $exception) {
-            Log::debug(
+            $this->logScan('debug',
                 sprintf('image_scan.%s_cleanup_failed', $this->scannerKey()),
                 ['error' => $exception->getMessage()]
             );
@@ -612,24 +634,24 @@ abstract class AbstractScanner
     {
         $rulesPath = trim((string) ($scannerConfig['rules_path'] ?? ''));
         if ($rulesPath === '') {
-            Log::error(sprintf('image_scan.%s_rules_missing', $this->scannerKey()));
+            $this->logScan('error', sprintf('image_scan.%s_rules_missing', $this->scannerKey()));
             return null;
         }
 
         $realRules = realpath($rulesPath);
         if ($realRules === false || $realRules === '') {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_rules_unreachable', $this->scannerKey()),
-                ['rules' => basename($rulesPath)]
+                ['rules_path' => $rulesPath]
             );
             return null;
         }
 
         $ext = strtolower(pathinfo($realRules, PATHINFO_EXTENSION));
         if (! is_file($realRules) || is_link($realRules) || ! in_array($ext, ['yar', 'yara', 'yarac'], true)) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_rules_not_regular', $this->scannerKey()),
-                ['rules' => basename($realRules)]
+                ['rules_path' => $realRules]
             );
             return null;
         }
@@ -640,9 +662,9 @@ abstract class AbstractScanner
             $prefix = $normalizedBase === '/' ? '/' : $normalizedBase . '/';
 
             if ($normalizedRules !== $normalizedBase && ! str_starts_with($normalizedRules, $prefix)) {
-                Log::error(
+                $this->logScan('error',
                     sprintf('image_scan.%s_rules_outside_allowed', $this->scannerKey()),
-                    ['rules' => basename($realRules), 'allowed_dir' => $normalizedBase]
+                    ['rules_path' => $realRules, 'allowed_dir' => $normalizedBase]
                 );
                 return null;
             }
@@ -650,9 +672,9 @@ abstract class AbstractScanner
 
         $handle = fopen($realRules, 'rb');
         if ($handle === false) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_rules_open_failed', $this->scannerKey()),
-                ['rules' => basename($realRules)]
+                ['rules_path' => $realRules]
             );
             return null;
         }
@@ -661,9 +683,9 @@ abstract class AbstractScanner
         $this->closeHandle($handle);
 
         if ($tempPath === null) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_rules_copy_failed', $this->scannerKey()),
-                ['rules' => basename($realRules)]
+                ['rules_path' => $realRules]
             );
             return null;
         }
@@ -696,7 +718,7 @@ abstract class AbstractScanner
             try {
                 $name = $prefix . bin2hex(random_bytes(16));
             } catch (Throwable $exception) {
-                Log::error(
+                $this->logScan('error',
                     sprintf('image_scan.%s_temp_random_failed', $this->scannerKey()),
                     ['error' => $exception->getMessage()]
                 );
@@ -712,7 +734,7 @@ abstract class AbstractScanner
         }
 
         if (! is_resource($handle) || $path === null) {
-            Log::error(sprintf('image_scan.%s_temp_open_failed', $this->scannerKey()));
+            $this->logScan('error', sprintf('image_scan.%s_temp_open_failed', $this->scannerKey()));
             return null;
         }
 
@@ -721,7 +743,7 @@ abstract class AbstractScanner
             $copySucceeded = stream_copy_to_stream($input, $handle) !== false;
         } finally {
             if (fclose($handle) === false) {
-                Log::error(sprintf('image_scan.%s_temp_close_failed', $this->scannerKey()));
+                $this->logScan('error', sprintf('image_scan.%s_temp_close_failed', $this->scannerKey()));
                 $copySucceeded = false;
             }
 
@@ -756,9 +778,9 @@ abstract class AbstractScanner
         }
 
         if (! is_dir($base) || is_link($base)) {
-            Log::error(
+            $this->logScan('error',
                 sprintf('image_scan.%s_rules_base_invalid', $this->scannerKey()),
-                ['base' => $this->normalizePath($base)]
+                ['base_path' => $this->normalizePath($base)]
             );
             return null;
         }
@@ -770,4 +792,59 @@ abstract class AbstractScanner
 
         return rtrim($realBase, DIRECTORY_SEPARATOR);
     }
+
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    protected function extractLogContext(array $context): array
+    {
+        return array_filter([
+            'upload_id' => $context['upload_id'] ?? null,
+            'tenant_id' => $context['tenant_id'] ?? null,
+            'correlation_id' => $context['correlation_id'] ?? ($context['request_id'] ?? null),
+            'user_id' => $context['user_id'] ?? null,
+        ], static fn (mixed $value): bool => $value !== null && $value !== '');
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    protected function baseLogContext(array $context = []): array
+    {
+        if ($this->currentScanStartedAt !== null && ! array_key_exists('duration_ms', $context)) {
+            $context['duration_ms'] = (int) round((microtime(true) - $this->currentScanStartedAt) * 1000);
+        }
+
+        return array_merge(
+            ['scanner_name' => $this->scannerKey()],
+            $this->currentLogContext,
+            $context
+        );
+    }
+
+    /**
+     * @param array<string,mixed> $context
+     */
+    protected function logScan(string $level, string $event, array $context = []): void
+    {
+        $payload = $this->baseLogContext($context);
+        $logger = $this->securityLogger();
+
+        match ($level) {
+            'debug' => $logger->debug($event, $payload),
+            'info' => $logger->info($event, $payload),
+            'warning' => $logger->warning($event, $payload),
+            'error' => $logger->error($event, $payload),
+            'critical' => $logger->critical($event, $payload),
+            default => $logger->error($event, $payload),
+        };
+    }
+
+    protected function securityLogger(): MediaSecurityLogger
+    {
+        return $this->securityLogger ??= app(MediaSecurityLogger::class);
+    }
+
 }

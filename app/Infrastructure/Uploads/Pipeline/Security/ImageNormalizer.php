@@ -22,6 +22,8 @@ final class ImageNormalizer
      * Tamaño máximo en bytes permitido para los archivos normalizados.
      */
     private int $maxBytes;
+    private int $maxEdge;
+    private float $maxMegapixels;
 
     /**
      * Constructor de la clase.
@@ -47,12 +49,14 @@ final class ImageNormalizer
         $resolvedConstraints = $constraints ?? app(FileConstraints::class);
         // Establece el tamaño máximo de bytes, asegurando que sea al menos 1
         $this->maxBytes = max(1, $resolvedConstraints->maxBytes);
+        $this->maxEdge = max(1, (int) config('image-pipeline.max_edge', 16384));
+        $this->maxMegapixels = max(0.0, (float) config('image-pipeline.max_megapixels', 48.0));
     }
 
     /**
      * Re-encodea la imagen usando el formato más seguro disponible.
      *
-     * Intenta usar métodos específicos de formato (toPng, toJpeg, toWebp) si están disponibles
+     * Intenta usar métodos específicos de formato (toPng, toJpeg) si están disponibles
      * en el objeto de imagen. Si no, utiliza un fallback con el método save().
      *
      * @param object $image Objeto de imagen soportado por Intervention (versión 2 o 3).
@@ -61,6 +65,18 @@ final class ImageNormalizer
      */
     public function reencode(object $image, ?string $preferredMime = null): ?string
     {
+        $dimensions = $this->resolveDimensions($image);
+        if ($dimensions !== null && ! $this->isDimensionsAllowed($dimensions[0], $dimensions[1])) {
+            $this->logger?->warning('image_normalizer_dimensions_exceeded', [
+                'width' => $dimensions[0],
+                'height' => $dimensions[1],
+                'max_edge' => $this->maxEdge,
+                'max_megapixels' => $this->maxMegapixels,
+            ]);
+
+            return null;
+        }
+
         // Elige el formato seguro basado en el MIME preferido
         $format = $this->chooseSafeFormat($preferredMime);
         $method = null;
@@ -70,8 +86,6 @@ final class ImageNormalizer
             $method = 'toPng';
         } elseif (in_array($format, ['jpg', 'jpeg'], true) && method_exists($image, 'toJpeg')) {
             $method = 'toJpeg';
-        } elseif ($format === 'webp' && method_exists($image, 'toWebp')) {
-            $method = 'toWebp';
         }
 
         // Si se encontró un método compatible, intenta codificar la imagen
@@ -83,6 +97,13 @@ final class ImageNormalizer
                 $bytes = $this->stringifyEncoded($encoded);
                 // Si se obtuvieron bytes válidos, devuélvelos
                 if (is_string($bytes) && $bytes !== '') {
+                    if (strlen($bytes) > $this->maxBytes) {
+                        $this->logger?->warning('image_normalizer_max_bytes_exceeded', [
+                            'limit' => $this->maxBytes,
+                            'size' => strlen($bytes),
+                        ]);
+                        return null;
+                    }
                     return $bytes;
                 }
             } catch (Throwable) {
@@ -104,12 +125,23 @@ final class ImageNormalizer
                 // Lee los bytes del archivo temporal
                 $bytes = file_get_contents($tmp);
                 // Devuelve los bytes si son válidos
-                return is_string($bytes) && $bytes !== '' ? $bytes : null;
+                if (! is_string($bytes) || $bytes === '') {
+                    return null;
+                }
+                if (strlen($bytes) > $this->maxBytes) {
+                    $this->logger?->warning('image_normalizer_max_bytes_exceeded', [
+                        'limit' => $this->maxBytes,
+                        'size' => strlen($bytes),
+                    ]);
+                    return null;
+                }
+
+                return $bytes;
             } finally {
                 // Asegura que el archivo temporal se elimine
                 if (file_exists($tmp) && !@unlink($tmp)) {
                     // Registra un debug si no se pudo eliminar el archivo temporal
-                    $this->logger?->debug('image_normalizer_temp_cleanup_failed', ['path' => $tmp]);
+                    $this->logger?->debug('image_normalizer_temp_cleanup_failed');
                 }
             }
         }
@@ -132,6 +164,9 @@ final class ImageNormalizer
     {
         // Verifica que el tamaño de los bytes no exceda el límite configurado
         $size = strlen($bytes);
+        if ($size <= 0) {
+            return false;
+        }
         if ($size > $this->maxBytes) {
             // Registra un warning si se excede el tamaño máximo
             $this->logger?->warning('image_normalizer_max_bytes_exceeded', [
@@ -183,12 +218,18 @@ final class ImageNormalizer
      */
     private function chooseSafeFormat(?string $preferredMime): string
     {
-        // Si el MIME preferido contiene 'jpeg', devuelve 'jpeg'
-        if (is_string($preferredMime) && str_contains($preferredMime, 'jpeg')) {
+        if (! is_string($preferredMime) || $preferredMime === '') {
+            return 'png';
+        }
+
+        $preferred = strtolower($preferredMime);
+
+        // Conserva flujo JPEG cuando sea explícitamente JPEG.
+        if (str_contains($preferred, 'jpeg') || str_contains($preferred, 'jpg')) {
             return 'jpeg';
         }
 
-        // Por defecto, devuelve 'png' como formato seguro
+        // Para PNG/GIF/WebP/AVIF, normaliza a PNG para evitar inconsistencias de alpha/animación.
         return 'png';
     }
 
@@ -226,5 +267,61 @@ final class ImageNormalizer
 
         // Si no se pudo convertir a string, devuelve null
         return null;
+    }
+
+    /**
+     * @return array{0:int,1:int}|null
+     */
+    private function resolveDimensions(object $image): ?array
+    {
+        $width = null;
+        $height = null;
+
+        foreach ([['width', 'height'], ['getWidth', 'getHeight']] as [$wMethod, $hMethod]) {
+            if (method_exists($image, $wMethod) && method_exists($image, $hMethod)) {
+                try {
+                    $width = (int) $image->{$wMethod}();
+                    $height = (int) $image->{$hMethod}();
+                    break;
+                } catch (Throwable) {
+                    $width = null;
+                    $height = null;
+                }
+            }
+        }
+
+        if (($width === null || $height === null) && method_exists($image, 'size')) {
+            try {
+                $size = $image->size();
+                if (is_object($size) && method_exists($size, 'width') && method_exists($size, 'height')) {
+                    $width = (int) $size->width();
+                    $height = (int) $size->height();
+                }
+            } catch (Throwable) {
+                $width = null;
+                $height = null;
+            }
+        }
+
+        if (! is_int($width) || ! is_int($height) || $width <= 0 || $height <= 0) {
+            return null;
+        }
+
+        return [$width, $height];
+    }
+
+    private function isDimensionsAllowed(int $width, int $height): bool
+    {
+        if ($width > $this->maxEdge || $height > $this->maxEdge) {
+            return false;
+        }
+
+        if ($this->maxMegapixels <= 0.0) {
+            return true;
+        }
+
+        $megapixels = ($width * $height) / 1_000_000;
+
+        return $megapixels <= $this->maxMegapixels;
     }
 }

@@ -14,6 +14,8 @@ return [
     'detection_error' => 'No se pudo detectar el idioma.',
     'cache_clear_error' => 'Error al limpiar la caché.',
     'cache_prewarm_error' => 'Error al precargar las traducciones.',
+    'cache_clear_only_dev' => 'Solo puedes limpiar la caché de traducciones en entornos de desarrollo o testing.',
+    'cache_clear_permission_denied' => 'No tienes permisos para limpiar la caché de traducciones.',
 
     // Mensajes informativos
     'fallback_used' => 'Usando idioma por defecto: :locale.',
@@ -37,6 +39,8 @@ return [
     'state_changed' => 'Idioma actualizado.',
     'state_error' => 'Error al cambiar el idioma.',
     'state_unsupported' => 'Este idioma no está disponible.',
+    'rate_limited' => 'Demasiados cambios de idioma. Espera :seconds segundos antes de intentarlo de nuevo.',
+    'invalid_locale' => 'El idioma seleccionado no es válido.',
 
     // Nombres de idiomas
     'languages' => [

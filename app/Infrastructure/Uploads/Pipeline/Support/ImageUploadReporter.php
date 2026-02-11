@@ -6,8 +6,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Support;
 
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Contracts\Debug\ExceptionHandler;
-use Illuminate\Support\Facades\Log;
-
+use App\Support\Logging\SecurityLogger;
 /**
  * Centraliza logging y reporting de errores del flujo de subida.
  */
@@ -32,7 +31,7 @@ final class ImageUploadReporter
             $logContext['trace'] = $exception->getTraceAsString();
         }
 
-        Log::log($level, $message, $logContext);
+        SecurityLogger::log($level, $message, $logContext);
         $this->exceptions->report($exception);
     }
 }

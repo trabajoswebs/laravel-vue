@@ -76,7 +76,8 @@ final class ShowMediaController extends Controller // Controlador invocable // E
                     $adapter = Storage::disk($disk); // Reobtiene adapter // Ej: Storage::disk('public')
                     $cleanPath = $altPath; // Ajusta path // Ej: tenants/.../v123.jpg
                 } else { // No se halló en ningún sitio // Ej: 404
-                    abort(404, 'Media no encontrado'); // Devuelve 404 // Ej: evita filtrar info
+                    $this->logDeniedAccess('media_not_found', $cleanPath, $tenantId, $userId);
+                    abort(404); // Devuelve 404 uniforme
                 }
             }
         }
@@ -113,28 +114,10 @@ final class ShowMediaController extends Controller // Controlador invocable // E
      */
     private function resolveDisk(string $cleanPath): string // Elige disk apropiado para servir media // Ej: avatars/public
     {
-        $candidates = array_values(array_filter([ // Lista de discos priorizados // Ej: ['avatars','public','local']
-            config('image-pipeline.avatar_disk'), // Disco configurado para avatares // Ej: avatars
-            config('media-library.conversions_disk'), // Disco opcional para conversiones // Ej: media-conversions
-            config('media-library.disk_name'), // Disco por defecto de Media Library // Ej: public
-            config('filesystems.default'), // Disco default del framework // Ej: local
-            config('filesystems.cloud'), // Disco cloud si está configurado // Ej: s3
-        ], static fn($disk) => is_string($disk) && trim($disk) !== '')); // Filtra valores inválidos // Ej: sólo strings
-
-        $unique = array_values(array_unique($candidates)); // Quita duplicados manteniendo orden // Ej: ['avatars','public','local']
-
-        foreach ($unique as $disk) { // Itera discos candidatos // Ej: avatars primero
-            $config = config("filesystems.disks.{$disk}"); // Lee config del disk // Ej: ['driver'=>'local',...]
-
-            if (! is_array($config)) { // Si el disk no existe // Ej: typo
-                continue; // Salta // Ej: sigue al siguiente
-            }
-
-            $adapter = Storage::disk($disk); // Obtiene FilesystemAdapter // Ej: Storage::disk('avatars')
-
-            if ($adapter instanceof Filesystem && $adapter->exists($cleanPath)) { // Usa primer disk donde exista el archivo // Ej: true
-                return $disk; // Devuelve disk válido // Ej: avatars
-            }
+        $unique = $this->diskCandidates(); // Quita duplicados manteniendo orden // Ej: ['avatars','public','local']
+        $found = $this->findExistingDisk($cleanPath, $unique);
+        if ($found !== null) {
+            return $found;
         }
 
         return $unique[0] ?? config('filesystems.default', 'local'); // Fallback al primer candidato o default // Ej: local
@@ -164,11 +147,20 @@ final class ShowMediaController extends Controller // Controlador invocable // E
         $dir = trim(str_replace($filename, '', $originalDir), '/'); // Directorio base sin conversions // Ej: tenants/.../avatars/uuid
 
         $base = preg_replace('/-[^-]+\\.[^.]+$/', '', $filename); // Quita sufijo de conversión + extensión // Ej: v123-thumb.webp -> v123
+        if (! is_string($base) || $base === '') {
+            return null;
+        }
 
         // Busca cualquier archivo que comience igual (cubre .jpg/.png/.webp)
-        $candidates = $adapter->files($dir); // Lista archivos en directorio base // Ej: tenants/.../v123.jpg
+        try {
+            $candidates = $adapter->files($dir); // Lista archivos en directorio base // Ej: tenants/.../v123.jpg
+        } catch (\Throwable) {
+            return null;
+        }
+
         foreach ($candidates as $candidate) { // Itera archivos // Ej: tenants/.../v123.jpg
-            if (str_contains($candidate, $base)) { // Coincide prefijo // Ej: true
+            $candidateBase = pathinfo(basename($candidate), PATHINFO_FILENAME);
+            if ($candidateBase === $base) { // Coincide nombre base exacto, evitando colisiones parciales
                 return $candidate; // Usa ese archivo como fallback // Ej: sirve original
             }
         }
@@ -185,15 +177,13 @@ final class ShowMediaController extends Controller // Controlador invocable // E
      */
     private function findOnAlternateDisks(string $cleanPath, string $currentDisk): array // Devuelve [disk|null, path|null] // Ej: ['public','tenants/.../v123.jpg']
     {
-        $candidates = array_values(array_filter([
-            config('image-pipeline.avatar_disk'),
-            config('media-library.conversions_disk'),
-            config('media-library.disk_name'),
-            config('filesystems.default'),
-            config('filesystems.cloud'),
-        ], static fn($disk) => is_string($disk) && trim($disk) !== '')); // Reutiliza lista de discos incluyendo conversions y cloud
+        $candidates = $this->diskCandidates(); // Reutiliza lista de discos incluyendo conversions y cloud
+        $found = $this->findExistingDisk($cleanPath, $candidates, $currentDisk);
+        if ($found !== null) {
+            return [$found, $cleanPath];
+        }
 
-        foreach ($candidates as $disk) { // Itera discos posibles // Ej: public
+        foreach ($candidates as $disk) { // Itera discos posibles para fallback local // Ej: public
             if ($disk === $currentDisk) { // Omite el actual // Ej: evita repetir
                 continue; // Continúa // Ej: siguiente disk
             }
@@ -212,6 +202,32 @@ final class ShowMediaController extends Controller // Controlador invocable // E
         }
 
         return [null, null]; // Ningún disco tiene el archivo // Ej: devolvemos nulls
+    }
+
+    /**
+     * Busca el primer disco configurado que contenga el path exacto.
+     *
+     * @param list<string> $candidates
+     */
+    private function findExistingDisk(string $cleanPath, array $candidates, ?string $excludeDisk = null): ?string
+    {
+        foreach ($candidates as $disk) {
+            if ($excludeDisk !== null && $disk === $excludeDisk) {
+                continue;
+            }
+
+            $config = config("filesystems.disks.{$disk}");
+            if (!is_array($config)) {
+                continue;
+            }
+
+            $adapter = Storage::disk($disk);
+            if ($adapter instanceof Filesystem && $adapter->exists($cleanPath)) {
+                return $disk;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -273,6 +289,20 @@ final class ShowMediaController extends Controller // Controlador invocable // E
         $driver = $disk !== null ? (string) config("filesystems.disks.{$disk}.driver", 'local') : 'local'; // Driver configurado // Ej: s3
 
         return $driver !== 'local'; // Considera remoto todo lo que no sea driver local
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function diskCandidates(): array
+    {
+        return array_values(array_unique(array_values(array_filter([
+            config('image-pipeline.avatar_disk'),
+            config('media-library.conversions_disk'),
+            config('media-library.disk_name'),
+            config('filesystems.default'),
+            config('filesystems.cloud'),
+        ], static fn($disk) => is_string($disk) && trim($disk) !== ''))));
     }
 
     /**

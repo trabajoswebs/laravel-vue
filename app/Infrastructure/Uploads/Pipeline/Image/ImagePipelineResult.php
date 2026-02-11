@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Image;
 
-use Illuminate\Support\Facades\Log;
-
+use App\Support\Logging\SecurityLogger;
 /**
  * Value Object que representa el resultado del procesamiento de una imagen.
  *
@@ -143,7 +142,7 @@ final class ImagePipelineResult
         $this->cleaned = true;
 
         if (!$this->isPathDeletable()) {
-            Log::warning('image_pipeline_cleanup_skipped', [
+            SecurityLogger::warning('image_pipeline_cleanup_skipped', [
                 'path' => $this->path,
             ]);
 
@@ -151,7 +150,7 @@ final class ImagePipelineResult
         }
 
         if (!@unlink($this->path)) {
-            Log::notice('image_pipeline_cleanup_failed', [
+            SecurityLogger::notice('image_pipeline_cleanup_failed', [
                 'path' => basename($this->path), // Registra solo el nombre del archivo por seguridad
             ]);
         }
@@ -170,7 +169,7 @@ final class ImagePipelineResult
         try {
             $this->cleanup();
         } catch (\Throwable $exception) {
-            Log::debug('image_pipeline_cleanup_exception', [
+            SecurityLogger::debug('image_pipeline_cleanup_exception', [
                 'message' => $exception->getMessage(),
             ]);
         }

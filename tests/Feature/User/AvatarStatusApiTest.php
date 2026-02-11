@@ -7,6 +7,7 @@ namespace Tests\Feature\User;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\TestCase;
@@ -71,5 +72,49 @@ final class AvatarStatusApiTest extends TestCase
                 'status' => 'superseded',
                 'latest_media_id' => $mediaNew->getKey(),
             ]);
+    }
+
+    public function test_upload_status_reports_processing_when_latest_payload_matches_requested_uuid(): void
+    {
+        $user = User::factory()->create();
+        $tenant = Tenant::query()->create([
+            'name' => 'Acme',
+            'owner_user_id' => $user->getKey(),
+        ]);
+
+        $tenant->makeCurrent();
+        $this->actingAs($user);
+        $this->withoutMiddleware();
+
+        Redis::shouldReceive('get')
+            ->once()
+            ->andReturn(json_encode([
+                'upload_uuid' => 'upload-pending',
+                'media_id' => '123',
+                'updated_at' => now()->toIso8601String(),
+            ]));
+
+        $this->getJson('/api/avatar/uploads/upload-pending/status')
+            ->assertOk()
+            ->assertJsonPath('status', 'processing');
+    }
+
+    public function test_upload_status_reports_failed_when_no_media_and_no_last_payload(): void
+    {
+        $user = User::factory()->create();
+        $tenant = Tenant::query()->create([
+            'name' => 'Acme',
+            'owner_user_id' => $user->getKey(),
+        ]);
+
+        $tenant->makeCurrent();
+        $this->actingAs($user);
+        $this->withoutMiddleware();
+
+        Redis::shouldReceive('get')->once()->andReturn(null);
+
+        $this->getJson('/api/avatar/uploads/upload-missing/status')
+            ->assertOk()
+            ->assertJsonPath('status', 'failed');
     }
 }

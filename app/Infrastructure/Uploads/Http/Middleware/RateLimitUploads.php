@@ -41,7 +41,9 @@ class RateLimitUploads
 
         // Genera una clave única para el usuario o IP.
         $userId = optional($request->user())->getAuthIdentifier();
-        $key = 'img_upload:' . ($userId !== null ? $userId : 'guest:' . $request->ip());
+        $tenantId = $request->user()?->current_tenant_id ?? tenant()?->getKey() ?? 'no-tenant';
+        $subject = $userId !== null ? (string) $userId : 'guest:' . (string) $request->ip();
+        $key = 'img_upload:' . $tenantId . ':' . $subject;
 
         // Verifica si se han excedido los intentos permitidos.
         if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {

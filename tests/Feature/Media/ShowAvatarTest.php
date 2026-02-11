@@ -65,7 +65,7 @@ class ShowAvatarTest extends TestCase
     public function test_s3_avatar_serving_sets_no_store_cache_control_on_redirect(): void
     {
         config()->set('media.signed_serve.enabled', true);
-        config()->set('media-serving.s3_temporary_url_ttl_seconds', 300);
+        config()->set('media-serving.temporary_url_ttl_seconds', 300);
         config()->set('filesystems.disks.s3.driver', 's3');
 
         $user = User::factory()->create(['current_tenant_id' => null]);

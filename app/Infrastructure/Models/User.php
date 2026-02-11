@@ -258,8 +258,8 @@ class User extends Authenticatable implements HasMedia, MediaOwner
      */
     private function signedAvatarRoute(Media $media, string $conversion): ?string
     {
-        $ttlMinutes = (int) config('media-library.temporary_url_default_lifetime', 15);
-        $ttlMinutes = $ttlMinutes > 0 ? $ttlMinutes : 15;
+        $ttlSeconds = (int) config('media-serving.temporary_url_ttl_seconds', 900);
+        $ttlSeconds = $ttlSeconds > 0 ? $ttlSeconds : 900;
 
         $version = $media->getCustomProperty('version') ?? $this->avatar_version;
         $params = [
@@ -273,7 +273,7 @@ class User extends Authenticatable implements HasMedia, MediaOwner
         try {
             return \URL::temporarySignedRoute(
                 'media.avatar.show',
-                now()->addMinutes($ttlMinutes),
+                now()->addSeconds($ttlSeconds),
                 $params
             );
         } catch (\Throwable) {

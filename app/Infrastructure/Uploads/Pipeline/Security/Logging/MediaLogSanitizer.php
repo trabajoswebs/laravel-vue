@@ -55,6 +55,11 @@ final class MediaLogSanitizer
                 continue;
             }
 
+            if ($this->isDangerousTraceKey($lowerKey)) {
+                $safe['trace_hash'] = $this->hashAny($value);
+                continue;
+            }
+
             if ($value instanceof \Throwable) {
                 $safe[$safeKey] = $this->safeException($value);
                 continue;
@@ -124,6 +129,11 @@ final class MediaLogSanitizer
     private function isDangerousHeadersKey(string $key): bool
     {
         return str_contains($key, 'header');
+    }
+
+    private function isDangerousTraceKey(string $key): bool
+    {
+        return str_contains($key, 'trace');
     }
 
     private function shouldNormalizeMessage(string $key): bool

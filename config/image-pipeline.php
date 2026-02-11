@@ -518,6 +518,11 @@ return [
 
             return array_values(array_unique($normalized));
         }),
+        'bin_allowlist_from_env' => value(function (): bool {
+            $envList = env('IMG_SCAN_BIN_ALLOWLIST');
+
+            return is_string($envList) && trim($envList) !== '';
+        }),
 
         // Tamaño máximo de archivo para escaneo individual (bytes)
         'max_file_size_bytes' => env('IMG_SCAN_MAX_FILE_SIZE', 25 * 1024 * 1024),

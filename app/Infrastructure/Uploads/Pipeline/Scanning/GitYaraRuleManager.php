@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline\Scanning;
 
 use App\Infrastructure\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use FilesystemIterator;
@@ -62,7 +62,7 @@ final class GitYaraRuleManager implements YaraRuleManager
             throw new InvalidRuleException('YARA rule hash mismatch.');
         }
 
-        Log::debug('yara.rules.integrity_ok', [
+        SecurityLogger::debug('yara.rules.integrity_ok', [
             'version' => $this->getCurrentVersion(),
         ]);
     }

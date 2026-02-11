@@ -18,6 +18,7 @@ final class UploadProfileRegistry // Registro inmutable de perfiles
      */
     public function __construct(private readonly array $profiles) // Injerta perfiles definidos en providers
     {
+        $this->assertProfilesMap($profiles);
     }
 
     /**
@@ -30,10 +31,31 @@ final class UploadProfileRegistry // Registro inmutable de perfiles
     {
         $key = (string) $id; // Convierte VO a string para indexar
 
-        if (! array_key_exists($key, $this->profiles)) { // Valida existencia
+        if (! $this->has($id)) { // Valida existencia
             throw new InvalidArgumentException("Perfil de upload no registrado: {$key}"); // Informa perfil faltante
         }
 
         return $this->profiles[$key]; // Devuelve el perfil encontrado
+    }
+
+    public function has(UploadProfileId $id): bool
+    {
+        return array_key_exists((string) $id, $this->profiles);
+    }
+
+    /**
+     * @param array<string, UploadProfile> $profiles
+     */
+    private function assertProfilesMap(array $profiles): void
+    {
+        foreach ($profiles as $key => $profile) {
+            if (! is_string($key) || trim($key) === '') {
+                throw new InvalidArgumentException('Clave de perfil inválida en UploadProfileRegistry.');
+            }
+
+            if (! $profile instanceof UploadProfile) {
+                throw new InvalidArgumentException('Valor inválido en UploadProfileRegistry: se esperaba UploadProfile.');
+            }
+        }
     }
 }

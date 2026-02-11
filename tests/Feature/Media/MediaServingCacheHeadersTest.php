@@ -62,6 +62,28 @@ final class MediaServingCacheHeadersTest extends TestCase
         $response->assertHeader('X-Content-Type-Options', 'nosniff');
     }
 
+    public function test_media_serving_local_caps_max_age_to_temporary_url_ttl(): void
+    {
+        [$user, $tenant] = $this->makeTenantUser();
+        $path = "tenants/{$tenant->id}/users/{$user->id}/avatars/avatar.jpg";
+
+        Storage::fake('local');
+        Storage::disk('local')->put($path, 'img');
+
+        $this->actingAs($user);
+        config()->set('image-pipeline.avatar_disk', 'local');
+        config()->set('filesystems.default', 'local');
+        config()->set('media-serving.local_max_age_seconds', 300);
+        config()->set('media-serving.temporary_url_ttl_seconds', 120);
+
+        $response = $this->get('/media/' . $path);
+
+        $response->assertOk();
+        $header = $response->headers->get('Cache-Control');
+        $this->assertNotNull($header);
+        $this->assertStringContainsString('max-age=120', $header);
+    }
+
     /**
      * @return array{0:User,1:\App\Infrastructure\Tenancy\Models\Tenant}
      */

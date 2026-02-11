@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Http\Support;
 
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -26,6 +27,8 @@ final class MediaServingResponder
      */
     public function serve(string $disk, string $path, array $extraHeaders = []): Response
     {
+        $path = $this->sanitizePath($path);
+
         // Obtiene el adaptador del disco desde el facade de Storage de Laravel
         $adapter = Storage::disk($disk);
         
@@ -40,27 +43,31 @@ final class MediaServingResponder
             // Genera una URL temporal con tiempo de vida limitado
             $url = $adapter->temporaryUrl(
                 $path,
-                now()->addSeconds($this->s3TemporaryUrlTtlSeconds()), // Fecha de expiración
+                now()->addSeconds($this->temporaryUrlTtlSeconds()), // Fecha de expiración
                 $this->temporaryUrlOptions($extraHeaders, $cacheControl), // Opciones para la URL
             );
 
             // Retorna una redirección HTTP 302 a la URL temporal
             return redirect()->away($url, 302)->withHeaders(array_merge(
-                [
-                    'Cache-Control' => $cacheControl, // Headers de cache restrictivos
-                    'X-Content-Type-Options' => 'nosniff', // Header de seguridad
-                ],
+                $this->baseHeaders($cacheControl),
+                $this->cacheCompatHeaders($cacheControl),
                 $extraHeaders, // Headers adicionales proporcionados
             ));
         }
 
+        if ($driver !== 'local') {
+            throw new RuntimeException(sprintf(
+                'Disk "%s" must support temporaryUrl for private media serving.',
+                $disk
+            ));
+        }
+
         // Si es un disco local, sirve el archivo directamente
+        $cacheControl = 'private, max-age=' . $this->localMaxAgeSeconds() . ', must-revalidate';
         $headers = array_merge(
-            [
-                // Headers de cache para archivos locales: privado, con tiempo de vida y revalidación
-                'Cache-Control' => 'private, max-age=' . $this->localMaxAgeSeconds() . ', must-revalidate',
-                'X-Content-Type-Options' => 'nosniff', // Header de seguridad
-            ],
+            $this->baseHeaders($cacheControl),
+            $this->localValidators($adapter, $path),
+            $this->cacheCompatHeaders($cacheControl),
             $extraHeaders, // Headers adicionales proporcionados
         );
 
@@ -98,30 +105,108 @@ final class MediaServingResponder
     }
 
     /**
+     * @return array<string,string>
+     */
+    private function baseHeaders(string $cacheControl): array
+    {
+        return [
+            'Cache-Control' => $cacheControl,
+            'X-Content-Type-Options' => 'nosniff',
+            'Referrer-Policy' => 'no-referrer',
+            'X-Frame-Options' => 'DENY',
+            'Cross-Origin-Resource-Policy' => 'same-origin',
+            'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'none'; style-src 'none'",
+            'Vary' => 'Authorization, Cookie',
+        ];
+    }
+
+    /**
+     * Headers de compatibilidad para caches legacy/intermedios.
+     *
+     * @return array<string,string>
+     */
+    private function cacheCompatHeaders(string $cacheControl): array
+    {
+        if (!str_contains($cacheControl, 'no-store')) {
+            return [];
+        }
+
+        return [
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ];
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function localValidators(mixed $adapter, string $path): array
+    {
+        if (! method_exists($adapter, 'lastModified') || ! method_exists($adapter, 'size')) {
+            return [];
+        }
+
+        try {
+            $lastModified = (int) $adapter->lastModified($path);
+            $size = (int) $adapter->size($path);
+            if ($lastModified <= 0 || $size < 0) {
+                return [];
+            }
+
+            return [
+                'Last-Modified' => gmdate(DATE_RFC7231, $lastModified),
+                'ETag' => sprintf('W/"%s"', sha1($path . '|' . $size . '|' . $lastModified)),
+            ];
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
      * Obtiene el tiempo de vida máximo en segundos para archivos locales en cache.
      *
      * @return int Segundos de cache para archivos locales.
      */
     private function localMaxAgeSeconds(): int
     {
-        // Obtiene el valor de configuración, con un fallback de 86400 segundos (1 día)
-        $seconds = (int) config('media-serving.local_max_age_seconds', 86400);
+        // Nunca cachear por más tiempo que la validez de la URL temporal.
+        $maxAgeSeconds = (int) config('media-serving.local_max_age_seconds', 86400);
+        $maxAgeSeconds = $maxAgeSeconds > 0 ? $maxAgeSeconds : 86400;
 
-        // Asegura que sea un valor positivo
-        return $seconds > 0 ? $seconds : 86400;
+        return min($maxAgeSeconds, $this->temporaryUrlTtlSeconds());
     }
 
     /**
-     * Obtiene el tiempo de vida en segundos para las URLs temporales de S3.
+     * TTL unificado para URLs temporales/signed media.
      *
      * @return int Segundos de vida para URLs temporales.
      */
-    private function s3TemporaryUrlTtlSeconds(): int
+    private function temporaryUrlTtlSeconds(): int
     {
         // Obtiene el valor de configuración, con un fallback de 900 segundos (15 minutos)
-        $seconds = (int) config('media-serving.s3_temporary_url_ttl_seconds', 900);
+        $seconds = (int) config('media-serving.temporary_url_ttl_seconds', 900);
 
         // Asegura que sea un valor positivo
         return $seconds > 0 ? $seconds : 900;
+    }
+
+    private function sanitizePath(string $path): string
+    {
+        $normalized = str_replace('\\', '/', trim($path));
+        $segments = array_values(array_filter(
+            explode('/', $normalized),
+            static fn(string $segment): bool => $segment !== '' && $segment !== '.'
+        ));
+
+        if ($segments === [] || in_array('..', $segments, true)) {
+            throw new RuntimeException('Invalid media path.');
+        }
+
+        $clean = implode('/', $segments);
+        if (!str_starts_with($clean, 'tenants/')) {
+            throw new RuntimeException('Media path must be tenant-first.');
+        }
+
+        return $clean;
     }
 }

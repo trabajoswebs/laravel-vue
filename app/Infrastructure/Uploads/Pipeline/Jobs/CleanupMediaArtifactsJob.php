@@ -6,6 +6,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
 use App\Application\Shared\Contracts\LoggerInterface;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -13,6 +14,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\UnableToDeleteDirectory;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * Job que limpia directorios residuales (artefactos) de medios eliminados.
@@ -38,7 +40,7 @@ use League\Flysystem\UnableToDeleteDirectory;
  *       's3'     => ['789'], // Formato legacy soportado como fallback
  *   ], preserveMediaIds: ['456']);
  */
-final class CleanupMediaArtifactsJob implements ShouldQueue
+final class CleanupMediaArtifactsJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -56,6 +58,7 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
     public int $tries = 3;              // Número de reintentos si falla
     public int $timeout = 120;          // Tiempo máximo de ejecución en segundos
     public int $maxExceptions = 3;      // Máximo de excepciones antes de marcar como fallido
+    public int $uniqueFor = 120;        // Evita encolar duplicados de cleanup en ráfagas cortas
 
     /**
      * @param array<string, list<string|array{dir:string,mediaId?:string|null}>> $artifacts
@@ -74,6 +77,22 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
         // Cola y consistencia transaccional (ejecuta tras commit de BD).
         $this->onQueue(config('queue.aliases.media', 'media'));
         $this->afterCommit();
+    }
+
+    /**
+     * Llave de unicidad estable para deduplicar jobs equivalentes.
+     */
+    public function uniqueId(): string
+    {
+        $preserve = $this->normalizePreserveIds($this->preserveMediaIds);
+        sort($preserve, SORT_STRING);
+
+        $payload = [
+            'artifacts' => $this->canonicalArtifacts($this->artifacts),
+            'preserve'  => $preserve,
+        ];
+
+        return 'cleanup-media-artifacts:' . hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -97,6 +116,7 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
             'missing'         => 0,  // ya no existían
             'exists'          => 0,  // media reapareció/existe → no borrar
             'preserved'       => 0,  // media en lista de preservación
+            'skipped_legacy_unparsable' => 0, // fallback legacy sin mediaId parseable
             'skipped_invalid' => 0,  // path inválido / vacío / traversal
             'errors'          => 0,  // excepciones al borrar
         ];
@@ -204,9 +224,9 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
             }
 
             if ($mediaId === null) {
-                $fallback = $this->extractBaseId($clean);
+                $fallback = $this->extractLegacyMediaId($clean);
                 if ($fallback !== null) {
-                    $mediaId = (string) $fallback;
+                    $mediaId = $fallback;
                 }
             }
 
@@ -270,18 +290,51 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
     }
 
     /**
-     * Extrae el ID numérico base de un directorio (primer segmento del path).
-     *
-     * Por ejemplo:
-     * - "123/conversions" → 123
-     * - "456/responsive-images" → 456
-     * - "invalid/path" → null
-     *
-     * También previene inyecciones de path traversal o caracteres inválidos.
-     *
-     * @return int|null ID numérico base o null si no es válido
+     * @param array<string, list<string|array{dir:string,mediaId?:string|null}>> $artifacts
+     * @return array<string, list<array{dir:string,mediaId:?string}>>
      */
-    private function extractBaseId(string $directory): ?int
+    private function canonicalArtifacts(array $artifacts): array
+    {
+        $canonical = [];
+
+        foreach ($artifacts as $disk => $directories) {
+            if (!is_string($disk) || $disk === '' || !is_array($directories)) {
+                continue;
+            }
+
+            $entries = $this->normalizeArtifactEntries($directories);
+            if ($entries === []) {
+                continue;
+            }
+
+            usort($entries, static function (array $left, array $right): int {
+                return [$left['dir'], $left['mediaId'] ?? ''] <=> [$right['dir'], $right['mediaId'] ?? ''];
+            });
+
+            $canonical[$disk] = $entries;
+        }
+
+        ksort($canonical);
+
+        return $canonical;
+    }
+
+    /**
+     * Extrae el mediaId de rutas legacy.
+     *
+     * Soporta:
+     * - Formato legacy clásico con primer segmento numérico:
+     *   - "123/conversions" → "123"
+     *   - "456/responsive-images" → "456"
+     * - Formato tenant-first legacy con segmento "media/{mediaId}":
+     *   - "tenants/1/users/2/media/789/conversions" → "789"
+     *   - "tenants/acme/users/2/media/abc_01/conversions" → "abc_01"
+     *
+     * Devuelve null si no se puede inferir un mediaId parseable.
+     *
+     * @return string|null mediaId extraído o null
+     */
+    private function extractLegacyMediaId(string $directory): ?string
     {
         // Validaciones de seguridad para evitar inyecciones de path
         if (
@@ -290,6 +343,18 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
             str_contains($directory, '\\') || // Evita backslashes
             str_starts_with($directory, '/')  // Evita paths absolutos
         ) {
+            return null;
+        }
+
+        // Fallback tenant-first: tenants/{tenant}/.../media/{mediaId}/...
+        if (str_starts_with($directory, 'tenants/')) {
+            if (preg_match('#^tenants/[^/]+(?:/[^/]+)*/media/([^/]+)(?:/|$)#', $directory, $matches) === 1) {
+                $mediaId = trim((string) ($matches[1] ?? ''));
+                if ($mediaId !== '' && preg_match('/^[A-Za-z0-9_-]+$/', $mediaId) === 1) {
+                    return $mediaId;
+                }
+            }
+
             return null;
         }
 
@@ -302,7 +367,7 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
             return null;
         }
 
-        return (int) $base;
+        return $base;
     }
 
     /**
@@ -333,6 +398,7 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
      * - 'deleted'         → borrado exitoso
      * - 'missing'         → no existía al intentar borrar
      * - 'exists'          → el Media asociado existe/reapareció → no borrar
+     * - 'skipped_legacy_unparsable' → fallback legacy sin mediaId extraíble
      * - 'skipped_invalid' → path inválido o potencial traversal
      * - 'errors'          → excepción al borrar
      *
@@ -354,12 +420,41 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
             return 'skipped_invalid';
         }
 
+        if (!str_starts_with($normalized, 'tenants/')) {
+            $this->logger()->warning('cleanup_media_artifacts_not_tenant_first', [
+                'disk'      => $disk,
+                'path_hash' => $this->hashPath($normalized),
+            ]);
+            return 'skipped_invalid';
+        }
+
         if (str_contains($normalized, '..') || str_contains($normalized, '\\') || str_starts_with($normalized, '/')) {
             $this->logger()->warning('cleanup_media_artifacts_invalid_dir', [
                 'disk'      => $disk,
-                'directory' => $normalized,
+                'path_hash' => $this->hashPath($normalized),
             ]);
             return 'skipped_invalid';
+        }
+
+        if ($mediaId === null || $mediaId === '') {
+            $mediaId = $this->extractLegacyMediaId($normalized);
+            if ($mediaId === null) {
+                $this->logger()->notice('cleanup_media_artifacts_skipped_legacy_unparsable', [
+                    'disk' => $disk,
+                    'path_hash' => $this->hashPath($normalized),
+                ]);
+                return 'skipped_legacy_unparsable';
+            }
+        }
+
+        // Evita borrar artefactos si el media asociado sigue existiendo.
+        if (Media::query()->whereKey($mediaId)->exists()) {
+            $this->logger()->debug('cleanup_media_artifacts_preserved_existing_media', [
+                'disk' => $disk,
+                'path_hash' => $this->hashPath($normalized),
+                'media_id' => $mediaId,
+            ]);
+            return 'exists';
         }
 
         $directoryExists = null;
@@ -370,7 +465,7 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
             } catch (\Throwable $checkError) {
                 $this->logger()->notice('cleanup_media_artifacts_directory_check_failed', [
                     'disk'      => $disk,
-                    'directory' => $normalized,
+                    'path_hash' => $this->hashPath($normalized),
                     'error'     => $checkError->getMessage(),
                 ]);
                 $directoryExists = null;
@@ -383,35 +478,35 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
             if ($directoryExists === false) {
                 $this->logger()->debug('cleanup_media_artifacts_dir_missing', [
                     'disk'      => $disk,
-                    'directory' => $normalized,
+                    'path_hash' => $this->hashPath($normalized),
                 ]);
                 return 'missing';
             }
 
             $this->logger()->info('cleanup_media_artifacts_dir_deleted', [
                 'disk'      => $disk,
-                'directory' => $normalized,
+                'path_hash' => $this->hashPath($normalized),
             ]);
             return 'deleted';
         } catch (UnableToDeleteDirectory $exception) {
             if ($directoryExists === false) {
                 $this->logger()->debug('cleanup_media_artifacts_dir_missing', [
                     'disk'      => $disk,
-                    'directory' => $normalized,
+                    'path_hash' => $this->hashPath($normalized),
                 ]);
                 return 'missing';
             }
 
             $this->logger()->warning('cleanup_media_artifacts_failed', [
                 'disk'      => $disk,
-                'directory' => $normalized,
+                'path_hash' => $this->hashPath($normalized),
                 'error'     => $exception->getMessage(),
             ]);
             return 'errors';
         } catch (\Throwable $exception) {
             $this->logger()->warning('cleanup_media_artifacts_failed', [
                 'disk'      => $disk,
-                'directory' => $normalized,
+                'path_hash' => $this->hashPath($normalized),
                 'error'     => $exception->getMessage(),
             ]);
             return 'errors';
@@ -439,5 +534,10 @@ final class CleanupMediaArtifactsJob implements ShouldQueue
     private function logger(): LoggerInterface
     {
         return app(LoggerInterface::class);
+    }
+
+    private function hashPath(string $path): string
+    {
+        return substr(hash('sha256', $path), 0, 16);
     }
 }

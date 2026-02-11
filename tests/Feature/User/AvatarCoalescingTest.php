@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\TestCase;
-use function app;
 
 final class AvatarCoalescingTest extends TestCase
 {
@@ -75,14 +74,21 @@ final class AvatarCoalescingTest extends TestCase
             Storage::disk('public')->put($path, 'avatar');
         }
 
-        $redis->shouldReceive('get')->andReturn(json_encode([
+        $payload = json_encode([
             'media_id' => (string) $mediaNew->getKey(),
             'upload_uuid' => 'u-new',
             'correlation_id' => 'corr-new',
             'tenant_id' => (string) $tenant->getKey(),
             'user_id' => (string) $user->getKey(),
             'updated_at' => now()->toIso8601String(),
-        ]));
+        ]);
+        $redis->shouldReceive('get')->andReturnUsing(static function (string $key) use ($payload): string {
+            if (str_contains($key, 'ppam:avatar:ver:')) {
+                return '1';
+            }
+
+            return $payload;
+        });
 
         $job = new ProcessLatestAvatar($tenant->getKey(), $user->getKey());
         $job->handle();
@@ -97,13 +103,20 @@ final class AvatarCoalescingTest extends TestCase
     {
         Queue::fake();
         $redis = Redis::partialMock();
-        $redis->shouldReceive('get')->andReturn(json_encode([
+        $payload = json_encode([
             'media_id' => '9999',
             'upload_uuid' => 'u-missing',
             'tenant_id' => '1',
             'user_id' => '1',
             'updated_at' => now()->toIso8601String(),
-        ]));
+        ]);
+        $redis->shouldReceive('get')->andReturnUsing(static function (string $key) use ($payload): string {
+            if (str_contains($key, 'ppam:avatar:ver:')) {
+                return '1';
+            }
+
+            return $payload;
+        });
         $redis->shouldReceive('del')->andReturn(1);
 
         $job = new ProcessLatestAvatar(1, 1);
@@ -168,8 +181,7 @@ final class AvatarCoalescingTest extends TestCase
             Storage::disk('public')->put($pathNew, 'avatar-new');
         }
 
-        // Primera lectura: devuelve mediaOld; segunda y tercera: mediaNew (para shouldReprocess + siguiente iteración)
-        $redis->shouldReceive('get')->andReturn(
+        $payloads = [
             json_encode([
                 'media_id' => (string) $mediaOld->getKey(),
                 'upload_uuid' => 'u-old',
@@ -194,7 +206,17 @@ final class AvatarCoalescingTest extends TestCase
                 'user_id' => (string) $user->getKey(),
                 'updated_at' => now()->toIso8601String(),
             ]),
-        );
+        ];
+        $payloadRead = 0;
+        $redis->shouldReceive('get')->andReturnUsing(static function (string $key) use (&$payloadRead, $payloads): string {
+            if (str_contains($key, 'ppam:avatar:ver:')) {
+                return '1';
+            }
+
+            $index = min($payloadRead, count($payloads) - 1);
+            $payloadRead++;
+            return $payloads[$index];
+        });
 
         $job = new ProcessLatestAvatar($tenant->getKey(), $user->getKey());
         $job->handle();
@@ -203,5 +225,68 @@ final class AvatarCoalescingTest extends TestCase
             return (int) $queued->mediaId === (int) $mediaNew->getKey()
                 && (int) $queued->tenantId === (int) $tenant->getKey();
         });
+    }
+
+    public function test_requeues_when_latest_changes_at_job_end(): void
+    {
+        Storage::fake('public');
+        Queue::fake();
+        $redis = Redis::partialMock();
+        $redis->shouldReceive('del')->andReturn(1);
+        $redis->shouldReceive('set')->andReturn('OK');
+
+        $user = User::factory()->create();
+        $tenant = Tenant::query()->create([
+            'name' => 'Acme',
+            'owner_user_id' => $user->getKey(),
+        ]);
+        $tenant->makeCurrent();
+
+        $media = Media::query()->create([
+            'model_type' => User::class,
+            'model_id' => $user->getKey(),
+            'uuid' => '66666666-6666-6666-6666-666666666666',
+            'collection_name' => 'avatar',
+            'name' => 'avatar-current',
+            'file_name' => 'avatar-current.jpg',
+            'mime_type' => 'image/jpeg',
+            'disk' => 'public',
+            'conversions_disk' => null,
+            'size' => 1024,
+            'manipulations' => [],
+            'custom_properties' => ['tenant_id' => $tenant->getKey(), 'upload_uuid' => 'u-current'],
+            'generated_conversions' => [],
+            'responsive_images' => [],
+            'order_column' => 1,
+        ]);
+
+        $path = $media->getPathRelativeToRoot();
+        if (is_string($path)) {
+            Storage::disk('public')->put($path, 'avatar-current');
+        }
+
+        $payload = json_encode([
+            'media_id' => (string) $media->getKey(),
+            'upload_uuid' => 'u-current',
+            'correlation_id' => 'corr-current',
+            'tenant_id' => (string) $tenant->getKey(),
+            'user_id' => (string) $user->getKey(),
+            'updated_at' => now()->toIso8601String(),
+        ]);
+
+        $versionRead = 0;
+        $redis->shouldReceive('get')->andReturnUsing(static function (string $key) use (&$versionRead, $payload): string {
+            if (str_contains($key, 'ppam:avatar:ver:')) {
+                $versionRead++;
+                return $versionRead === 1 ? '1' : '2';
+            }
+
+            return $payload;
+        });
+
+        $job = new ProcessLatestAvatar($tenant->getKey(), $user->getKey());
+        $job->handle();
+
+        Queue::assertPushed(ProcessLatestAvatar::class, 1);
     }
 }

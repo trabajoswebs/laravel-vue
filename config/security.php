@@ -35,6 +35,7 @@ $developmentConnectHosts = array_filter(array_merge([
 return [
 
     'debug_csp' => env('SECURITY_DEBUG_CSP', false),
+    'frontend_url' => env('APP_FRONTEND_URL', 'http://localhost:3000'),
 
     /*
     |--------------------------------------------------------------------------

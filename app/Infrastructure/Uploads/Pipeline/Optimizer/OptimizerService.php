@@ -10,7 +10,7 @@ use App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters\RemoteUploader;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -162,6 +162,7 @@ class OptimizerService
             $disk = $this->resolveFilesystemAdapter($diskName, $diskCache);
             $driver = $driverCache[$diskName] ??= $this->diskDriver($diskName);
             $isLocal = $this->isLocalDriver($driver);
+            $this->assertTenantScopedRelativePath($relativePath, $media);
 
             $result = $isLocal && $fullPath !== null
                 ? $this->localAdapter->optimize($fullPath, $this->detectLocalMime($fullPath))
@@ -342,6 +343,13 @@ class OptimizerService
             $safeName = preg_replace('/[^a-z0-9_\-]/i', '', (string) $name) ?: $name;
             [$full, $rel] = $this->safeGetConversionPaths($media, $safeName); // Rutas de la conversión
             $conversionDisk = (string) ($media->conversions_disk ?: $originalDisk);
+            if ($full === null && $rel === null) {
+                $this->logDebug('optimizer_service_conversion_skipped_unresolved_path', [
+                    'media_id' => $media->id,
+                    'conversion' => $safeName,
+                ]);
+                continue;
+            }
 
             $targets[] = [
                 'type'      => "conversion:{$safeName}",
@@ -428,14 +436,6 @@ class OptimizerService
         try {
             if (method_exists($media, 'getPathRelativeToRoot')) {
                 $rel = $media->getPathRelativeToRoot($conversion);
-            } else {
-                // Fallback aproximado (si el patrón no coincide, la conversión quedará sin optimizar)
-                $baseRel = $this->safeGetPathRelative($media);
-                if ($baseRel) {
-                    $filename = pathinfo($baseRel, PATHINFO_FILENAME);
-                    $ext      = pathinfo($baseRel, PATHINFO_EXTENSION);
-                    $rel = 'conversions/' . $filename . '-' . $conversion . '.' . $ext;
-                }
             }
         } catch (Throwable $e) {
             $this->logDebug('optimizer_service_safe_get_conv_rel_failed', [
@@ -555,6 +555,32 @@ class OptimizerService
         }
     }
 
+    private function assertTenantScopedRelativePath(?string $relativePath, Media $media): void
+    {
+        if (!is_string($relativePath) || $relativePath === '') {
+            return;
+        }
+
+        $normalized = str_replace('\\', '/', trim($relativePath, "/ \t\n\r\0\x0B"));
+        $segments = array_values(array_filter(explode('/', $normalized), static fn(string $segment): bool => $segment !== '' && $segment !== '.'));
+        if ($segments === [] || in_array('..', $segments, true)) {
+            throw new RuntimeException('invalid_relative_path');
+        }
+
+        $cleanPath = implode('/', $segments);
+        if (!str_starts_with($cleanPath, 'tenants/')) {
+            throw new RuntimeException('path_not_tenant_first');
+        }
+
+        $tenantId = $media->getCustomProperty('tenant_id');
+        if ($tenantId !== null && $tenantId !== '') {
+            $expectedPrefix = 'tenants/' . trim((string) $tenantId, '/') . '/';
+            if (!str_starts_with($cleanPath, $expectedPrefix)) {
+                throw new RuntimeException('path_tenant_mismatch');
+            }
+        }
+    }
+
     /**
      * Convierte mensajes de error en códigos legibles por máquina.
      */
@@ -574,7 +600,7 @@ class OptimizerService
      */
     private function logDebug(string $message, array $context): void
     {
-        Log::debug($message, $this->safeContext($context));
+        SecurityLogger::debug($message, $this->safeContext($context));
     }
 
     /**
@@ -582,7 +608,7 @@ class OptimizerService
      */
     private function logWarning(string $message, array $context): void
     {
-        Log::warning($message, $this->safeContext($context));
+        SecurityLogger::warning($message, $this->safeContext($context));
     }
 
     /**

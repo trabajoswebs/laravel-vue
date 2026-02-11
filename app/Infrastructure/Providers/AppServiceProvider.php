@@ -19,14 +19,17 @@ use App\Infrastructure\Shared\Adapters\LaravelEventBus;
 use App\Infrastructure\Shared\Adapters\LaravelLogger;
 use App\Infrastructure\Shared\Adapters\LaravelTransactionManager;
 use App\Infrastructure\Shared\Metrics\LogMetrics;
+use App\Support\Logging\SecurityLogger;
 use App\Infrastructure\User\Adapters\EloquentUserAvatarRepository;
 use App\Infrastructure\User\Adapters\EloquentUserRepository;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Vite;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Translation\Events\TranslationMissing;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
@@ -71,6 +74,19 @@ class AppServiceProvider extends ServiceProvider
         if (app()->environment('production')) {
             Model::preventLazyLoading();
         }
+
+        // En testing, cualquier traducción faltante debe fallar las pruebas; en otros entornos se registra.
+        Event::listen(TranslationMissing::class, static function (TranslationMissing $event): void {
+            if (app()->environment('testing')) {
+                throw new \RuntimeException("Missing translation [{$event->key}] for locale [{$event->locale}]");
+            }
+
+            SecurityLogger::warning('translation_missing', [
+                'key' => $event->key,
+                'locale' => $event->locale,
+                'namespace' => $event->namespace,
+            ]);
+        });
 
         RateLimiter::for('media-serving', static function (Request $request): array|Limit {
             $userId = $request->user()?->getAuthIdentifier();

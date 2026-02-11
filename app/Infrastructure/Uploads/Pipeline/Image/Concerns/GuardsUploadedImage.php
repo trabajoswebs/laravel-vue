@@ -6,7 +6,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Image\Concerns;
 
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use RuntimeException;
 
 /**
@@ -88,7 +88,7 @@ trait GuardsUploadedImage
 
             // Busca coincidencias en el buffer
             if (preg_match($pattern, $buffer) === 1) {
-                Log::warning('image_pipeline_suspicious_payload_detected', [
+                SecurityLogger::warning('image_pipeline_suspicious_payload_detected', [
                     'pattern' => $pattern,
                     'path' => basename($path),
                     'sha256' => hash('sha256', $buffer)

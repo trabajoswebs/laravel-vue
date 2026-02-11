@@ -31,12 +31,16 @@ class FileConstraints
     public readonly int $maxDimension;
     public readonly float $maxMegapixels;
     public readonly ?float $maxDecompressionRatio;
+    public readonly bool $enforceStrictMagicBytes;
+    public readonly bool $preventPolyglotFiles;
     /** @var array<int,string> */
     public readonly array $allowedExtensions;
     /** @var array<int,string> */
     public readonly array $allowedMimes;
     /** @var array<string,string> */
     public readonly array $mimeToExtension;
+    /** @var array<string,string> */
+    public readonly array $allowedMagicSignatures;
 
     public function __construct()
     {
@@ -50,6 +54,8 @@ class FileConstraints
         $this->maxDecompressionRatio = isset($config['max_decompression_ratio'])
             ? (float) $config['max_decompression_ratio']
             : (isset($limits['bomb_ratio_threshold']) ? (float) $limits['bomb_ratio_threshold'] : null);
+        $this->enforceStrictMagicBytes = (bool) ($config['enforce_strict_magic_bytes'] ?? true);
+        $this->preventPolyglotFiles = (bool) ($config['prevent_polyglot_files'] ?? true);
 
         $defaultExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
         $extConfig = array_values(array_filter(array_map('strtolower', (array) ($config['allowed_extensions'] ?? $defaultExtensions))));
@@ -86,6 +92,29 @@ class FileConstraints
             $normalizedMap[strtolower($mime)] = strtolower($ext);
         }
         $this->mimeToExtension = $normalizedMap;
+
+        $signatureMap = [];
+        foreach ((array) ($config['allowed_magic_signatures'] ?? []) as $signature => $label) {
+            if (!is_string($signature) || !is_string($label)) {
+                continue;
+            }
+            $sig = strtolower(trim($signature));
+            if ($sig === '' || !preg_match('/^[0-9a-f]+$/', $sig) || (strlen($sig) % 2) !== 0) {
+                continue;
+            }
+            $signatureMap[$sig] = strtolower(trim($label));
+        }
+
+        // Fallback defensivo para no dejar el sistema sin firmas válidas.
+        if ($signatureMap === []) {
+            $signatureMap = [
+                'ffd8ff' => 'image/jpeg',
+                '89504e470d0a1a0a' => 'image/png',
+                '47494638' => 'image/gif',
+                '52494646' => 'riff',
+            ];
+        }
+        $this->allowedMagicSignatures = $signatureMap;
     }
 
     /**

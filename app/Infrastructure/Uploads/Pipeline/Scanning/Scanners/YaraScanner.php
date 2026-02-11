@@ -7,8 +7,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
 use App\Infrastructure\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager;
-use Illuminate\Support\Facades\Log;
-
+use App\Support\Logging\SecurityLogger;
 /**
  * Escáner concreto que utiliza YARA para detectar patrones o firmas en archivos subidos.
  *
@@ -111,7 +110,7 @@ final class YaraScanner extends AbstractScanner
 
                 $expects = self::ALLOWED_ARGUMENTS[$name]['expects'];
                 if ($expects === 'flag') {
-                    Log::warning('image_scan.yara_flag_with_value_ignored', ['argument' => $name]);
+                    SecurityLogger::warning('image_scan.yara_flag_with_value_ignored', ['argument' => $name]);
                     continue;
                 }
 
@@ -168,7 +167,7 @@ final class YaraScanner extends AbstractScanner
         array $scannerConfig,
     ): ?array {
         if (! isset($target['handle']) || ! is_resource($target['handle'])) {
-            Log::error('image_scan.yara_target_invalid_handle', [
+            SecurityLogger::error('image_scan.yara_target_invalid_handle', [
                 'expected_keys' => ['handle', 'display_name'],
                 'received_keys' => array_keys($target),
             ]);
@@ -178,7 +177,7 @@ final class YaraScanner extends AbstractScanner
         }
 
         if (! isset($target['display_name']) || ! is_string($target['display_name'])) {
-            Log::error('image_scan.yara_target_invalid_display_name');
+            SecurityLogger::error('image_scan.yara_target_invalid_display_name');
             return [
                 'fail_open_reason' => 'target_missing_display_name',
             ];
@@ -186,24 +185,24 @@ final class YaraScanner extends AbstractScanner
 
         $resolvedBinary = realpath($binary);
         if ($resolvedBinary === false || $resolvedBinary === '') {
-            Log::error('image_scan.yara_binary_unresolved', ['binary' => $binary]);
+            SecurityLogger::error('image_scan.yara_binary_unresolved', ['binary' => $binary]);
             return null;
         }
 
         $normalizedBinary = $this->normalizePath($resolvedBinary);
         $allowlist = $this->allowedBinaries();
         if ($allowlist === []) {
-            Log::critical('image_scan.yara_no_allowlist_configured');
+            SecurityLogger::critical('image_scan.yara_no_allowlist_configured');
             return null;
         }
 
         if (! in_array($normalizedBinary, $allowlist, true)) {
-            Log::error('image_scan.yara_binary_not_allowlisted', ['binary' => basename($resolvedBinary)]);
+            SecurityLogger::error('image_scan.yara_binary_not_allowlisted', ['binary' => basename($resolvedBinary)]);
             return null;
         }
 
         if (! is_file($resolvedBinary) || ! is_executable($resolvedBinary)) {
-            Log::error('image_scan.yara_binary_unusable', ['binary' => $resolvedBinary]);
+            SecurityLogger::error('image_scan.yara_binary_unusable', ['binary' => $resolvedBinary]);
             return null;
         }
 
@@ -216,14 +215,14 @@ final class YaraScanner extends AbstractScanner
 
         if ($rulesPath === null) {
             // Si no se puede obtener el archivo de reglas, se indica un fail_open_reason.
-            Log::critical('image_scan.yara_failopen', ['reason' => 'rules_missing']);
+            SecurityLogger::critical('image_scan.yara_failopen', ['reason' => 'rules_missing']);
             return [
                 'fail_open_reason' => 'rules_missing',
             ];
         }
 
         if (! $this->rulesPathWithinBase($rulesPath, $rulesBase)) {
-            Log::critical('image_scan.yara_rules_path_validation_failed', [
+            SecurityLogger::critical('image_scan.yara_rules_path_validation_failed', [
                 'rules_path' => $rulesPath,
                 'base' => $rulesBase,
             ]);
@@ -246,7 +245,7 @@ final class YaraScanner extends AbstractScanner
         restore_error_handler();
 
         if ($rewound === false) {
-            Log::error('image_scan.yara_target_unseekable', [
+            SecurityLogger::error('image_scan.yara_target_unseekable', [
                 'target' => $target['display_name'],
                 'error' => $rewindError,
             ]);
@@ -264,7 +263,7 @@ final class YaraScanner extends AbstractScanner
                 && is_int($stats['size'])
                 && $stats['size'] > $maxFileBytes
             ) {
-                Log::warning('image_scan.yara_file_too_large', [
+                SecurityLogger::warning('image_scan.yara_file_too_large', [
                     'file' => $target['display_name'],
                     'size' => $stats['size'],
                     'limit' => $maxFileBytes,
@@ -295,7 +294,7 @@ final class YaraScanner extends AbstractScanner
 
                 clearstatcache(true, $rulesPath);
                 if (file_exists($rulesPath)) {
-                    Log::error('image_scan.yara_rules_cleanup_failed_persistent', [
+                    SecurityLogger::error('image_scan.yara_rules_cleanup_failed_persistent', [
                         'path' => $rulesPath,
                         'attempts' => $attempts,
                     ]);
@@ -394,10 +393,10 @@ final class YaraScanner extends AbstractScanner
         } catch (InvalidRuleException $exception) {
             $context = ['error' => $exception->getMessage()];
             $this->securityLogger->yaraRulesFailed($context);
-            Log::critical('image_scan.yara_rules_invalid', $context);
+            SecurityLogger::critical('image_scan.yara_rules_invalid', $context);
 
             if (app()->environment(['local', 'testing'])) {
-                Log::warning('image_scan.yara_rules_invalid_local', $context);
+                SecurityLogger::warning('image_scan.yara_rules_invalid_local', $context);
                 return null;
             }
 

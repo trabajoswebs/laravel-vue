@@ -1,10 +1,9 @@
 <script setup lang="ts">
 // Importaciones de Vue y bibliotecas externas
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
-import { Camera, ImagePlus, Loader2, Upload, X } from 'lucide-vue-next';
+import { Camera, ImagePlus, Upload, X } from 'lucide-vue-next';
 
 // Importaciones de componentes UI
-import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import InlineStatus from '@/components/ui/InlineStatus.vue';
 
@@ -79,12 +78,6 @@ const avatarImageAlt = computed<string>(() => {
     return t('profile.avatar_image_alt_generic');
 });
 
-// Porcentaje de subida redondeado
-const uploadPercentage = computed<number>(() => {
-    if (uploadProgress.value === null) return 0;
-    return Math.round(uploadProgress.value);
-});
-
 // Progreso visual para la barra (con mínimo para visibilidad)
 const visualProgress = computed<number>(() => {
     if (uploadProgress.value === null) return 0;
@@ -96,6 +89,8 @@ const visualProgress = computed<number>(() => {
 // Vista previa
 const previewUrl = ref<string | null>(null); // URL de vista previa del archivo
 const renderedAvatarUrl = computed<string | null>(() => previewUrl.value ?? avatarUrl.value); // URL a mostrar (vista previa o avatar actual)
+const UPLOAD_VISUAL_TEST_DELAY_MS = 0; // Retardo temporal para pruebas de UX
+const uploadVisualLock = ref(false); // Mantiene visible el estado de subida aunque la red responda muy rápido
 
 // Mensajes
     const helperMessage = computed<string>(() => {
@@ -119,7 +114,8 @@ const avatarErrorMessage = computed<string>(() => {
 });
 
 // Estados
-const isBusy = computed<boolean>(() => isUploading.value || isDeleting.value); // Indica si hay operación en curso
+const isUploadingUi = computed<boolean>(() => isUploading.value || uploadVisualLock.value); // Estado de subida mostrado en UI (incluye retardo de prueba)
+const isBusy = computed<boolean>(() => isUploadingUi.value || isDeleting.value); // Indica si hay operación en curso
 const isUploadCancellable = computed<boolean>(() => isUploading.value); // Indica si la subida se puede cancelar
 const acceptAttribute = computed<string>(() => acceptMimeTypes); // Tipos MIME permitidos
 const isDragActive = ref(false); // Indica si hay arrastre activo
@@ -152,11 +148,21 @@ const formatLocaleKeys = [
 // Formatso localizados
 const localizedFormats = computed<string[]>(() => formatLocaleKeys.map((key) => t(key)));
 
-// Indica si hay una imagen para mostrar
-const hasImage = computed<boolean>(() => Boolean(renderedAvatarUrl.value));
-
 const activeUploadToken = ref<symbol | null>(null); // Token para identificar la subida activa
 const isImageLoading = ref(false); // Indica si la imagen está cargando
+const hasUploadStartedInSession = ref(false); // Evita skeleton tras iniciar una subida en esta sesión
+const shouldShowAvatarSkeleton = computed<boolean>(() =>
+    isImageLoading.value
+    && Boolean(renderedAvatarUrl.value)
+    && !previewUrl.value
+    && !isUploadingUi.value
+    && !hasUploadStartedInSession.value
+);
+
+const wait = (ms: number) =>
+    new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ms);
+    });
 
 // Limpia la vista previa y restablece estado
 const clearPreview = () => {
@@ -183,7 +189,8 @@ watch([avatarUrl, isUploading], ([next, uploading]) => {
 watch(
     renderedAvatarUrl,
     (nextUrl) => {
-        isImageLoading.value = Boolean(nextUrl);
+        const isLocalPreview = typeof nextUrl === 'string' && nextUrl.startsWith('blob:');
+        isImageLoading.value = Boolean(nextUrl) && !isLocalPreview;
     },
     { immediate: true }
 );
@@ -219,7 +226,10 @@ const applyPreview = (file: File | null) => {
 // Procesa el archivo subido
 const processFile = async (file: File | null) => {
     const token = Symbol('avatar-upload'); // Token único para esta subida
+    const startedAt = Date.now();
+    hasUploadStartedInSession.value = true;
     activeUploadToken.value = token;
+    uploadVisualLock.value = true;
     applyPreview(file);
 
     try {
@@ -241,11 +251,19 @@ const processFile = async (file: File | null) => {
             notify.error(t('profile.avatar_error_generic'));
         }
     } finally {
+        const elapsed = Date.now() - startedAt;
+        const remainingDelay = Math.max(0, UPLOAD_VISUAL_TEST_DELAY_MS - elapsed);
+        if (remainingDelay > 0) {
+            await wait(remainingDelay);
+        }
+
         if (activeUploadToken.value === token) {
             resetInput();
             activeUploadToken.value = null;
             setDragState(false);
         }
+
+        uploadVisualLock.value = false;
     }
 };
 
@@ -271,6 +289,7 @@ const handleCancelUpload = () => {
     cancelUpload();
     resetInput();
     activeUploadToken.value = null;
+    uploadVisualLock.value = false;
     clearPreview();
     setDragState(false);
 };
@@ -365,36 +384,25 @@ const handleImageError = () => {
                             role="button" tabindex="0" @click="triggerFileDialog"
                             @keydown.enter.prevent="triggerFileDialog" @keydown.space.prevent="triggerFileDialog">
                             <div class="relative h-full w-full rounded-2xl overflow-hidden">
-                                <!-- Subida en curso -->
-                                <div v-if="isUploading"
-                                    class="h-full w-full flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-primary/5 to-primary/10">
-                                    <Loader2 class="h-8 w-8 animate-spin text-primary" />
-                                    <div class="text-center">
-                                        <p class="text-xs font-semibold text-foreground">
-                                            {{ t('profile.avatar_uploading_short') }}
-                                        </p>
-                                        <p class="text-[10px] text-muted-foreground">
-                                            {{ uploadPercentage }}%
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- Imagen (ya subida) -->
-                                <template v-else-if="renderedAvatarUrl">
+                                <!-- Imagen (ya subida o vista previa local) -->
+                                <template v-if="renderedAvatarUrl">
                                     <img :src="renderedAvatarUrl" :alt="avatarImageAlt"
                                         class="h-full w-full object-cover transition-opacity duration-200"
                                         :class="isImageLoading ? 'opacity-0' : 'opacity-100'" @load="handleImageLoad"
                                         @error="handleImageError" @click.stop="triggerFileDialog" />
-                                    <div v-if="isImageLoading"
+                                    <div v-if="shouldShowAvatarSkeleton"
                                         class="absolute inset-0 flex items-center justify-center p-5">
                                         <div class="avatar-skeleton">
                                             <div class="avatar-skeleton__frame shimmer">
-                                                <span class="avatar-skeleton__sun"></span>
-                                                <span
-                                                    class="avatar-skeleton__mountain avatar-skeleton__mountain--left"></span>
-                                                <span
-                                                    class="avatar-skeleton__mountain avatar-skeleton__mountain--right"></span>
-                                                <span class="avatar-skeleton__baseline"></span>
+                                                <span class="avatar-skeleton__receipt"></span>
+                                                <span class="avatar-skeleton__line avatar-skeleton__line--1"></span>
+                                                <span class="avatar-skeleton__line avatar-skeleton__line--2"></span>
+                                                <span class="avatar-skeleton__line avatar-skeleton__line--3"></span>
+                                                <span class="avatar-skeleton__chart"></span>
+                                                <span class="avatar-skeleton__bar avatar-skeleton__bar--1"></span>
+                                                <span class="avatar-skeleton__bar avatar-skeleton__bar--2"></span>
+                                                <span class="avatar-skeleton__bar avatar-skeleton__bar--3"></span>
+                                                <span class="avatar-skeleton__coin"></span>
                                             </div>
                                         </div>
                                     </div>
@@ -414,8 +422,16 @@ const handleImageError = () => {
                                     </span>
                                 </div>
 
+                                <!-- Máscara de subida: mantiene la imagen visible para evitar salto visual -->
+                                <div v-if="isUploadingUi" class="avatar-upload-overlay">
+                                    <div class="avatar-upload-overlay__glyph" role="status" aria-live="polite">
+                                        <span class="avatar-upload-overlay__spinner" aria-hidden="true"></span>
+                                        <span class="sr-only">{{ t('profile.avatar_uploading_short') }}</span>
+                                    </div>
+                                </div>
+
                                 <!-- Indicador hover "subir" cuando no hay avatar -->
-                                <div v-if="!renderedAvatarUrl && !isUploading"
+                                <div v-if="!renderedAvatarUrl && !isUploadingUi"
                                     class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 opacity-0 transition-all duration-200 group-hover:bg-black/85 group-hover:opacity-100">
                                     <ImagePlus
                                         class="h-10 w-10 text-transparent transition-all duration-200 group-hover:text-white" />
@@ -423,7 +439,7 @@ const handleImageError = () => {
                             </div>
                         </div>
                         <!-- ÚNICO control eliminar -->
-                        <Button v-if="hasAvatar && !isUploading" type="button" variant="destructive" size="icon"
+                        <Button v-if="hasAvatar && !isUploadingUi" type="button" variant="destructive" size="icon"
                             @click.stop="handleRemove" :disabled="isBusy"
                             class="absolute -top-2 -right-2 h-8 w-8 rounded-full shadow-lg cursor-pointer transition-all duration-200 hover:scale-110 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
                             :aria-label="t('profile.avatar_remove_button')" :title="t('profile.avatar_remove_button')">
@@ -431,7 +447,7 @@ const handleImageError = () => {
                         </Button>
 
                         <!-- Progreso bajo avatar -->
-                        <div v-if="isUploading && uploadProgress !== null"
+                        <div v-if="isUploadingUi && uploadProgress !== null"
                             class="mt-2 w-32 lg:w-36 h-2 bg-muted/50 rounded-full overflow-hidden shadow-inner"
                             role="progressbar" :aria-valuenow="visualProgress" aria-valuemin="0" aria-valuemax="100"
                             :aria-describedby="progressId">
@@ -736,6 +752,46 @@ const handleImageError = () => {
 }
 
 /* ---------------------------------------
+ * Overlay de subida del avatar
+ * ------------------------------------- */
+.avatar-upload-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem;
+    backdrop-filter: blur(2px);
+    background: linear-gradient(160deg,
+            color-mix(in srgb, var(--avatar-card) 54%, transparent),
+            color-mix(in srgb, var(--avatar-primary) 16%, transparent));
+}
+
+.avatar-upload-overlay__glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.8rem;
+    height: 2.8rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--avatar-border) 70%, transparent);
+    background: color-mix(in srgb, var(--avatar-card) 90%, transparent);
+    box-shadow:
+        0 8px 22px -14px color-mix(in srgb, var(--avatar-foreground) 42%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--avatar-primary-foreground) 14%, transparent);
+}
+
+.avatar-upload-overlay__spinner {
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--avatar-primary) 28%, var(--avatar-border));
+    border-top-color: var(--avatar-primary);
+    animation: avatar-upload-rotate 0.8s linear infinite;
+}
+
+/* ---------------------------------------
  * Skeleton del avatar
  * ------------------------------------- */
 .avatar-skeleton {
@@ -755,49 +811,89 @@ const handleImageError = () => {
     overflow: hidden;
 }
 
-.avatar-skeleton__sun {
+.avatar-skeleton__receipt {
     position: absolute;
-    top: 18%;
-    right: 18%;
-    width: 2.8rem;
-    height: 2.8rem;
+    top: 14%;
+    left: 14%;
+    width: 72%;
+    height: 72%;
+    border-radius: 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--avatar-primary) 24%, var(--avatar-border));
+    background: linear-gradient(180deg,
+            color-mix(in srgb, var(--avatar-card) 85%, transparent),
+            color-mix(in srgb, var(--avatar-primary) 10%, transparent));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--avatar-primary-foreground) 14%, transparent);
+}
+
+.avatar-skeleton__line {
+    position: absolute;
+    left: 22%;
+    height: 0.3rem;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--avatar-primary-foreground) 18%, transparent);
-    box-shadow: 0 0 25px color-mix(in srgb, var(--avatar-foreground) 45%, transparent);
+    background: color-mix(in srgb, var(--avatar-primary) 28%, var(--avatar-border));
+    opacity: 0.82;
 }
 
-.avatar-skeleton__mountain {
+.avatar-skeleton__line--1 {
+    top: 24%;
+    width: 52%;
+}
+
+.avatar-skeleton__line--2 {
+    top: 31%;
+    width: 42%;
+}
+
+.avatar-skeleton__line--3 {
+    top: 38%;
+    width: 48%;
+}
+
+.avatar-skeleton__chart {
     position: absolute;
-    bottom: 18%;
-    width: 60%;
-    height: 55%;
-    background: linear-gradient(180deg,
-            color-mix(in srgb, var(--avatar-foreground) 20%, transparent),
-            color-mix(in srgb, var(--avatar-foreground) 65%, transparent));
-    clip-path: polygon(0 100%, 50% 0, 100% 100%);
-    opacity: 0.85;
+    left: 22%;
+    bottom: 21%;
+    width: 56%;
+    height: 24%;
+    border-radius: 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--avatar-border) 82%, transparent);
+    background: color-mix(in srgb, var(--avatar-card) 68%, transparent);
 }
 
-.avatar-skeleton__mountain--left {
-    left: -5%;
-}
-
-.avatar-skeleton__mountain--right {
-    right: -5%;
-    width: 50%;
-    height: 45%;
-    opacity: 0.6;
-}
-
-.avatar-skeleton__baseline {
+.avatar-skeleton__bar {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 22%;
+    bottom: 24%;
+    width: 0.5rem;
+    border-radius: 0.22rem 0.22rem 0.12rem 0.12rem;
     background: linear-gradient(180deg,
-            transparent,
-            color-mix(in srgb, var(--avatar-foreground) 90%, transparent));
+            color-mix(in srgb, var(--avatar-primary) 55%, transparent),
+            color-mix(in srgb, var(--avatar-primary) 82%, transparent));
+}
+
+.avatar-skeleton__bar--1 {
+    left: 30%;
+    height: 8%;
+}
+
+.avatar-skeleton__bar--2 {
+    left: 39%;
+    height: 12%;
+}
+
+.avatar-skeleton__bar--3 {
+    left: 48%;
+    height: 16%;
+}
+
+.avatar-skeleton__coin {
+    position: absolute;
+    right: 17%;
+    bottom: 20%;
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--avatar-primary) 40%, transparent);
+    background: color-mix(in srgb, var(--avatar-primary) 22%, transparent);
 }
 
 /* ---------------------------------------
@@ -826,6 +922,12 @@ const handleImageError = () => {
 @keyframes avatar-shimmer {
     100% {
         transform: translateX(100%);
+    }
+}
+
+@keyframes avatar-upload-rotate {
+    100% {
+        transform: rotate(360deg);
     }
 }
 

@@ -116,4 +116,31 @@ class MediaServingAllowlistTest extends TestCase
 
         $response->assertStatus(404);
     }
+
+    public function test_missing_conversion_falls_back_to_exact_base_name_only(): void
+    {
+        $user = User::factory()->create();
+        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+            'name' => 'Tenant Exact Match',
+            'owner_user_id' => $user->id,
+        ]);
+
+        $user->tenants()->attach($tenant->id, ['role' => 'owner']);
+        $user->forceFill(['current_tenant_id' => $tenant->id])->save();
+
+        Storage::fake('local');
+        config()->set('image-pipeline.avatar_disk', 'local');
+        config()->set('filesystems.default', 'local');
+
+        $dir = "tenants/{$tenant->id}/users/{$user->id}/avatars/uuid";
+        $requested = "{$dir}/conversions/v123-thumb.webp";
+        Storage::disk('local')->put("{$dir}/av1234.jpg", 'wrong');
+        Storage::disk('local')->put("{$dir}/v123.jpg", 'correct');
+
+        $this->actingAs($user);
+        $response = $this->get('/media/' . $requested);
+
+        $response->assertOk();
+        $this->assertSame('correct', $response->streamedContent());
+    }
 }

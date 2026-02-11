@@ -145,7 +145,8 @@ app/ — código de aplicación organizado por capas
 │   │   │   ├── Paths/
 │   │   │   │   ├── MediaLibrary/TenantAwareFileNamer.php — nombres por tenant (Spatie)
 │   │   │   │   ├── MediaLibrary/TenantAwarePathGenerator.php — rutas por tenant (Spatie)
-│   │   │   │   └── TenantPathGenerator.php — rutas genéricas por tenant
+│   │   │   │   ├── TenantPathGenerator.php — rutas genéricas por tenant
+│   │   │   │   └── TenantPathLayout.php — compone la estructura física de rutas por tenant
 │   │   │   ├── Registry/UploadProfileRegistry.php — catálogo de perfiles
 │   │   │   ├── Repositories/EloquentUploadRepository.php — repo uploads
 │   │   │   └── Services/MediaReplacementService.php — reemplazo de media
@@ -168,7 +169,8 @@ app/ — código de aplicación organizado por capas
 │   │   │   │   ├── Settings/UpdateAvatarRequest.php — valida update avatar
 │   │   │   │   ├── StoreUploadRequest.php — valida alta upload
 │   │   │   │   └── UploadImageRequest.php — valida imagen
-│   │   │   └── Rules/SecureImageValidation.php — regla compuesta para imágenes
+│   │   │   ├── Rules/SecureImageValidation.php — regla compuesta para imágenes
+│   │   │   └── Support/MediaServingResponder.php — centraliza respuestas HTTP para servir media
 │   │   ├── Pipeline/ — pipelines y seguridad de media
 │   │   │   ├── Contracts/UploadMetadata.php
 │   │   │   ├── Contracts/UploadPipeline.php
@@ -230,6 +232,8 @@ app/ — código de aplicación organizado por capas
 │   │   │   │   ├── Exceptions/InvalidRuleException.php — error de regla
 │   │   │   │   ├── ImageMetadataReader.php — lee metadatos EXIF
 │   │   │   │   ├── ImageNormalizer.php — normaliza imágenes
+│   │   │   │   ├── Logging/MediaLogSanitizer.php — sanea datos sensibles antes de loguear
+│   │   │   │   ├── Logging/MediaSecurityLogger.php — logger de eventos de seguridad en media
 │   │   │   │   ├── MagicBytesValidator.php — valida magic bytes
 │   │   │   │   ├── MimeNormalizer.php — normaliza MIME
 │   │   │   │   ├── PayloadScanner.php — escanea payload
@@ -238,6 +242,7 @@ app/ — código de aplicación organizado por capas
 │   │   │   ├── Services/MediaCleanupScheduler.php — agenda limpiezas
 │   │   │   ├── Support/ImageUploadReporter.php — reporter de imagen
 │   │   │   ├── Support/MediaArtifactCollector.php — recolector de artefactos
+│   │   │   ├── Support/MediaCleanupArtifactsBuilder.php — construye lotes de artefactos para limpieza
 │   │   │   ├── Support/PipelineResultMapper.php — mapea resultados
 │   │   │   └── Support/QuarantineManager.php — gestiona cuarentenas
 │   │   ├── Profiles/
@@ -261,5 +266,6 @@ app/ — código de aplicación organizado por capas
 │   │       ├── OnAvatarDeleted.php — reacciona al evento AvatarDeleted
 │   │       └── OnAvatarUpdated.php — reacciona al evento AvatarUpdated
 ├── Support/ — utilidades compartidas
+│   ├── Logging/SecurityLogger.php — logger genérico para eventos de seguridad
 │   └── Media/TenantAwareUrlGenerator.php — genera URLs de media por tenant
 └── README.md — guía raíz de la capa app

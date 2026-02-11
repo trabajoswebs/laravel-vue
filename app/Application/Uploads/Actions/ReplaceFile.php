@@ -10,8 +10,8 @@ use App\Domain\Uploads\UploadProfile;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 use App\Infrastructure\Uploads\Core\Models\Upload;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Support\Logging\SecurityLogger;
 
 /**
  * Acción de aplicación para reemplazar archivos.
@@ -66,7 +66,7 @@ final class ReplaceFile
                 Storage::disk($disk)->delete($path);
             }
         } catch (\Throwable $e) {
-            Log::warning('uploads.replace.delete_old_failed', [
+            SecurityLogger::warning('uploads.replace.delete_old_failed', [
                 'upload_id' => (string) $upload->getKey(),
                 'error' => $e->getMessage(),
             ]);

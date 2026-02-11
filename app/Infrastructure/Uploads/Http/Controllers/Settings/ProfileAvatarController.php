@@ -23,8 +23,8 @@ use Illuminate\Http\JsonResponse;                     // Ej. respuesta JSON
 use Illuminate\Http\RedirectResponse;                 // Ej. respuesta redirect
 use Illuminate\Http\Request;                          // Ej. request base
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
+use App\Support\Logging\SecurityLogger;
 use Throwable;                                        // Ej. captura de errores
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media de Spatie // Ej.: media->getUrl()
 
@@ -68,7 +68,7 @@ class ProfileAvatarController extends Controller
         $this->authorize('updateAvatar', $authUser);
 
         // Registra información sobre la solicitud de actualización de avatar
-        Log::info('Avatar update request received', [
+        SecurityLogger::info('avatar.update_request_received', [
             'user_id' => $authUser?->getKey(),
             'has_file' => $request->hasFile('avatar'),
             'files' => $this->gatherUploadedFileInfo($request),
@@ -98,8 +98,9 @@ class ProfileAvatarController extends Controller
                 $avatarData
             );
         } catch (VirusDetectedException $e) {
-            Log::warning('Avatar upload rejected (virus detected)', [
+            SecurityLogger::warning('avatar.upload_rejected', [
                 'user_id' => $authUser->getKey(),
+                'reason' => 'virus_detected',
                 'error' => $e->getMessage(),
             ]);
 
@@ -107,8 +108,9 @@ class ProfileAvatarController extends Controller
         } catch (UploadValidationException $e) {
             $isAntivirusFailure = $e->getPrevious() instanceof AntivirusException;
 
-            Log::warning('Avatar upload rejected (validation failed)', [
+            SecurityLogger::warning('avatar.upload_rejected', [
                 'user_id' => $authUser->getKey(),
+                'reason' => 'validation_failed',
                 'error' => $e->getMessage(),
                 'antivirus_fail_closed' => $isAntivirusFailure,
             ]);
@@ -119,7 +121,7 @@ class ProfileAvatarController extends Controller
 
             return $this->respondValidationFailure($request, $message);
         } catch (NormalizationFailedException $e) {
-            Log::error('Avatar upload normalization failed', [
+            SecurityLogger::error('avatar.upload_normalization_failed', [
                 'user_id' => $authUser->getKey(),
                 'error' => $e->getMessage(),
             ]);
@@ -127,7 +129,7 @@ class ProfileAvatarController extends Controller
             return $this->respondServerFailure($request);
         } catch (ScanFailedException|QuarantineException $e) {
             // Registra un error si falla la infraestructura de escaneo o cuarentena
-            Log::error('Avatar upload infrastructure error', [
+            SecurityLogger::error('avatar.upload_infrastructure_error', [
                 'user_id' => $authUser->getKey(),
                 'error' => $e->getMessage(),
             ]);
@@ -135,7 +137,7 @@ class ProfileAvatarController extends Controller
             return $this->respondServerFailure($request);
         } catch (Throwable $e) {
             // Registra el error en caso de fallo
-            Log::error('Avatar update failed', [
+            SecurityLogger::error('avatar.update_failed', [
                 'user_id' => $authUser->getKey(),
                 'error' => $e->getMessage(),
                 'exception' => $e,
@@ -195,7 +197,7 @@ class ProfileAvatarController extends Controller
 
                     return response()->json(['status' => $status]);
                 } catch (\Throwable $e) {
-                    Log::warning('avatar.status.quarantine_lookup_failed', [
+                    SecurityLogger::warning('avatar.status.quarantine_lookup_failed', [
                         'user_id' => $authUser->getKey(),
                         'quarantine_id' => $quarantineId,
                         'error' => $e->getMessage(),
@@ -319,7 +321,7 @@ class ProfileAvatarController extends Controller
             );
         } catch (Throwable $e) {
             // Registra el error en caso de fallo
-            Log::error('Avatar delete failed', [
+            SecurityLogger::error('avatar.delete_failed', [
                 'user_id' => $authUser->getKey(),
                 'error' => $e->getMessage(),
                 'exception' => $e,

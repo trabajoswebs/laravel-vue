@@ -79,6 +79,11 @@ final class MimeNormalizer
             $normalized = self::MIME_ALIAS_MAP[$normalized];
         }
 
+        // Acepta solo formato type/subtype válido para evitar decisiones sobre cadenas inválidas.
+        if (! preg_match('~^[a-z0-9!#$&^_.+\-]+/[a-z0-9!#$&^_.+\-]+$~', $normalized)) {
+            return null;
+        }
+
         // Devuelve el MIME completamente normalizado
         return $normalized;
     }

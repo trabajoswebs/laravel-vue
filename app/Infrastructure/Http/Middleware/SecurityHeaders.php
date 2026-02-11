@@ -2,10 +2,11 @@
 
 namespace App\Infrastructure\Http\Middleware;
 
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -75,6 +76,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class SecurityHeaders
 {
+    private ?MediaSecurityLogger $securityLogger = null;
+    private ?MediaLogSanitizer $logSanitizer = null;
+
     /**
      * Esquemas URI permitidos al validar URLs de configuración.
      * 
@@ -177,8 +181,8 @@ class SecurityHeaders
 
         $securityConfig = $this->securityConfig();
         $isDev = app()->environment(['local', 'development']);
-        $frontendUrl = $this->validateUrl(env('APP_FRONTEND_URL', 'http://localhost:3000'));
-        $viteUrl = $this->validateUrl(env('VITE_DEV_SERVER_URL', 'http://127.0.0.1:5174'));
+        $frontendUrl = $this->validateUrl((string) config('security.frontend_url', 'http://localhost:3000'));
+        $viteUrl = $this->validateUrl((string) config('vite.dev_server_url', 'http://127.0.0.1:5174'));
         $appUrl = $this->validateUrl(config('app.url'));
         $nonce = $this->generateNonce();
 
@@ -186,17 +190,13 @@ class SecurityHeaders
             $csp = $this->buildCSP($isDev, $frontendUrl, $viteUrl, $appUrl, $nonce);
             $response->headers->set('Content-Security-Policy', $csp);
         } catch (\Throwable $exception) {
-            $context = [
-                'error' => $exception->getMessage(),
+            $context = $this->requestLogContext($request, $response, [
+                'result' => 'fallback_applied',
+                'reason' => 'build_csp_failed',
                 'environment' => app()->environment(),
-                'url' => $request->fullUrl(),
-            ];
-
-            if (config('app.debug', false)) {
-                $context['trace'] = $exception->getTraceAsString();
-            }
-
-            Log::error('Failed to build Content-Security-Policy, applying fallback.', $context);
+                'exception' => $exception,
+            ]);
+            $this->securityLogger()->error('http.security_headers.misconfigured', $context);
             $csp = self::FALLBACK_CSP;
             $response->headers->set('Content-Security-Policy', $csp);
         }
@@ -206,28 +206,22 @@ class SecurityHeaders
         try {
             $this->applySecurityHeaders($response, $request, $securityConfig);
         } catch (\Throwable $exception) {
-            $context = [
-                'error' => $exception->getMessage(),
+            $this->securityLogger()->error('http.security_headers.misconfigured', $this->requestLogContext($request, $response, [
+                'reason' => 'apply_security_headers_failed',
                 'environment' => app()->environment(),
-                'url' => $request->fullUrl(),
-            ];
-
-            if (config('app.debug', false)) {
-                $context['trace'] = $exception->getTraceAsString();
-            }
-
-            Log::error('Failed to apply security headers.', $context);
+                'exception' => $exception,
+            ]));
         }
 
         $this->applyReportToHeader($response);
 
-        $this->logDebug('Security headers applied.', [
+        $this->logDebug('http.security_headers.applied', $this->requestLogContext($request, $response, [
             'environment' => app()->environment(),
-            'request_id' => $request->headers->get('X-Request-ID'),
-            'url' => $request->fullUrl(),
-            'csp' => $csp,
-            'headers' => $this->extractSecurityHeaders($response),
-        ]);
+            'csp_hash' => $this->logSanitizer()->hashPath($csp),
+            'headers_hash' => $this->logSanitizer()->hashPath(
+                json_encode($this->extractSecurityHeaders($response), JSON_UNESCAPED_SLASHES) ?: '{}'
+            ),
+        ]));
 
         return $response;
     }
@@ -265,10 +259,11 @@ class SecurityHeaders
         $allowedSchemes = $this->allowedSchemes();
 
         if ($parsedUrl === false || !isset($parsedUrl['scheme']) || !in_array($parsedUrl['scheme'], $allowedSchemes, true)) {
-            Log::warning("Invalid URL detected in security middleware", [
-                'url' => $url,
+            $this->securityLogger()->warning('http.security_headers.misconfigured', [
+                'reason' => 'invalid_url',
                 'parsed' => $parsedUrl,
                 'allowed_schemes' => $allowedSchemes,
+                'url' => $url,
             ]);
             return null;
         }
@@ -817,7 +812,10 @@ class SecurityHeaders
             $url = trim($endpoint);
 
             if (filter_var($url, FILTER_VALIDATE_URL) === false) {
-                Log::warning('Skipping invalid Report-To endpoint URL.', ['url' => $url]);
+                $this->securityLogger()->warning('http.security_headers.misconfigured', [
+                    'reason' => 'report_to_invalid_endpoint',
+                    'url' => $url,
+                ]);
                 continue;
             }
 
@@ -826,7 +824,8 @@ class SecurityHeaders
             $allowedSchemes = $isLocal ? ['https', 'http'] : ['https'];
 
             if (!in_array($scheme, $allowedSchemes, true)) {
-                Log::warning('Skipping Report-To endpoint with unsupported scheme.', [
+                $this->securityLogger()->warning('http.security_headers.misconfigured', [
+                    'reason' => 'report_to_unsupported_scheme',
                     'url' => $url,
                     'scheme' => $scheme,
                     'environment' => app()->environment(),
@@ -928,7 +927,7 @@ class SecurityHeaders
     /**
      * Registra mensajes de debug solo cuando el modo debug CSP está activo.
      * 
-     * Wrapper alrededor de Log::debug() que verifica isDebugEnabled() antes
+     * Wrapper alrededor del logger seguro que verifica isDebugEnabled() antes
      * de escribir, evitando overhead de logging en producción.
      * 
      * Los logs de debug incluyen contexto rico para facilitar troubleshooting:
@@ -938,7 +937,7 @@ class SecurityHeaders
      * - URL de la petición
      * - Entorno de ejecución
      * 
-     * @param string $message Mensaje principal del log
+     * @param string $event Evento de log
      * @param array<string, mixed> $context Datos contextuales adicionales
      * @return void
      * 
@@ -949,13 +948,41 @@ class SecurityHeaders
      *     'environment' => 'production'
      * ]);
      */
-    private function logDebug(string $message, array $context = []): void
+    private function logDebug(string $event, array $context = []): void
     {
         if (!$this->isDebugEnabled()) {
             return;
         }
 
-        Log::debug($message, $context);
+        $this->securityLogger()->debug($event, $context);
+    }
+
+    /**
+     * @param array<string,mixed> $extra
+     * @return array<string,mixed>
+     */
+    private function requestLogContext(Request $request, Response $response, array $extra = []): array
+    {
+        $context = [
+            'route_name' => $request->route()?->getName(),
+            'method' => $request->method(),
+            'status' => $response->getStatusCode(),
+            'correlation_id' => (string) ($request->headers->get('X-Request-ID') ?? ''),
+            'tenant_id' => $request->attributes->get('tenant_id'),
+            'user_id' => $request->user()?->getAuthIdentifier(),
+        ];
+
+        return array_merge($context, $extra);
+    }
+
+    private function securityLogger(): MediaSecurityLogger
+    {
+        return $this->securityLogger ??= app(MediaSecurityLogger::class);
+    }
+
+    private function logSanitizer(): MediaLogSanitizer
+    {
+        return $this->logSanitizer ??= app(MediaLogSanitizer::class);
     }
 
     /**

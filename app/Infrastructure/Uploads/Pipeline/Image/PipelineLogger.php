@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Image;
 
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use Illuminate\Support\Str;
 
 /**
@@ -50,12 +50,15 @@ final class PipelineLogger
             }
         }
 
-        if ($this->channel) {
-            Log::channel($this->channel)->{$level}($message, $context);
-            return;
-        }
+        $event = $this->channel ? "{$this->channel}.{$message}" : $message;
 
-        Log::{$level}($message, $context);
+        match ($level) {
+            'debug' => SecurityLogger::debug($event, $context),
+            'info' => SecurityLogger::info($event, $context),
+            'warning' => SecurityLogger::warning($event, $context),
+            'error', 'critical' => SecurityLogger::error($event, $context),
+            default => SecurityLogger::info($event, $context),
+        };
     }
 
     /**

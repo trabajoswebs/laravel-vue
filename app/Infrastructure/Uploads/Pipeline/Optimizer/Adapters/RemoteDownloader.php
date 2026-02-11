@@ -9,7 +9,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use RuntimeException;
@@ -914,7 +914,7 @@ final class RemoteDownloader
         }
 
         if (@\unlink($path) === false) {
-            Log::warning('RemoteDownloader failed to remove temp file', [
+            SecurityLogger::warning('RemoteDownloader failed to remove temp file', [
                 'path' => $path,
             ]);
         }

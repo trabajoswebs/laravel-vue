@@ -39,7 +39,8 @@ use App\Infrastructure\Uploads\Pipeline\Support\MediaArtifactCollector; // Colec
 use App\Application\Uploads\Contracts\UploadOrchestratorInterface; // Contrato de orquestador
 use App\Application\Uploads\Contracts\UploadRepositoryInterface; // Contrato de repositorio
 use Illuminate\Support\ServiceProvider; // Base ServiceProvider
-use Illuminate\Support\Facades\Log; // Logger
+use App\Support\Logging\SecurityLogger;
+// Logger
 use Illuminate\Support\Facades\Storage; // Storage
 use InvalidArgumentException; // Excepciones de config
 
@@ -85,7 +86,7 @@ class UploadsServiceProvider extends ServiceProvider // Provider de uploads
             try {
                 $filesystem = Storage::disk($configuredDisk);
             } catch (InvalidArgumentException $exception) {
-                Log::warning('quarantine.disk.invalid', [
+                SecurityLogger::warning('quarantine.disk.invalid', [
                     'disk' => $configuredDisk,
                     'error' => $exception->getMessage(),
                 ]);

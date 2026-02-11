@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Security\Upload;
 
+use App\Support\Logging\SecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 
 /**

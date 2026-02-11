@@ -43,8 +43,8 @@ class LanguageController extends Controller
         if (RateLimiter::tooManyAttempts($rateLimitKey, $maxAttempts)) {
             $seconds = RateLimiter::availableIn($rateLimitKey);
             return $this->handleError(
-                'Too many language changes. Please wait before trying again.',
-                "Rate limit exceeded. Try again in {$seconds} seconds.",
+                'language.change.rate_limited',
+                trans('language.rate_limited', ['seconds' => $seconds]),
                 $request,
                 429
             );
@@ -163,8 +163,8 @@ class LanguageController extends Controller
             ]);
 
             return $this->handleError(
-                'Operation not allowed',
-                'Cache clearing only available in development environments',
+                'language.cache_clear.env_blocked',
+                trans('language.cache_clear_only_dev'),
                 $request,
                 403
             );
@@ -173,8 +173,8 @@ class LanguageController extends Controller
         if ($request->user() && method_exists($request->user(), 'can')) {
             if (!$request->user()->can('clear-translation-cache')) {
                 return $this->handleError(
-                    'Insufficient permissions',
-                    'You do not have permission to clear translation cache',
+                    'language.cache_clear.permission_denied',
+                    trans('language.cache_clear_permission_denied'),
                     $request,
                     403
                 );
@@ -518,7 +518,7 @@ class LanguageController extends Controller
 
     private function invalidLocaleResponse(Request $request)
     {
-        $message = 'Idioma no válido.';
+        $message = trans('language.invalid_locale');
 
         // Para peticiones API/JSON mantenemos el contrato 422 de validación.
         if ($request->expectsJson() || $request->wantsJson()) {

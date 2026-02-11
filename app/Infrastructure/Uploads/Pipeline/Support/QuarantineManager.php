@@ -11,8 +11,9 @@ use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Log;
+use App\Support\Logging\SecurityLogger;
 use Illuminate\Support\Str;
 
 /**
@@ -44,11 +45,16 @@ final class QuarantineManager
     public function validateMimeType(UploadedFile $file, ?MediaProfile $profile = null): void
     {
         $constraints = $profile?->fileConstraints() ?? app(FileConstraints::class);
-        $allowedMimes = $constraints->allowedMimeTypes();
-        $disallowedMimes = (array) config('image-pipeline.disallowed_mimes', []);
-        $mime = $file->getMimeType();
+        $rawAllowedMimes = $constraints->allowedMimeTypes();
+        $allowedMimes = $this->normalizeMimes($rawAllowedMimes);
+        $disallowedMimes = $this->normalizeMimes((array) config('image-pipeline.disallowed_mimes', []));
+        $mime = MimeNormalizer::normalize($file->getMimeType());
 
-        if (!is_string($mime)) {
+        if (!is_string($mime) || $mime === '') {
+            throw new UploadValidationException(__('media.uploads.invalid_image'));
+        }
+
+        if ($rawAllowedMimes !== [] && $allowedMimes === []) {
             throw new UploadValidationException(__('media.uploads.invalid_image'));
         }
 
@@ -101,8 +107,8 @@ final class QuarantineManager
             throw new UploadValidationException(__('media.uploads.source_unreadable'));
         }
 
-        $name = $file->getClientOriginalName();
-        if (!is_string($name) || $name === '') {
+        $name = $this->sanitizeOriginalName($file->getClientOriginalName());
+        if ($name === '') {
             $name = basename($realPath) ?: 'upload.bin';
         }
 
@@ -120,7 +126,7 @@ final class QuarantineManager
             fclose($handle);
         }
 
-        $mime = $file->getClientMimeType() ?? $file->getMimeType() ?: null;
+        $mime = $file->getMimeType() ?: null;
 
         $quarantined = new UploadedFile($token->path, $name, $mime, $file->getError(), true);
 
@@ -155,8 +161,9 @@ final class QuarantineManager
         try {
             $this->quarantine->delete($path);
         } catch (\Throwable $exception) {
-            Log::warning('image_upload.quarantine_cleanup_failed', [
-                'path' => $path instanceof QuarantineToken ? $path->path : $path,
+            $pathValue = $path instanceof QuarantineToken ? $path->path : (string) $path;
+            SecurityLogger::warning('image_upload.quarantine_cleanup_failed', [
+                'path_hash' => substr(hash('sha256', $pathValue), 0, 16),
                 'error' => $exception->getMessage(),
             ]);
         }
@@ -175,11 +182,46 @@ final class QuarantineManager
         }
 
         if ($artifact->path !== '' && is_file($artifact->path)) {
-            @unlink($artifact->path);
+            if (! @unlink($artifact->path)) {
+                SecurityLogger::warning('image_upload.temp_cleanup_failed', [
+                    'path_hash' => substr(hash('sha256', $artifact->path), 0, 16),
+                ]);
+            }
         }
 
         if ($removeQuarantine && $artifact->quarantineId !== null) {
             $this->delete($artifact->quarantineId);
         }
+    }
+
+    private function sanitizeOriginalName(mixed $name): string
+    {
+        if (! is_string($name)) {
+            return '';
+        }
+
+        $trimmed = trim($name);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        return str_replace(["\r", "\n", "\0"], '', basename($trimmed));
+    }
+
+    /**
+     * @param list<string> $mimes
+     * @return list<string>
+     */
+    private function normalizeMimes(array $mimes): array
+    {
+        $normalized = [];
+        foreach ($mimes as $mime) {
+            $canonical = MimeNormalizer::normalize($mime);
+            if ($canonical !== null) {
+                $normalized[] = $canonical;
+            }
+        }
+
+        return array_values(array_unique($normalized));
     }
 }
