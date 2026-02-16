@@ -3,7 +3,7 @@
 namespace App\Http\Requests\Settings;
 
 use App\Infrastructure\Security\SecurityHelper;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Sanitization\DisplayName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Auth\Policies;
 
 use App\Infrastructure\Auth\Policies\Concerns\HandlesTenantMembership;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Domain\Uploads\ServingMode;
 use App\Domain\Uploads\UploadProfileId;

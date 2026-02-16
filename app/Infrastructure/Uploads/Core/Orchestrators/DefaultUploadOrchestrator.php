@@ -12,7 +12,7 @@ use App\Application\Shared\Contracts\TenantContextInterface;
 use App\Domain\Uploads\ScanMode;
 use App\Domain\Uploads\UploadKind;
 use App\Domain\Uploads\UploadProfile;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;

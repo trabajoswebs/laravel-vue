@@ -6,7 +6,7 @@ namespace App\Infrastructure\User\Adapters;
 
 use App\Application\User\Contracts\UserRepository;
 use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 
 final class EloquentUserRepository implements UserRepository
 {

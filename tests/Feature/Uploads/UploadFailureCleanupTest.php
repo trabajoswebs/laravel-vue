@@ -8,7 +8,7 @@ use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -38,7 +38,7 @@ class UploadFailureCleanupTest extends TestCase
         });
 
         $user = User::factory()->create(['current_tenant_id' => null]);
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant Cleanup',
             'owner_user_id' => $user->id,
         ]);

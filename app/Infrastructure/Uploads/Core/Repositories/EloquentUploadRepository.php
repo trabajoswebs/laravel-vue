@@ -7,7 +7,7 @@ namespace App\Infrastructure\Uploads\Core\Repositories; // Namespace del adaptad
 use App\Application\Uploads\Contracts\UploadRepositoryInterface; // Contrato de repositorio
 use App\Application\Uploads\DTO\UploadResult; // DTO de resultado de upload
 use App\Domain\Uploads\UploadProfile; // Perfil de upload
-use App\Infrastructure\Models\User; // Modelo de usuario
+use App\Models\User; // Modelo de usuario
 use App\Infrastructure\Uploads\Core\Models\Upload; // Modelo Upload para persistencia
 
 /**

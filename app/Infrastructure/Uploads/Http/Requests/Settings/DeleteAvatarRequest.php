@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Http\Requests\Settings;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**

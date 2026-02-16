@@ -4,8 +4,8 @@ declare(strict_types=1); // Activa tipado estricto
 
 namespace App\Infrastructure\Console\Commands; // Namespace de comandos de infraestructura
 
-use App\Infrastructure\Models\User; // Modelo de usuario
-use App\Infrastructure\Tenancy\Models\Tenant; // Modelo de tenant
+use App\Models\User; // Modelo de usuario
+use App\Models\Tenant; // Modelo de tenant
 use Illuminate\Console\Command; // Clase base Command
 use Illuminate\Support\Facades\DB; // Facade para transacciones/lock
 

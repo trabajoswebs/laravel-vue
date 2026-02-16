@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads;
 
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\User;
+use App\Models\Tenant;
 use App\Infrastructure\Uploads\Pipeline\Jobs\PerformConversionsJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\MediaLibrary\Conversions\ConversionCollection;

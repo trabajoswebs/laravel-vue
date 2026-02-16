@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Uploads;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Config;
@@ -21,7 +21,7 @@ class UploadRateLimitTest extends TestCase
         Config::set('image-pipeline.rate_limit.decay_seconds', 60);
 
         $user = User::factory()->create(['current_tenant_id' => null]);
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant RL',
             'owner_user_id' => $user->id,
         ]);

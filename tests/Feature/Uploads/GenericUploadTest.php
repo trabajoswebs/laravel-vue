@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Uploads;
 
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\User;
+use App\Models\Tenant;
 use App\Application\Uploads\Actions\UploadFile;
 use App\Domain\Uploads\UploadProfileId;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -133,7 +133,7 @@ final class GenericUploadTest extends TestCase
         [$owner, $tenant] = $this->makeTenantUser();
         /** @var User $foreign */
         $foreign = User::factory()->create(['current_tenant_id' => null]);
-        $otherTenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $otherTenant = \App\Models\Tenant::query()->create([
             'name' => 'Other',
             'owner_user_id' => $owner->id,
         ]);

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Media;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -15,7 +15,7 @@ class ProfilePageUsesSignedAvatarUrlsTest extends TestCase
     public function test_profile_page_uses_signed_avatar_urls_not_media_or_storage(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant A',
             'owner_user_id' => $user->id,
         ]);

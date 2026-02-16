@@ -3,7 +3,7 @@
 namespace Tests\Feature\Uploads;
 
 use App\Infrastructure\Uploads\Core\Models\Upload;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -20,7 +20,7 @@ class DownloadUploadTest extends TestCase
         // Arrange: tenant/user, file on disk, and upload row
         Storage::fake('public');
         $user = User::factory()->create(['current_tenant_id' => null]);
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant Download',
             'owner_user_id' => $user->id,
         ]);
@@ -55,7 +55,7 @@ class DownloadUploadTest extends TestCase
         // Arrange: tenant/user and secret upload entry
         Storage::fake('public');
         $user = User::factory()->create(['current_tenant_id' => null]);
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant Secret',
             'owner_user_id' => $user->id,
         ]);
@@ -98,7 +98,7 @@ class DownloadUploadTest extends TestCase
         // Arrange: two tenants, upload in tenant A, user in tenant B
         Storage::fake('public');
         $ownerA = User::factory()->create(['current_tenant_id' => null]);
-        $tenantA = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenantA = \App\Models\Tenant::query()->create([
             'name' => 'Tenant A',
             'owner_user_id' => $ownerA->id,
         ]);
@@ -121,7 +121,7 @@ class DownloadUploadTest extends TestCase
         ]);
 
         $userB = User::factory()->create(['current_tenant_id' => null]);
-        $tenantB = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenantB = \App\Models\Tenant::query()->create([
             'name' => 'Tenant B',
             'owner_user_id' => $userB->id,
         ]);

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Media;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Route;
@@ -21,7 +21,7 @@ class ShowAvatarTest extends TestCase
         config()->set('media-serving.local_max_age_seconds', 120);
 
         $user = User::factory()->create(['current_tenant_id' => null]);
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant A',
             'owner_user_id' => $user->id,
         ]);
@@ -69,7 +69,7 @@ class ShowAvatarTest extends TestCase
         config()->set('filesystems.disks.s3.driver', 's3');
 
         $user = User::factory()->create(['current_tenant_id' => null]);
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant A',
             'owner_user_id' => $user->id,
         ]);
@@ -114,7 +114,7 @@ class ShowAvatarTest extends TestCase
     {
         // Setup tenants/users and media in different tenants
         $tenantAUser = User::factory()->create(['current_tenant_id' => null]); // User owner in tenant A
-        $tenantA = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenantA = \App\Models\Tenant::query()->create([
             'name' => 'Tenant A',
             'owner_user_id' => $tenantAUser->id,
         ]); // Tenant A row
@@ -138,7 +138,7 @@ class ShowAvatarTest extends TestCase
         ]);
 
         $tenantBUser = User::factory()->create(['current_tenant_id' => null]); // User in tenant B
-        $tenantB = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenantB = \App\Models\Tenant::query()->create([
             'name' => 'Tenant B',
             'owner_user_id' => $tenantBUser->id,
         ]); // Tenant B row

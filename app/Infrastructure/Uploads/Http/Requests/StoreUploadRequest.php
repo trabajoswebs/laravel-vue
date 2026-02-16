@@ -8,7 +8,7 @@ use App\Domain\Uploads\UploadKind;
 use App\Domain\Uploads\UploadProfile;
 use App\Domain\Uploads\UploadProfileId;
 use App\Infrastructure\Http\Requests\Concerns\SanitizesInputs;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
 use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesDocumentValidation;
 use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesImageValidation;

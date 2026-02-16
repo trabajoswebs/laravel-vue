@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Media;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -14,7 +14,7 @@ class MediaServingAllowlistTest extends TestCase
     public function test_avatar_path_is_allowed_and_served(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant 1',
             'owner_user_id' => $user->id,
         ]);
@@ -42,7 +42,7 @@ class MediaServingAllowlistTest extends TestCase
     public function test_path_outside_allowlist_returns_404_even_if_exists(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant 1',
             'owner_user_id' => $user->id,
         ]);
@@ -68,7 +68,7 @@ class MediaServingAllowlistTest extends TestCase
     public function test_wrong_tenant_prefix_returns_404_instead_of_403(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant 2',
             'owner_user_id' => $user->id,
         ]);
@@ -94,7 +94,7 @@ class MediaServingAllowlistTest extends TestCase
     public function test_path_traversal_attempt_returns_404(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant Traversal',
             'owner_user_id' => $user->id,
         ]);
@@ -120,7 +120,7 @@ class MediaServingAllowlistTest extends TestCase
     public function test_missing_conversion_falls_back_to_exact_base_name_only(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant Exact Match',
             'owner_user_id' => $user->id,
         ]);

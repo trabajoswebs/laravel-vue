@@ -51,7 +51,7 @@ class TenantPathAlignmentTest extends TestCase
             $mediaPaths = new TenantAwarePathGenerator($this->context, $paths, $profiles, $layout);
 
             $media = Media::query()->create([
-                'model_type' => \App\Infrastructure\Models\User::class,
+                'model_type' => \App\Models\User::class,
                 'model_id' => 7,
                 'uuid' => '11111111-1111-1111-1111-111111111111',
                 'collection_name' => 'avatar',
@@ -100,7 +100,7 @@ class TenantPathAlignmentTest extends TestCase
             $mediaPaths = new TenantAwarePathGenerator($this->context, $paths, $profiles, $layout);
 
             $media = Media::query()->create([
-                'model_type' => \App\Infrastructure\Models\User::class,
+                'model_type' => \App\Models\User::class,
                 'model_id' => 9,
                 'uuid' => '22222222-2222-2222-2222-222222222222',
                 'collection_name' => 'gallery',

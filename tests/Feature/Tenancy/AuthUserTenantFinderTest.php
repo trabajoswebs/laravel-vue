@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Tenancy;
 
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\User;
+use App\Models\Tenant;
 use App\Infrastructure\Tenancy\TenantFinder\AuthUserTenantFinder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;

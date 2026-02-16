@@ -2,7 +2,7 @@
 
 namespace App\Infrastructure\Auth\Policies;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Auth\Policies\Concerns\HandlesMediaOwnership;
 use App\Infrastructure\Auth\Policies\Concerns\HandlesTenantMembership; // Trait para validar pertenencia a tenant
 

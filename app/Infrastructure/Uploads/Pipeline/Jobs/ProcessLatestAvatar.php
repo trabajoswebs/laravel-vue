@@ -6,8 +6,8 @@ namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
 use App\Application\Shared\Contracts\ClockInterface;
 use App\Application\Shared\Contracts\LoggerInterface;
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\User;
+use App\Models\Tenant;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;

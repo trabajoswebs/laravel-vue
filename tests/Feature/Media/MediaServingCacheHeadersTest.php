@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Media;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\TemporaryUrlFilesystem;
@@ -85,12 +85,12 @@ final class MediaServingCacheHeadersTest extends TestCase
     }
 
     /**
-     * @return array{0:User,1:\App\Infrastructure\Tenancy\Models\Tenant}
+     * @return array{0:User,1:\App\Models\Tenant}
      */
     private function makeTenantUser(): array
     {
         $user = User::factory()->create(['current_tenant_id' => null]);
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant Cache',
             'owner_user_id' => $user->id,
         ]);

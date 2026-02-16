@@ -2,7 +2,7 @@
 
 namespace App\Infrastructure\Providers;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Auth\Policies\UserPolicy;
 use App\Infrastructure\Auth\Policies\UploadPolicy;
 use App\Infrastructure\Uploads\Core\Models\Upload;

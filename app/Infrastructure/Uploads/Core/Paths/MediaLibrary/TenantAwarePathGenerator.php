@@ -21,7 +21,7 @@ namespace App\Infrastructure\Uploads\Core\Paths\MediaLibrary;
 
 use App\Application\Shared\Contracts\TenantContextInterface;
 use App\Domain\Uploads\UploadProfileId;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;
 use App\Infrastructure\Uploads\Core\Paths\TenantPathLayout;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;

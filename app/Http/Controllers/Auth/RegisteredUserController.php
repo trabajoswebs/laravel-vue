@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Infrastructure\Security\SecurityHelper;
 use App\Http\Controllers\Controller;
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant para bootstrap inicial
+use App\Models\User;
+use App\Models\Tenant; // Modelo Tenant para bootstrap inicial
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;

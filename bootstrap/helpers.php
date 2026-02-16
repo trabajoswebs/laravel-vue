@@ -1,6 +1,6 @@
 <?php
 
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\Tenant;
 
 if (!function_exists('tenant')) {
     /**

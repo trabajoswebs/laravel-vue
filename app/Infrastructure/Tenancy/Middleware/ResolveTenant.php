@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Tenancy\Middleware;
 
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\User;
+use App\Models\Tenant;
 use Closure;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;

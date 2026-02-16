@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Media;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -14,7 +14,7 @@ class ProfilePageNoStorageUrlTest extends TestCase
     {
         // Arrange: user + tenant membership
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Profile Tenant',
             'owner_user_id' => $user->id,
         ]);

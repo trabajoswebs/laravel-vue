@@ -2,7 +2,7 @@
 
 namespace App\Infrastructure\Auth\Policies\Concerns;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 
 /**
  * Trait para centralizar la verificación de propiedad de medios

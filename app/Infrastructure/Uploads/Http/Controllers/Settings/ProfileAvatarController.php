@@ -11,7 +11,7 @@ use App\Infrastructure\Http\Controllers\Controller;                  // Ej. base
 use App\Infrastructure\Uploads\Http\Requests\Settings\UpdateAvatarRequest;   // Ej. valida imagen (mimes, tamaño, dimensiones)
 use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;
 use App\Infrastructure\Security\Exceptions\AntivirusException;
-use App\Infrastructure\Models\User;                                  // Ej. modelo User
+use App\Models\User;                                  // Ej. modelo User
 use App\Infrastructure\Uploads\Pipeline\Exceptions\NormalizationFailedException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\QuarantineException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\ScanFailedException;

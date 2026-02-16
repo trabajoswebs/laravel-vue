@@ -2,9 +2,9 @@
 
 declare(strict_types=1); // Tipado estricto // Ej.: evita coerciones silenciosas
 
-namespace App\Infrastructure\Tenancy\Models; // Namespace del modelo // Ej.: App\...\Tenant
+namespace App\Models; // Namespace del modelo // Ej.: App\...\Tenant
 
-use App\Infrastructure\Models\User; // Modelo User // Ej.: $tenant->users()
+use App\Models\User; // Modelo User // Ej.: $tenant->users()
 use Illuminate\Database\Eloquent\Relations\BelongsTo; // Relación BelongsTo // Ej.: owner()
 use Illuminate\Database\Eloquent\Relations\BelongsToMany; // Relación BelongsToMany // Ej.: users()
 use Spatie\Multitenancy\Models\Tenant as SpatieTenant; // Base Spatie (trae makeCurrent/checkCurrent/etc.) // Ej.: $tenant->makeCurrent()

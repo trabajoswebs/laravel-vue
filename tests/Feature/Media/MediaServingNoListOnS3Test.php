@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Media;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -14,7 +14,7 @@ class MediaServingNoListOnS3Test extends TestCase
     public function test_missing_conversion_on_s3_does_not_list_directory(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant 1',
             'owner_user_id' => $user->id,
         ]);

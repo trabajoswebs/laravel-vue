@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Uploads\Pipeline;
 
 use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;

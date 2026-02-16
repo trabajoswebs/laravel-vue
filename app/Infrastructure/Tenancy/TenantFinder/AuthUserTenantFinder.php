@@ -4,7 +4,7 @@ declare(strict_types=1); // Habilita tipado estricto
 
 namespace App\Infrastructure\Tenancy\TenantFinder; // Namespace para finders de tenant
 
-use App\Infrastructure\Tenancy\Models\Tenant; // Modelo Tenant propio
+use App\Models\Tenant; // Modelo Tenant propio
 use Illuminate\Http\Request; // Request HTTP
 
 use Spatie\Multitenancy\Contracts\IsTenant; // Contrato esperado por Spatie // Ej.: return ?IsTenant

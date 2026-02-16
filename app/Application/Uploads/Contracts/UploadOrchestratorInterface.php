@@ -6,7 +6,7 @@ namespace App\Application\Uploads\Contracts;
 
 use App\Application\Uploads\DTO\UploadResult;
 use App\Domain\Uploads\UploadProfile;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 
 /**

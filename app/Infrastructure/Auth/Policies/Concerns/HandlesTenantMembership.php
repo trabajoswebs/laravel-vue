@@ -4,7 +4,7 @@ declare(strict_types=1); // Activa tipado estricto
 
 namespace App\Infrastructure\Auth\Policies\Concerns; // Namespace de traits de policies
 
-use App\Infrastructure\Models\User; // Modelo de usuario
+use App\Models\User; // Modelo de usuario
 
 /**
  * Centraliza validaciones de pertenencia a tenant.

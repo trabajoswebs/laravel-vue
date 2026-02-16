@@ -6,8 +6,8 @@ namespace Tests\Feature\Uploads;
 
 use App\Application\Uploads\Actions\UploadFile;
 use App\Domain\Uploads\UploadProfileId;
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\User;
+use App\Models\Tenant;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
 use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;
 use Illuminate\Foundation\Testing\RefreshDatabase;

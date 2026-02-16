@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\User;
 
-use App\Infrastructure\Models\User;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\User;
+use App\Models\Tenant;
 use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia;
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar;
 use Illuminate\Foundation\Testing\RefreshDatabase;

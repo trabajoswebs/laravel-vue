@@ -8,7 +8,7 @@ use App\Infrastructure\Http\Controllers\Controller; // Base controller
 use App\Infrastructure\Uploads\Http\Support\MediaServingResponder;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile; // Perfil avatar
-use App\Infrastructure\Models\User; // Modelo User
+use App\Models\User; // Modelo User
 use Illuminate\Http\Request; // Request HTTP
 use Illuminate\Support\Facades\Auth; // Facade Auth
 use Illuminate\Support\Facades\Gate; // Facade Gate

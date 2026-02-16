@@ -9,7 +9,7 @@ use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Application\Uploads\DTO\ReplacementResult;
 use App\Application\Uploads\DTO\UploadResult;
 use App\Domain\Uploads\UploadProfile;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 

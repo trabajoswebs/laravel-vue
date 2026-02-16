@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Media;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -16,7 +16,7 @@ class AvatarUrlsAreSignedTest extends TestCase
     public function test_user_avatar_urls_use_signed_route_and_not_media_or_storage(): void
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Tenant A',
             'owner_user_id' => $user->id,
         ]);
@@ -69,7 +69,7 @@ class AvatarUrlsAreSignedTest extends TestCase
 
         try {
             $user = User::factory()->create();
-            $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+            $tenant = \App\Models\Tenant::query()->create([
                 'name' => 'Tenant TTL',
                 'owner_user_id' => $user->id,
             ]);

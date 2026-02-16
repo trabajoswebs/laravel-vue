@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Settings;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,7 +13,7 @@ class ProfileUpdateTest extends TestCase
     public function test_profile_page_is_displayed()
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Settings Tenant',
             'owner_user_id' => $user->id,
         ]);
@@ -30,7 +30,7 @@ class ProfileUpdateTest extends TestCase
     public function test_profile_information_can_be_updated()
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Settings Tenant',
             'owner_user_id' => $user->id,
         ]);
@@ -58,7 +58,7 @@ class ProfileUpdateTest extends TestCase
     public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged()
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Settings Tenant',
             'owner_user_id' => $user->id,
         ]);
@@ -82,7 +82,7 @@ class ProfileUpdateTest extends TestCase
     public function test_user_can_delete_their_account()
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Settings Tenant',
             'owner_user_id' => $user->id,
         ]);
@@ -106,7 +106,7 @@ class ProfileUpdateTest extends TestCase
     public function test_correct_password_must_be_provided_to_delete_account()
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Settings Tenant',
             'owner_user_id' => $user->id,
         ]);

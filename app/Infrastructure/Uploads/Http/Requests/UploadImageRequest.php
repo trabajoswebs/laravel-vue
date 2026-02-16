@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Http\Requests;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesImageValidation; // Trait de reglas compartidas
 

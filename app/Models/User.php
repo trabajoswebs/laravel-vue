@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Models;
+namespace App\Models;
 
 use App\Infrastructure\Uploads\Core\Contracts\MediaOwner; // Contrato que marca modelos propietarios de medios
 use App\Infrastructure\Uploads\Core\Models\Concerns\TracksMediaVersions; // Trait que versiona media para cache busting
 use App\Infrastructure\Uploads\Pipeline\Image\AvatarConversionProfile;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
-use App\Infrastructure\Tenancy\Models\Tenant; // Modelo de tenant para relaciones
+use App\Models\Tenant; // Modelo de tenant para relaciones
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

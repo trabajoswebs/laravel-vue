@@ -1,6 +1,6 @@
 <?php
 
-use App\Infrastructure\Tenancy\Models\Tenant; // Modelo tenant propio; ej. Tenant::find(1)
+use App\Models\Tenant; // Modelo tenant propio; ej. Tenant::find(1)
 use App\Infrastructure\Tenancy\TenantFinder\AuthUserTenantFinder; // Finder basado en usuario autenticado; ej. user->current_tenant_id
 use Spatie\Multitenancy\Actions\ForgetCurrentTenantAction; // Limpia tenant actual; ej. después de job
 use Spatie\Multitenancy\Actions\MakeQueueTenantAwareAction; // Añade tenantId al payload de jobs; ej. tenantId=3
@@ -9,7 +9,7 @@ use Spatie\Multitenancy\Actions\MigrateTenantAction; // Migra tenant; ej. tenant
 
 return [
     // Modelo que representa un tenant; debe extender Spatie\Multitenancy\Models\Tenant o implementar IsTenant.
-    'tenant_model' => Tenant::class, // Ej.: App\Infrastructure\Tenancy\Models\Tenant
+    'tenant_model' => Tenant::class, // Ej.: App\Models\Tenant
 
     // Columna que identifica al tenant (PK).
     'id_column_name' => 'id', // Ej.: id autoincremental

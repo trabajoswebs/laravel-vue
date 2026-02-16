@@ -6,7 +6,7 @@ namespace App\Application\Uploads\Contracts; // Namespace de contratos de upload
 
 use App\Application\Uploads\DTO\UploadResult; // DTO de resultado de upload
 use App\Domain\Uploads\UploadProfile; // Perfil de upload
-use App\Infrastructure\Models\User; // Modelo de usuario
+use App\Models\User; // Modelo de usuario
 
 /**
  * Permite persistir metadata de uploads no imagen.

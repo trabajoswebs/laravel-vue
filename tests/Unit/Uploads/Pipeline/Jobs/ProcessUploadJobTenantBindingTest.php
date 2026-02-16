@@ -6,7 +6,7 @@ namespace Tests\Unit\Uploads\Pipeline\Jobs;
 
 use App\Application\Shared\Contracts\MetricsInterface;
 use App\Application\User\Contracts\UserRepository;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessUploadJob;

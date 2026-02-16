@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
 use App\Application\Shared\Contracts\LoggerInterface;
-use App\Infrastructure\Tenancy\Models\Tenant;
+use App\Models\Tenant;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;

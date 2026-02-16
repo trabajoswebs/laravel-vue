@@ -10,7 +10,7 @@ use App\Application\Uploads\Contracts\UploadOrchestratorInterface;
 use App\Application\Uploads\DTO\UploadResult;
 use App\Application\Uploads\Exceptions\InvalidOwnerIdException;
 use App\Domain\Uploads\UploadProfile;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Services\ConfigurableOwnerIdNormalizer;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 use Tests\TestCase;

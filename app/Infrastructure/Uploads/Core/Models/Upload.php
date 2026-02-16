@@ -77,6 +77,6 @@ class Upload extends Model // Modelo Upload para documentos
      */
     public function creator(): BelongsTo // Usuario que subió el archivo
     {
-        return $this->belongsTo(\App\Infrastructure\Models\User::class, 'created_by_user_id'); // FK hacia users
+        return $this->belongsTo(\App\Models\User::class, 'created_by_user_id'); // FK hacia users
     }
 }

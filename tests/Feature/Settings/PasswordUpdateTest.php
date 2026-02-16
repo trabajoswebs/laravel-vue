@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Settings;
 
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -14,7 +14,7 @@ class PasswordUpdateTest extends TestCase
     public function test_password_can_be_updated()
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Settings Tenant',
             'owner_user_id' => $user->id,
         ]);
@@ -40,7 +40,7 @@ class PasswordUpdateTest extends TestCase
     public function test_correct_password_must_be_provided_to_update_password()
     {
         $user = User::factory()->create();
-        $tenant = \App\Infrastructure\Tenancy\Models\Tenant::query()->create([
+        $tenant = \App\Models\Tenant::query()->create([
             'name' => 'Settings Tenant',
             'owner_user_id' => $user->id,
         ]);

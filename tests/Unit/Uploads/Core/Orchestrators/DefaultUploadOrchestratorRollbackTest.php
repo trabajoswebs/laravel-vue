@@ -14,7 +14,7 @@ use App\Domain\Uploads\UploadKind;
 use App\Domain\Uploads\UploadProfile;
 use App\Domain\Uploads\UploadProfileId;
 use App\Application\Uploads\DTO\UploadResult;
-use App\Infrastructure\Models\User;
+use App\Models\User;
 use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector;
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
 use App\Infrastructure\Uploads\Core\Contracts\MediaUploader;

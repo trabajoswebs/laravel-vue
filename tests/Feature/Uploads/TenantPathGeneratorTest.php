@@ -24,7 +24,7 @@ class TenantPathGeneratorTest extends TestCase
         $generator = $this->app->make(TenantAwarePathGenerator::class);
 
         $media = Media::query()->create([
-            'model_type' => \App\Infrastructure\Models\User::class,
+            'model_type' => \App\Models\User::class,
             'model_id' => 7,
             'uuid' => '11111111-1111-1111-1111-111111111111',
             'collection_name' => 'avatar',
@@ -57,7 +57,7 @@ class TenantPathGeneratorTest extends TestCase
         $generator = $this->app->make(TenantAwarePathGenerator::class);
 
         $media = Media::query()->create([
-            'model_type' => \App\Infrastructure\Models\User::class,
+            'model_type' => \App\Models\User::class,
             'model_id' => 7,
             'uuid' => '11111111-1111-1111-1111-111111111111',
             'collection_name' => 'avatar',
@@ -92,7 +92,7 @@ class TenantPathGeneratorTest extends TestCase
         $generator = $this->app->make(TenantAwarePathGenerator::class);
 
         $media = Media::query()->create([
-            'model_type' => \App\Infrastructure\Models\User::class,
+            'model_type' => \App\Models\User::class,
             'model_id' => 7,
             'uuid' => '11111111-1111-1111-1111-111111111111',
             'collection_name' => 'avatar',
