@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Infrastructure\Http\Controllers\Settings\PasswordController;
-use App\Infrastructure\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\PasswordController;
+use App\Http\Controllers\Settings\ProfileController;
 use App\Infrastructure\Uploads\Http\Controllers\Settings\ProfileAvatarController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;

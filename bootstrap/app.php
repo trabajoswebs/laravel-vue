@@ -4,15 +4,15 @@ require_once __DIR__ . '/helpers.php';
 
 // Importaciones de clases y namespaces necesarios para la configuración de la aplicación.
 use App\Infrastructure\Security\SecurityHelper;
-use App\Infrastructure\Http\Middleware\HandleAppearance;
-use App\Infrastructure\Http\Middleware\HandleInertiaRequests;
-use App\Infrastructure\Http\Middleware\PreventBruteForce;
+use App\Http\Middleware\HandleAppearance;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\PreventBruteForce;
 use App\Infrastructure\Uploads\Http\Middleware\RateLimitUploads;
-use App\Infrastructure\Http\Middleware\SanitizeInput;
-use App\Infrastructure\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SanitizeInput;
+use App\Http\Middleware\SecurityHeaders;
 use App\Infrastructure\Uploads\Http\Middleware\TrackMediaAccess;
-use App\Infrastructure\Http\Middleware\UserAudit;
-use App\Infrastructure\Http\Middleware\TrustProxies;
+use App\Http\Middleware\UserAudit;
+use App\Http\Middleware\TrustProxies;
 use App\Infrastructure\Tenancy\Middleware\ResolveTenant; // Middleware propio para resolver tenant
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -32,6 +32,14 @@ use Symfony\Component\HttpFoundation\Response; //OJO: es la interfaz base que im
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Spatie\Multitenancy\Http\Middleware\NeedsTenant; // Exige tenant current en rutas tenant-aware
 use Spatie\Multitenancy\Http\Middleware\EnsureValidTenantSession; // Valida que sesión y tenant no estén desalineados
+
+// Compat: clases movidas desde App\Infrastructure\Http a App\Http (PR-2).
+if (! class_exists('App\Infrastructure\Http\Controllers\Controller', false)) {
+    class_alias(\App\Http\Controllers\Controller::class, 'App\Infrastructure\Http\Controllers\Controller');
+}
+if (! trait_exists('App\Infrastructure\Http\Requests\Concerns\SanitizesInputs', false)) {
+    class_alias(\App\Http\Requests\Concerns\SanitizesInputs::class, 'App\Infrastructure\Http\Requests\Concerns\SanitizesInputs');
+}
 
 /**
  * Configura y crea la instancia de la aplicación Laravel.

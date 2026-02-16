@@ -2,10 +2,10 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Infrastructure\Http\Controllers\LanguageController;
+use App\Http\Controllers\LanguageController;
 use App\Infrastructure\Uploads\Http\Controllers\Media\ShowAvatar;
 use App\Infrastructure\Uploads\Http\Controllers\DownloadUploadController; // Controlador de descargas
-use App\Infrastructure\Http\Controllers\Health\HealthController;
+use App\Http\Controllers\Health\HealthController;
 use App\Infrastructure\Uploads\Http\Controllers\Media\ShowMediaController;
 use App\Infrastructure\Uploads\Http\Controllers\UploadController;
 
