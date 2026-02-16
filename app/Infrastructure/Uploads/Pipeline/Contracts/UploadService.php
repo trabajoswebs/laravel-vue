@@ -25,25 +25,6 @@ interface UploadService
     public function storeToQuarantine(UploadedFile $file): string;
 
     /**
-     * Ejecutar análisis de seguridad sobre el contenido sin confiar en la extensión.
-     *
-     * Recibe el contenido crudo (bytes) para permitir inspecciones en memoria.
-     */
-    public function scan(string $bytes): void;
-
-    /**
-     * Validar restricciones lógicas (tamaño, tipo, dimensiones, etc.).
-     */
-    public function validate(string $bytes): void;
-
-    /**
-     * Normalizar/conversión opcional para mitigar polyglots o metadata sensible.
-     *
-     * Debe devolver los bytes resultantes o lanzar excepción ante fallo.
-     */
-    public function normalize(string $bytes): string;
-
-    /**
      * Asociar el artefacto resultante al modelo dueño utilizando un perfil concreto.
      *
      * @param HasMediaContract $owner    Modelo que recibirá el media.

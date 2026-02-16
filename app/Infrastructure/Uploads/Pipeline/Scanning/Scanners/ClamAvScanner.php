@@ -4,44 +4,42 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
 
-use App\Support\Logging\SecurityLogger;
+use App\Infrastructure\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 
 /**
- * Escáner concreto que utiliza ClamAV para detectar malware o virus en archivos subidos.
+ * Escáner concreto que utiliza ClamAV para detectar malware en archivos subidos.
  *
- * Esta clase extiende `AbstractScanner` e implementa la lógica específica para interactuar
- * con el motor de antivirus ClamAV. Define argumentos permitidos, sanitiza entradas,
- * y construye el comando de ClamAV correspondiente, manejando tanto escaneos directos
- * como mediante streams para `clamdscan`.
+ * Esta clase implementa la integración específica con ClamAV:
+ * - Soporte para clamdscan (streaming) y clamscan (copia temporal).
+ * - Sanitización y clamping de argumentos mediante lista blanca.
+ * - Resolución de binario con fallbacks y lista blanca.
+ * - Sin dependencias ocultas; toda la configuración se inyecta.
+ *
+ * @package App\Infrastructure\Uploads\Pipeline\Scanning\Scanners
  */
 final class ClamAvScanner extends AbstractScanner
 {
     /**
-     * Lista blanca de argumentos soportados y su tipo esperado.
+     * Lista blanca de argumentos soportados con su tipo y rango seguro.
      *
-     * @var array<string, array{expects: string}> Clave: nombre del argumento, Valor: tipo esperado ('flag' o 'int').
+     * @var array<string, array{expects: string, min?: int, max?: int}>
      */
     private const ALLOWED_ARGUMENTS = [
-        '--no-summary'    => ['expects' => 'flag'], // Bandera sin valor
-        '--fdpass'        => ['expects' => 'flag'], // Bandera específica para daemon
-        '--stream'        => ['expects' => 'flag'], // Bandera para escaneo por stream
-        '--disable-cache' => ['expects' => 'flag'], // Bandera para deshabilitar caché
-        '--max-filesize'  => ['expects' => 'int'],  // Argumento que requiere un valor entero
-        '--max-scansize'  => ['expects' => 'int'],
-        '--max-recursion' => ['expects' => 'int'],
-        '--timeout'       => ['expects' => 'int'],
+        '--no-summary'    => ['expects' => 'flag'],
+        '--fdpass'        => ['expects' => 'flag'],
+        '--stream'        => ['expects' => 'flag'],
+        '--disable-cache' => ['expects' => 'flag'],
+        '--max-filesize'  => ['expects' => 'int', 'min' => 1, 'max' => PHP_INT_MAX],
+        '--max-scansize'  => ['expects' => 'int', 'min' => 1, 'max' => PHP_INT_MAX],
+        '--max-recursion' => ['expects' => 'int', 'min' => 1, 'max' => 32],
+        '--timeout'       => ['expects' => 'int', 'min' => 1, 'max' => 30],
     ];
 
     /**
-     * Rangos seguros para argumentos enteros.
-     *
-     * @var array<string, array{min: int, max: int}> Clave: nombre del argumento, Valor: rango permitido.
+     * Cache para determinar si el binario es clamdscan.
      */
-    private const INTEGER_RANGES = [
-        '--timeout'       => ['min' => 1,  'max' => 30], // Segundos
-        '--max-recursion' => ['min' => 1,  'max' => 32], // Nivel de recursión
-    ];
+    private ?bool $isDaemonCache = null;
 
     /**
      * {@inheritDoc}
@@ -54,98 +52,19 @@ final class ClamAvScanner extends AbstractScanner
     /**
      * {@inheritDoc}
      *
-     * Sanitiza y filtra los argumentos para el comando de ClamAV.
-     * Asegura que solo se pasen argumentos permitidos y con formato correcto (banderas o enteros).
-     * Limita los valores enteros a rangos seguros y al tamaño máximo del archivo si aplica.
-     *
-     * @param array<string, mixed>|string|null $arguments Argumentos sin procesar.
-     * @param int $maxFileBytes Tamaño máximo del archivo, útil para validar argumentos.
-     * @return list<string> Lista de argumentos sanitizados y seguros.
-     */
-    protected function sanitizeArguments(array|string|null $arguments, int $maxFileBytes): array
-    {
-        $tokens = [];
-
-        if (is_array($arguments)) {
-            foreach ($arguments as $argument) {
-                if (is_string($argument)) {
-                    $tokens[] = trim($argument);
-                }
-            }
-        } elseif (is_string($arguments)) {
-            $trimmed = trim($arguments);
-            if ($trimmed !== '') {
-                $tokens = preg_split('/\s+/', $trimmed) ?: [];
-            }
-        }
-
-        $sanitized = [];
-        $count = count($tokens);
-
-        for ($i = 0; $i < $count; $i++) {
-            $token = trim((string) $tokens[$i]);
-            if ($token === '') {
-                continue;
-            }
-
-            if (str_contains($token, '=')) {
-                [$name, $value] = explode('=', $token, 2);
-                $name  = trim($name);
-                $value = trim($value);
-                if (! isset(self::ALLOWED_ARGUMENTS[$name])) {
-                    continue;
-                }
-
-                $expects = self::ALLOWED_ARGUMENTS[$name]['expects'];
-                if ($expects === 'flag') {
-                    $sanitized[] = $name;
-                    continue;
-                }
-
-                if ($expects === 'int' && $this->isValidInteger($value)) {
-                    $sanitized[] = $name;
-                    $sanitized[] = (string) $this->clampIntegerArgument($name, (int) $value, $maxFileBytes);
-                }
-
-                continue;
-            }
-
-            if (! isset(self::ALLOWED_ARGUMENTS[$token])) {
-                continue;
-            }
-
-            $expects = self::ALLOWED_ARGUMENTS[$token]['expects'];
-            if ($expects === 'flag') {
-                $sanitized[] = $token;
-                continue;
-            }
-
-            $next = $tokens[$i + 1] ?? null;
-            if ($next !== null && $this->isValidInteger($next)) {
-                $sanitized[] = $token;
-                $sanitized[] = (string) $this->clampIntegerArgument($token, (int) $next, $maxFileBytes);
-                $i++;
-            }
-        }
-
-        return $sanitized;
-    }
-
-    /**
-     * {@inheritDoc}
+     * Resuelve el binario de ClamAV utilizando la configuración inyectada.
+     * NO utiliza helpers globales (config, app).
      */
     protected function resolveExecutable(array $scannerConfig): ?string
     {
         static $loggedMissing = false;
 
-        if (! config('uploads.virus_scanning.enabled', true)) {
-            return null;
-        }
-
         $allowlist = $this->allowedBinaries();
         if ($allowlist === []) {
             if (! $loggedMissing) {
-                $this->logScan('error', 'image_scan.clamav_binary_not_allowlisted', ['reason' => 'empty_allowlist']);
+                $this->logScan('error', 'image_scan.clamav_binary_not_allowlisted', [
+                    'reason' => 'empty_allowlist',
+                ]);
                 $loggedMissing = true;
             }
             return null;
@@ -160,22 +79,21 @@ final class ClamAvScanner extends AbstractScanner
             }
 
             $resolved = realpath($path);
-            if ($resolved === false || $resolved === '') {
+            if ($resolved === false) {
                 $failures[] = [
                     'binary_path' => $path,
-                    'reason' => 'missing',
-                    'source' => $candidate['source'],
+                    'reason'      => 'missing',
+                    'source'      => $candidate['source'],
                 ];
                 continue;
             }
 
             $normalized = $this->normalizePath($resolved);
-
             if (! in_array($normalized, $allowlist, true)) {
                 $failures[] = [
                     'binary_path' => $normalized,
-                    'reason' => 'not_allowlisted',
-                    'source' => $candidate['source'],
+                    'reason'      => 'not_allowlisted',
+                    'source'      => $candidate['source'],
                 ];
                 continue;
             }
@@ -183,8 +101,8 @@ final class ClamAvScanner extends AbstractScanner
             if (! is_executable($resolved)) {
                 $failures[] = [
                     'binary_path' => $normalized,
-                    'reason' => 'not_executable',
-                    'source' => $candidate['source'],
+                    'reason'      => 'not_executable',
+                    'source'      => $candidate['source'],
                 ];
                 continue;
             }
@@ -192,7 +110,7 @@ final class ClamAvScanner extends AbstractScanner
             if ($candidate['source'] !== 'primary') {
                 $this->logScan('debug', 'image_scan.clamav_binary_selected', [
                     'binary_path' => $normalized,
-                    'source' => $candidate['source'],
+                    'source'      => $candidate['source'],
                 ]);
             }
 
@@ -201,7 +119,7 @@ final class ClamAvScanner extends AbstractScanner
 
         $this->logScan('error', 'image_scan.clamav_binary_unavailable', [
             'candidates' => $failures,
-            'result' => 'scan_failed',
+            'result'     => 'scan_failed',
         ]);
 
         return null;
@@ -209,18 +127,57 @@ final class ClamAvScanner extends AbstractScanner
 
     /**
      * {@inheritDoc}
+     */
+    protected function sanitizeArguments(array|string|null $arguments, int $maxFileBytes): array
+    {
+        $tokens = $this->normalizeArgumentsToTokens($arguments);
+        $sanitized = [];
+        $count = count($tokens);
+
+        for ($i = 0; $i < $count; $i++) {
+            $token = trim((string) $tokens[$i]);
+            if ($token === '') {
+                continue;
+            }
+
+            // Formato --nombre=valor
+            if (str_contains($token, '=')) {
+                [$name, $value] = explode('=', $token, 2);
+                $name  = trim($name);
+                $value = trim($value);
+                $sanitized = $this->processArgumentPair($sanitized, $name, $value, $maxFileBytes);
+                continue;
+            }
+
+            // Argumento simple
+            if (! isset(self::ALLOWED_ARGUMENTS[$token])) {
+                continue;
+            }
+
+            $definition = self::ALLOWED_ARGUMENTS[$token];
+            if ($definition['expects'] === 'flag') {
+                $sanitized[] = $token;
+                continue;
+            }
+
+            // Argumento que espera un valor entero en el siguiente token
+            $next = $tokens[$i + 1] ?? null;
+            if ($next !== null && $this->isValidInteger($next)) {
+                $sanitized[] = $token;
+                $sanitized[] = (string) $this->clampIntegerArgument($token, (int) $next, $maxFileBytes);
+                $i++; // saltar valor ya procesado
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * {@inheritDoc}
      *
-     * Construye el comando específico de ClamAV.
-     * Determina si usar `clamdscan` en modo stream o `clamscan` con una copia temporal del archivo.
-     *
-     * @param string $binary Ruta al binario de ClamAV.
-     * @param array<string, string> $arguments Argumentos sanitizados.
-     * @param array<string, mixed> $target Información sobre el archivo objetivo (path, handle, etc.).
-     * @param array<string, mixed> $scanConfig Configuración global del escaneo.
-     * @param array<string, mixed> $scannerConfig Configuración específica del escáner.
-     * @return array{command: list<string>, input: resource|null, cleanup: (callable|null), uses_target_handle?: bool, target_closed?: bool}|null
-     *         Array con el comando, handle de entrada opcional, función de limpieza y flags de estado,
-     *         o `null` si la construcción falla.
+     * Construye el comando para ClamAV.
+     * - Si el binario es clamdscan → modo stream (usa el handle directamente).
+     * - Si el binario es clamscan → crea una copia temporal mediante copyStreamToTemp().
      */
     protected function buildCommand(
         string $binary,
@@ -230,75 +187,163 @@ final class ClamAvScanner extends AbstractScanner
         array $scannerConfig,
     ): ?array {
         if (! isset($target['handle']) || ! is_resource($target['handle'])) {
-            $this->logScan('error', 'image_scan.clamav_invalid_target_handle', ['target' => array_keys($target)]);
-            return null;
+            $this->logScan('error', 'image_scan.clamav_invalid_target_handle', [
+                'target' => array_keys($target),
+            ]);
+            return ['fail_open_reason' => AntivirusException::REASON_TARGET_HANDLE_INVALID];
         }
 
         if (! isset($target['display_name']) || ! is_string($target['display_name'])) {
             $this->logScan('error', 'image_scan.clamav_invalid_target_display_name');
-            return null;
+            return ['fail_open_reason' => AntivirusException::REASON_TARGET_MISSING_DISPLAY_NAME];
         }
 
-        $maxFileBytes = $this->resolveMaxFileBytes($scanConfig, $scannerConfig);
+        $maxFileBytes = $this->resolveMaxFileBytes();
         [$finalArguments, $isDaemon] = $this->ensureStreamArguments($arguments, $binary, $maxFileBytes);
 
         if ($isDaemon) {
-            // Escaneo por stream (clamdscan).
+            // clamdscan: escaneo por stream (stdin)
             return [
-                'command' => array_merge([$binary], $finalArguments, ['-']), // '-' indica lectura desde stdin
-                'input' => $target['handle'],
-                'uses_target_handle' => true, // El proceso usará el handle directamente
+                'command'             => array_merge([$binary], $finalArguments, ['-']),
+                'input'               => $target['handle'],
+                'uses_target_handle'  => true,
+                // No cerramos el handle; el padre es responsable.
             ];
         }
 
-        // Escaneo directo de archivo (clamscan).
-        $copy = $this->createTemporaryCopy($target['handle'], $target['display_name'], $maxFileBytes);
-        if ($copy === null) {
+        // clamscan: requiere copia temporal del archivo
+        $tempPath = $this->copyStreamToTemp(
+            $target['handle'],
+            'clam_scan_',
+            $maxFileBytes > 0 ? $maxFileBytes : null,
+            self::STREAM_COPY_TIMEOUT
+        );
+
+        if ($tempPath === null) {
+            $this->logScan('error', 'image_scan.clamav_temp_copy_failed', [
+                'file' => $target['display_name'],
+            ]);
             return null;
         }
 
         return [
-            'command' => array_merge([$binary], $finalArguments, [$copy['path']]),
-            'input' => null,
-            'cleanup' => $copy['cleanup'],
-            'target_closed' => true, // El handle del target ya ha sido cerrado por createTemporaryCopy
+            'command'      => array_merge([$binary], $finalArguments, [$tempPath]),
+            'input'        => null,
+            'cleanup'      => function () use ($tempPath, $target): void {
+                if (file_exists($tempPath) && ! unlink($tempPath)) {
+                    $this->logScan('warning', 'image_scan.clamav_temp_cleanup_failed', [
+                        'file'      => $target['display_name'],
+                        'temp_path' => $tempPath,
+                    ]);
+                }
+            },
+            'close_target' => true, // El handle original puede cerrarse tras la copia
         ];
     }
 
+    /* -------------------------------------------------------------------------
+     |  Métodos privados de soporte
+     ------------------------------------------------------------------------- */
+
     /**
-     * Ajusta los argumentos para garantizar la compatibilidad con el binario de ClamAV.
+     * Normaliza los argumentos a una lista plana de strings.
      *
-     * Si se detecta `clamdscan`, se asegura de que se use `--stream` y se ignora `--fdpass`.
-     * También aplica límites de tamaño si `maxFileBytes` es positivo.
+     * @param array<string, mixed>|string|null $arguments
+     * @return list<string>
+     */
+    private function normalizeArgumentsToTokens(array|string|null $arguments): array
+    {
+        $tokens = [];
+
+        if (is_array($arguments)) {
+            // Precomputar claves permitidas para búsqueda O(1)
+            static $allowedKeys = null;
+            if ($allowedKeys === null) {
+                $allowedKeys = array_flip(array_keys(self::ALLOWED_ARGUMENTS));
+            }
+
+            foreach ($arguments as $key => $value) {
+                if (is_int($key) && is_string($value)) {
+                    $tokens[] = trim($value);
+                } elseif (is_string($key) && isset($allowedKeys[$key])) {
+                    if ($value === true || $value === null) {
+                        $tokens[] = $key; // bandera
+                    } elseif (is_scalar($value)) {
+                        $tokens[] = $key . '=' . (string) $value;
+                    }
+                }
+            }
+        } elseif (is_string($arguments)) {
+            $trimmed = trim($arguments);
+            if ($trimmed !== '') {
+                $tokens = preg_split('/\s+/', $trimmed) ?: [];
+            }
+        }
+
+        return $tokens;
+    }
+
+    /**
+     * Procesa un argumento en formato --nombre=valor.
      *
-     * @param array<int, string> $arguments Lista de argumentos originales.
-     * @param string $binary Ruta al binario de ClamAV.
-     * @param int $maxFileBytes Tamaño máximo del archivo.
-     * @return array{0: list<string>, 1: bool} Tupla con la lista de argumentos ajustados y un booleano
-     *         que indica si se debe usar escaneo por stream.
+     * @param list<string> $sanitized
+     * @param string $name
+     * @param string $value
+     * @param int $maxFileBytes
+     * @return list<string>
+     */
+    private function processArgumentPair(array $sanitized, string $name, string $value, int $maxFileBytes): array
+    {
+        if (! isset(self::ALLOWED_ARGUMENTS[$name])) {
+            return $sanitized;
+        }
+
+        $definition = self::ALLOWED_ARGUMENTS[$name];
+
+        if ($definition['expects'] === 'flag') {
+            $this->logScan('debug', 'image_scan.clamav_flag_with_value_ignored', [
+                'argument' => $name,
+                'value'    => $value,
+            ]);
+            $sanitized[] = $name; // solo la bandera
+            return $sanitized;
+        }
+
+        if ($definition['expects'] === 'int' && $this->isValidInteger($value)) {
+            $sanitized[] = $name;
+            $sanitized[] = (string) $this->clampIntegerArgument($name, (int) $value, $maxFileBytes);
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Ajusta los argumentos para garantizar compatibilidad con clamdscan/clamscan.
+     *
+     * @param list<string> $arguments
+     * @param string $binary
+     * @param int $maxFileBytes
+     * @return array{0: list<string>, 1: bool}
      */
     private function ensureStreamArguments(array $arguments, string $binary, int $maxFileBytes): array
     {
-        $isClamDaemon = $this->isClamDaemon($binary);
+        $isDaemon = $this->isClamDaemon($binary);
         $filtered = [];
         $hasStream = false;
         $hasMaxFilesize = false;
         $hasMaxScansize = false;
 
         foreach ($arguments as $argument) {
-            if ($argument === '--fdpass' && $isClamDaemon) {
-                // `--fdpass` no es compatible con `clamdscan` en modo stream
-                continue;
+            if ($argument === '--fdpass' && $isDaemon) {
+                continue; // no compatible con clamdscan en modo stream
             }
 
             if ($argument === '--stream') {
                 $hasStream = true;
             }
-
             if ($argument === '--max-filesize') {
                 $hasMaxFilesize = true;
             }
-
             if ($argument === '--max-scansize') {
                 $hasMaxScansize = true;
             }
@@ -306,56 +351,44 @@ final class ClamAvScanner extends AbstractScanner
             $filtered[] = $argument;
         }
 
-        if ($isClamDaemon && ! $hasStream) {
-            // `clamdscan` requiere `--stream` para escanear por stdin
+        if ($isDaemon && ! $hasStream) {
             $filtered[] = '--stream';
         }
 
         if ($maxFileBytes > 0) {
-            // Aplica límites de tamaño si no están ya presentes
             if (! $hasMaxFilesize) {
                 $filtered[] = '--max-filesize';
                 $filtered[] = (string) $maxFileBytes;
             }
-
             if (! $hasMaxScansize) {
                 $filtered[] = '--max-scansize';
                 $filtered[] = (string) $maxFileBytes;
             }
         }
 
-        return [$filtered, $isClamDaemon];
+        return [$filtered, $isDaemon];
     }
 
     /**
-     * Limita un valor entero de un argumento a rangos seguros y al tamaño máximo del archivo.
-     *
-     * @param string $argument Nombre del argumento (por ejemplo, '--timeout').
-     * @param int $value Valor original.
-     * @param int $maxFileBytes Tamaño máximo del archivo.
-     * @return int Valor ajustado.
+     * Limita un valor entero al rango definido y al tamaño máximo del archivo.
      */
     private function clampIntegerArgument(string $argument, int $value, int $maxFileBytes): int
     {
-        if (isset(self::INTEGER_RANGES[$argument])) {
-            $min = self::INTEGER_RANGES[$argument]['min'];
-            $max = self::INTEGER_RANGES[$argument]['max'];
-            $value = max($min, min($max, $value));
+        $definition = self::ALLOWED_ARGUMENTS[$argument] ?? null;
+
+        if ($definition && isset($definition['min'], $definition['max'])) {
+            $value = max($definition['min'], min($definition['max'], $value));
         }
 
-        // Para argumentos de tamaño de archivo, limita al tamaño máximo permitido globalmente
         if (in_array($argument, ['--max-filesize', '--max-scansize'], true) && $maxFileBytes > 0) {
-            $value = min($value, $maxFileBytes); // Ej.: max_file_size_bytes=2MB → clamp
+            $value = min($value, $maxFileBytes);
         }
 
         return $value;
     }
 
     /**
-     * Verifica si un valor es un entero positivo representado como string o int.
-     *
-     * @param mixed $value Valor a verificar.
-     * @return bool `true` si es un entero positivo, `false` en caso contrario.
+     * Verifica si un valor es un entero positivo (>=1).
      */
     private function isValidInteger(mixed $value): bool
     {
@@ -364,182 +397,23 @@ final class ClamAvScanner extends AbstractScanner
         }
 
         $stringValue = (string) $value;
-        return $stringValue !== '' && ctype_digit($stringValue);
+        return $stringValue !== '' && ctype_digit($stringValue) && (int) $stringValue > 0;
     }
 
     /**
-     * Determina si el binario es `clamdscan` o similar.
-     *
-     * @param string $binary Ruta al binario.
-     * @return bool `true` si parece ser un binario de daemon de ClamAV.
+     * Determina si el binario corresponde a clamdscan (con caché).
      */
     private function isClamDaemon(string $binary): bool
     {
-        $basename = strtolower(basename($binary));
-        return str_contains($basename, 'clamd');
+        if ($this->isDaemonCache === null) {
+            $basename = strtolower(basename($binary));
+            $this->isDaemonCache = str_contains($basename, 'clamd');
+        }
+        return $this->isDaemonCache;
     }
 
     /**
-     * Crea una copia temporal segura del archivo para escanearlo directamente.
-     *
-     * Este método se usa cuando no se puede escanear por stream (por ejemplo, con `clamscan`).
-     * Cierra el handle original del archivo.
-     *
-     * @param resource $handle Handle del archivo original.
-     * @param string $displayName Nombre del archivo para logs.
-     * @param int $maxFileBytes Tamaño máximo permitido para el archivo temporal.
-     * @return array{path: string, cleanup: callable}|null Ruta de la copia temporal y función de limpieza,
-     *         o `null` si falla.
-     *
-     * Nota: Esta función consume y cierra el handle original del archivo de entrada.
-     */
-    private function createTemporaryCopy($handle, string $displayName, int $maxFileBytes): ?array
-    {
-        if (! is_resource($handle)) {
-            return null;
-        }
-
-        $sizeLimit = $maxFileBytes > 0 ? $maxFileBytes : null;
-        $fstatError = null;
-        set_error_handler(static function (int $severity, string $message) use (&$fstatError): bool {
-            $fstatError = $message;
-            return true;
-        });
-        $stats = fstat($handle);
-        restore_error_handler();
-        if ($stats === false) {
-            $this->logScan('warning', 'image_scan.clamav_temp_stat_failed', [
-                'file' => $displayName,
-                'error' => $fstatError,
-            ]);
-            $stats = null;
-        }
-
-        if (
-            $sizeLimit !== null
-            && is_array($stats)
-            && isset($stats['size'])
-            && $stats['size'] > $sizeLimit
-        ) {
-            $this->logScan('warning', 'image_scan.clamav_temp_size_exceeded', [
-                'file' => $displayName,
-                'size' => $stats['size'],
-                'limit' => $sizeLimit,
-            ]);
-            return null;
-        }
-
-        $tempFile = $this->createExclusiveTempFile($displayName);
-        if ($tempFile === null) {
-            return null;
-        }
-
-        $tempPath = $tempFile['path'];
-        $out = $tempFile['handle'];
-
-        rewind($handle);
-        $copySucceeded = false;
-
-        try {
-            $copySucceeded = $this->copyStreamWithLimit($handle, $out, $sizeLimit, $displayName);
-        } finally {
-            if (fclose($out) === false) {
-                $this->logScan('error', 'image_scan.clamav_temp_close_failed', ['file' => $displayName]);
-                $copySucceeded = false;
-            }
-
-            if (! $copySucceeded) {
-                if (file_exists($tempPath) && ! unlink($tempPath)) {
-                    $this->logScan('warning', 'image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
-                }
-            }
-        }
-
-        if (! $copySucceeded) {
-            return null;
-        }
-
-        if (! chmod($tempPath, 0600)) { // Solo lectura/escritura para el propietario.
-            if (file_exists($tempPath) && ! unlink($tempPath)) {
-                $this->logScan('warning', 'image_scan.clamav_temp_cleanup_failed', ['file' => $displayName]);
-            }
-            $this->logScan('error', 'image_scan.clamav_temp_chmod_failed', ['file' => $displayName]);
-            return null;
-        }
-
-        // Cierra el handle original después de la copia
-        if (fclose($handle) === false) {
-            $this->logScan('warning', 'image_scan.clamav_source_close_failed', ['file' => $displayName]);
-        }
-
-        return [
-            'path' => $tempPath,
-            'cleanup' => static function () use ($tempPath): void {
-                if (file_exists($tempPath) && ! unlink($tempPath)) {
-                    app(MediaSecurityLogger::class)->warning('image_scan.clamav_temp_cleanup_failed', [
-                        'scanner_name' => 'clamav',
-                        'path' => $tempPath,
-                    ]);
-                }
-            },
-        ];
-    }
-
-    /**
-     * Crea un archivo temporal con nombre impredecible usando creación exclusiva.
-     *
-     * @param string $displayName Nombre del archivo para logs.
-     * @return array{path: string, handle: resource}|null Ruta y handle del archivo temporal.
-     */
-    private function createExclusiveTempFile(string $displayName): ?array
-    {
-        $directory = rtrim((string) sys_get_temp_dir(), DIRECTORY_SEPARATOR);
-        if ($directory === '') {
-            $this->logScan('error', 'image_scan.clamav_temp_dir_invalid', ['file' => $displayName]);
-            return null;
-        }
-
-        $lastOpenError = null;
-
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            try {
-                $name = 'clam_scan_' . bin2hex(random_bytes(16));
-            } catch (\Throwable $exception) {
-                $this->logScan('error', 'image_scan.clamav_temp_random_failed', [
-                    'file' => $displayName,
-                    'message' => $exception->getMessage(),
-                ]);
-                return null;
-            }
-
-            $path = $directory . DIRECTORY_SEPARATOR . $name;
-            $openError = null;
-            set_error_handler(static function (int $severity, string $message) use (&$openError): bool {
-                $openError = $message;
-                return true;
-            });
-            $handle = fopen($path, 'xb'); // 'x' asegura creación exclusiva en un solo paso.
-            restore_error_handler();
-
-            if ($handle !== false) {
-                return [
-                    'path' => $path,
-                    'handle' => $handle,
-                ];
-            }
-
-            $lastOpenError = $openError;
-        }
-
-        $this->logScan('error', 'image_scan.clamav_temp_open_failed', [
-            'file' => $displayName,
-            'error' => $lastOpenError,
-        ]);
-        return null;
-    }
-
-    /**
-     * Genera la lista priorizada de binarios candidatos para ClamAV.
+     * Genera la lista priorizada de binarios candidatos.
      *
      * @param array<string, mixed> $scannerConfig
      * @return list<array{path: string, source: string}>
@@ -549,12 +423,11 @@ final class ClamAvScanner extends AbstractScanner
         $candidates = [];
         $seen = [];
 
-        $push = static function (string $path, string $source) use (&$candidates, &$seen): void {
+        $push = function (string $path, string $source) use (&$candidates, &$seen): void {
             $trimmed = trim($path);
             if ($trimmed === '' || isset($seen[$trimmed])) {
                 return;
             }
-
             $seen[$trimmed] = true;
             $candidates[] = ['path' => $trimmed, 'source' => $source];
         };
@@ -570,78 +443,11 @@ final class ClamAvScanner extends AbstractScanner
                 if (! is_string($fallback)) {
                     continue;
                 }
-
                 $source = str_contains(strtolower($fallback), 'clamd') ? 'clamdscan' : 'fallback';
                 $push($fallback, $source);
             }
         }
 
         return $candidates;
-    }
-
-    /**
-     * Copia un stream en otro aplicando un límite opcional de bytes.
-     *
-     * @param resource $source Stream de origen.
-     * @param resource $destination Stream de destino.
-     * @param int|null $maxBytes Límite máximo permitido o `null` si no aplica.
-     * @param string $displayName Nombre del archivo para logs.
-     * @return bool `true` si la copia tuvo éxito y respetó el límite.
-     */
-    private function copyStreamWithLimit($source, $destination, ?int $maxBytes, string $displayName): bool
-    {
-        $bytesCopied = 0;
-        $chunkSize = 1048576; // 1MB
-        $emptyReads = 0;
-        $maxEmptyReads = 1024;
-
-        while (! feof($source)) {
-            $chunk = fread($source, $chunkSize);
-            if ($chunk === false) {
-                $this->logScan('error', 'image_scan.clamav_temp_read_failed', ['file' => $displayName]);
-                return false;
-            }
-
-            if ($chunk === '') {
-                $emptyReads++;
-                $meta = stream_get_meta_data($source);
-                if (is_array($meta) && ! empty($meta['timed_out'])) {
-                    $this->logScan('warning', 'image_scan.clamav_temp_source_timeout', ['file' => $displayName]);
-                    return false;
-                }
-
-                if ($emptyReads >= $maxEmptyReads) {
-                    $this->logScan('warning', 'image_scan.clamav_temp_empty_reads_limit', [
-                        'file' => $displayName,
-                        'attempts' => $emptyReads,
-                    ]);
-                    return false;
-                }
-
-                usleep(10000); // Cede CPU antes de reintentar.
-                continue;
-            }
-
-            $emptyReads = 0;
-            $chunkLength = strlen($chunk);
-            if ($maxBytes !== null && ($bytesCopied + $chunkLength) > $maxBytes) {
-                $this->logScan('warning', 'image_scan.clamav_temp_size_exceeded', [
-                    'file' => $displayName,
-                    'limit' => $maxBytes,
-                    'copied_bytes' => $bytesCopied,
-                ]);
-                return false;
-            }
-
-            $written = fwrite($destination, $chunk);
-            if ($written === false || $written !== $chunkLength) {
-                $this->logScan('error', 'image_scan.clamav_temp_write_failed', ['file' => $displayName]);
-                return false;
-            }
-
-            $bytesCopied += $written;
-        }
-
-        return true;
     }
 }

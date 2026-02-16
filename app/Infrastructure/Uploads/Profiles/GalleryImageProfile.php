@@ -21,8 +21,8 @@ final class GalleryImageProfile extends UploadProfile // Define configuración p
         parent::__construct(
             id: new UploadProfileId('gallery_image'), // ID de perfil galería
             kind: UploadKind::IMAGE, // Es una imagen
-            allowedMimes: ['image/jpeg', 'image/png', 'image/webp'], // MIMEs permitidos
-            maxBytes: (int) config('image-pipeline.limits.max_bytes', 5 * 1024 * 1024), // Límite de bytes
+            allowedMimes: ['image/jpeg', 'image/png', 'image/webp', 'image/avif'], // MIMEs permitidos
+            maxBytes: (int) config('image-pipeline.max_bytes', 25 * 1024 * 1024), // Límite real de bytes
             scanMode: ScanMode::REQUIRED, // Escaneo obligatorio
             processingMode: ProcessingMode::IMAGE_PIPELINE, // Usa pipeline de imágenes
             servingMode: ServingMode::CONTROLLER_SIGNED, // Se sirve vía controlador

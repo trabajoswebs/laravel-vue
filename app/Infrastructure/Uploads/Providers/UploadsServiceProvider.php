@@ -6,15 +6,19 @@ namespace App\Infrastructure\Uploads\Providers; // Namespace del provider de upl
 
 use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract; // Contrato colector
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract; // Contrato cleanup
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile; // Contrato perfil Spatie
 use App\Infrastructure\Uploads\Core\Contracts\MediaUploader as MediaUploaderContract; // Contrato de uploader
+use App\Application\Uploads\Contracts\OwnerIdNormalizerInterface;
+use App\Application\Uploads\Contracts\UploadStorageInterface;
+use App\Infrastructure\Uploads\Core\Adapters\LaravelUploadStorage;
+use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
+use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
+use App\Infrastructure\Uploads\Core\Services\ConfigurableOwnerIdNormalizer;
 use App\Infrastructure\Uploads\Core\Services\MediaReplacementService; // Servicio de reemplazo
 use App\Application\Shared\Contracts\MetricsInterface; // Métricas
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles
 use App\Infrastructure\Uploads\Core\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
 use App\Infrastructure\Uploads\Profiles\AvatarImageProfile; // Perfil avatar
-use App\Infrastructure\Uploads\Profiles\AvatarProfile; // Perfil Spatie avatar
 use App\Infrastructure\Uploads\Profiles\CertificateSecretProfile; // Perfil certificados
 use App\Infrastructure\Uploads\Profiles\DocumentPdfProfile; // Perfil PDF
 use App\Infrastructure\Uploads\Profiles\GalleryImageProfile; // Perfil galería
@@ -31,9 +35,16 @@ use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository; // Cont
 use App\Infrastructure\Uploads\Pipeline\Scanning\GitYaraRuleManager; // Gestor Yara git
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinator; // Coordinador AV
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface; // Contrato coordinador AV
+use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCircuitStoreInterface;
+use App\Infrastructure\Uploads\Pipeline\Scanning\LaravelCacheScanCircuitStore;
+use App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner;
+use App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\YaraScanner;
 use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager; // Gestor de reglas Yara
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
+use Psr\Log\LoggerInterface;
+use App\Application\Shared\Contracts\LoggerInterface as AppLoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator; // Validador de magic bytes
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger; // Logger de seguridad
 use App\Infrastructure\Uploads\Pipeline\Services\MediaCleanupScheduler; // Scheduler de cleanup
 use App\Infrastructure\Uploads\Pipeline\Support\MediaArtifactCollector; // Colector de artefactos
 use App\Application\Uploads\Contracts\UploadOrchestratorInterface; // Contrato de orquestador
@@ -56,6 +67,10 @@ class UploadsServiceProvider extends ServiceProvider // Provider de uploads
     {
         $this->app->singleton(UploadRepositoryInterface::class, EloquentUploadRepository::class); // Binding repositorio uploads
         $this->app->singleton(UploadOrchestratorInterface::class, DefaultUploadOrchestrator::class); // Binding orquestador
+        $this->app->singleton(OwnerIdNormalizerInterface::class, ConfigurableOwnerIdNormalizer::class);
+        $this->app->singleton(UploadStorageInterface::class, LaravelUploadStorage::class);
+        $this->app->singleton(DocumentUploadGuard::class);
+        $this->app->singleton(MediaProfileResolver::class);
 
         $this->app->singleton(UploadProfileRegistry::class, function ($app): UploadProfileRegistry { // Crea registro único
             $profiles = [
@@ -112,19 +127,34 @@ class UploadsServiceProvider extends ServiceProvider // Provider de uploads
                 $workingDirectory,
                 $app->make(ImageUploadPipelineAdapter::class),
                 $app->make(MagicBytesValidator::class),
-                $app->make(UploadSecurityLogger::class),
+                $app->make(AppLoggerInterface::class),
                 $app->make(MetricsInterface::class),
             );
         });
 
-        $this->app->singleton(ScanCoordinatorInterface::class, ScanCoordinator::class);
+        $this->app->singleton(ScanCircuitStoreInterface::class, static fn($app): ScanCircuitStoreInterface => new LaravelCacheScanCircuitStore(
+            $app->make(CacheRepository::class)
+        ));
+
+        $this->app->singleton(ScanCoordinator::class, static function ($app): ScanCoordinator {
+            return new ScanCoordinator(
+                scannerRegistry: [
+                    ClamAvScanner::class => $app->make(ClamAvScanner::class),
+                    YaraScanner::class => $app->make(YaraScanner::class),
+                ],
+                scanConfig: (array) config('image-pipeline.scan', []),
+                circuitStore: $app->make(ScanCircuitStoreInterface::class),
+                logger: $app->make(LoggerInterface::class),
+                config: $app->make(ConfigRepository::class),
+            );
+        });
+        $this->app->singleton(ScanCoordinatorInterface::class, static fn ($app): ScanCoordinatorInterface => $app->make(ScanCoordinator::class));
         $this->app->alias(ScanCoordinator::class, ScanCoordinatorInterface::class);
 
         $this->app->singleton(UploadService::class, DefaultUploadService::class);
         $this->app->singleton(MediaUploaderContract::class, DefaultUploadService::class);
         $this->app->singleton(MediaArtifactCollectorContract::class, MediaArtifactCollector::class);
         $this->app->singleton(MediaCleanupSchedulerContract::class, MediaCleanupScheduler::class);
-        $this->app->singleton(MediaProfile::class, AvatarProfile::class);
         $this->app->singleton(MediaReplacementService::class, MediaReplacementService::class);
     }
 }

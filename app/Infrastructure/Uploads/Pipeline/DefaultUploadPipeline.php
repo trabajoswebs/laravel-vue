@@ -7,8 +7,9 @@ namespace App\Infrastructure\Uploads\Pipeline;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
 use App\Application\Shared\Contracts\MetricsInterface;
+use App\Application\Shared\Contracts\LoggerInterface;
+use App\Infrastructure\Uploads\Pipeline\Contracts\ImageUploadPipelineInterface;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
@@ -16,7 +17,6 @@ use App\Infrastructure\Uploads\Pipeline\Exceptions\UnexpectedUploadException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
-use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
 use Illuminate\Http\UploadedFile;
 use SplFileObject;
 use Throwable;
@@ -37,26 +37,18 @@ final class DefaultUploadPipeline implements UploadPipeline
     private const SCAN_OVERLAP = 512;
 
     /**
-     * Buffer utilizada para buscar patrones entre chunks.
-     * 
-     * Permite detectar patrones peligrosos que podrían estar divididos
-     * entre bloques consecutivos.
-     */
-    private string $scanBuffer = '';
-
-    /**
      * Constructor del pipeline de subida.
      * 
      * @param string $workingDirectory Directorio temporal para archivos de trabajo
      * @param ImageUploadPipelineAdapter $imagePipeline Adaptador para procesamiento de imágenes
      * @param MagicBytesValidator $magicBytes Validador de firmas/magic bytes
-     * @param UploadSecurityLogger $securityLogger Logger de eventos de seguridad
+     * @param LoggerInterface $securityLogger Logger de eventos de seguridad
      */
     public function __construct(
         private readonly string $workingDirectory,
-        private readonly ImageUploadPipelineAdapter $imagePipeline,
+        private readonly ImageUploadPipelineInterface $imagePipeline,
         private readonly MagicBytesValidator $magicBytes,
-        private readonly UploadSecurityLogger $securityLogger,
+        private readonly LoggerInterface $securityLogger,
         private readonly MetricsInterface $metrics,
     ) {
         $this->ensureWorkingDirectory();
@@ -139,7 +131,7 @@ final class DefaultUploadPipeline implements UploadPipeline
                 dimensions: $dimensions,
                 originalFilename: $originalFilename,
             );
-            $this->securityLogger->normalized($securityContext + [
+            $this->securityLogger->debug('media.pipeline.normalized', $securityContext + [
                 'mime' => $mime,
                 'size' => $size,
             ]);
@@ -154,13 +146,13 @@ final class DefaultUploadPipeline implements UploadPipeline
         } catch (VirusDetectedException $exception) {
             $resultTag = 'virus';
             $this->metrics->increment('upload.pipeline.virus_detected', $this->metricTags($profile));
-            $this->securityLogger->validationFailed($securityContext + ['error' => $exception->getMessage()]);
+            $this->securityLogger->error('media.pipeline.failed', $securityContext + ['error' => $exception->getMessage()]);
 
             throw $exception;
         } catch (Throwable $exception) {
             $resultTag = 'failed';
             $this->metrics->increment('upload.pipeline.failures', $this->metricTags($profile));
-            $this->securityLogger->validationFailed($securityContext + ['error' => $exception->getMessage()]);
+            $this->securityLogger->error('media.pipeline.failed', $securityContext + ['error' => $exception->getMessage()]);
             // Elimina el archivo temporal si fue creado
             if (is_string($normalizedPath)) {
                 $this->deleteFileSilently($normalizedPath);
@@ -222,7 +214,7 @@ final class DefaultUploadPipeline implements UploadPipeline
     private function analyze(SplFileObject $file): void
     {
         $file->rewind();
-        $this->scanBuffer = '';
+        $scanBuffer = '';
 
         while (!$file->eof()) {
             $chunk = $file->fread(self::CHUNK_SIZE);
@@ -231,11 +223,10 @@ final class DefaultUploadPipeline implements UploadPipeline
             }
 
             // Ejecuta verificaciones defensivas en el bloque
-            $this->runDefensiveChecks($chunk);
+            $this->runDefensiveChecks($chunk, $scanBuffer);
         }
 
         $file->rewind();
-        $this->scanBuffer = '';
     }
 
     /**
@@ -312,9 +303,9 @@ final class DefaultUploadPipeline implements UploadPipeline
      *
      * @param string $chunk Bloque del archivo.
      */
-    private function runDefensiveChecks(string $chunk): void
+    private function runDefensiveChecks(string $chunk, string &$scanBuffer): void
     {
-        $window = $this->scanBuffer . $chunk;
+        $window = $scanBuffer . $chunk;
 
         // Verifica si hay código PHP malicioso
         if (preg_match('/<\?[\s\x00]*(?:php|=)?/i', $window) === 1) {
@@ -333,7 +324,7 @@ final class DefaultUploadPipeline implements UploadPipeline
 
         // Mantiene una ventana de solapamiento para detectar patrones que cruzan bloques
         $tailLength = min(self::SCAN_OVERLAP, strlen($window));
-        $this->scanBuffer = $tailLength > 0 ? substr($window, -$tailLength) : '';
+        $scanBuffer = $tailLength > 0 ? substr($window, -$tailLength) : '';
     }
 
     /**
@@ -459,6 +450,9 @@ final class DefaultUploadPipeline implements UploadPipeline
     private function ensureWorkingDirectory(): void
     {
         if (is_dir($this->workingDirectory)) {
+            if (!is_writable($this->workingDirectory)) {
+                throw new UnexpectedUploadException('Working directory is not writable.');
+            }
             return;
         }
 

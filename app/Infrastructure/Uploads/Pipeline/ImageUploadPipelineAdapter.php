@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline;
 
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
+use App\Infrastructure\Uploads\Pipeline\Contracts\ImageUploadPipelineInterface;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
@@ -17,7 +18,7 @@ use SplFileObject;
 /**
  * Adaptador que reutiliza el ImagePipeline existente para cumplir con UploadPipeline.
  */
-class ImageUploadPipelineAdapter implements UploadPipeline
+class ImageUploadPipelineAdapter implements UploadPipeline, ImageUploadPipelineInterface
 {
     private string $workingDirectory;
 
@@ -114,7 +115,7 @@ class ImageUploadPipelineAdapter implements UploadPipeline
         $source = $result->path();
 
         if (@rename($source, $target)) {
-            $this->suppressResultCleanup($result);
+            $result->releaseCleanupOwnership();
             return $target;
         }
 
@@ -125,25 +126,6 @@ class ImageUploadPipelineAdapter implements UploadPipeline
         $result->cleanup();
         $this->deleteFileSilently($target);
         throw new UploadException('Unable to persist processed image.');
-    }
-
-    /**
-     * Marca el resultado como limpiado para evitar logs al mover el archivo.
-     *
-     * @param ImagePipelineResult $result El resultado del pipeline de imágenes.
-     */
-    private function suppressResultCleanup(ImagePipelineResult $result): void
-    {
-        try {
-            $reflection = new \ReflectionObject($result);
-            if ($reflection->hasProperty('cleaned')) {
-                $property = $reflection->getProperty('cleaned');
-                $property->setAccessible(true);
-                $property->setValue($result, true);
-            }
-        } catch (\Throwable) {
-            // Si no podemos modificar el estado, el cleanup se encargará (puede loguear).
-        }
     }
 
     /**

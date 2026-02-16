@@ -23,5 +23,10 @@ final class MimeNormalizerTest extends TestCase
     {
         $this->assertSame('application/ld+json', MimeNormalizer::normalize('application/ld+json'));
     }
-}
 
+    public function test_normalize_maps_pkcs12_aliases_to_canonical_value(): void
+    {
+        $this->assertSame('application/x-pkcs12', MimeNormalizer::normalize('application/pkcs12'));
+        $this->assertSame('application/x-pkcs12', MimeNormalizer::normalize('application/x-pkcs-12'));
+    }
+}

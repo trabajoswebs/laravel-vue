@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Application\Uploads\Actions;
 
+use App\Application\Shared\Contracts\LoggerInterface;
+use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Application\Uploads\DTO\ReplacementResult;
 use App\Application\Uploads\DTO\UploadResult;
 use App\Domain\Uploads\UploadProfile;
 use App\Infrastructure\Models\User;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 use App\Infrastructure\Uploads\Core\Models\Upload;
-use Illuminate\Support\Facades\Storage;
-use App\Support\Logging\SecurityLogger;
 
 /**
  * Acción de aplicación para reemplazar archivos.
@@ -21,9 +21,11 @@ use App\Support\Logging\SecurityLogger;
  */
 final class ReplaceFile
 {
-    public function __construct(private readonly UploadFile $uploadFile)
-    {
-    }
+    public function __construct(
+        private readonly UploadFile $uploadFile,
+        private readonly UploadStorageInterface $storage,
+        private readonly LoggerInterface $logger,
+    ) {}
 
     /**
      * Reemplaza un archivo existente con uno nuevo (o simplemente crea uno nuevo si no hay previo).
@@ -59,14 +61,9 @@ final class ReplaceFile
     private function deletePreviousFile(Upload $upload): void
     {
         try {
-            $disk = (string) $upload->disk;
-            $path = (string) $upload->path;
-
-            if ($disk !== '' && $path !== '' && Storage::disk($disk)->exists($path)) {
-                Storage::disk($disk)->delete($path);
-            }
+            $this->storage->deleteIfExists((string) $upload->disk, (string) $upload->path);
         } catch (\Throwable $e) {
-            SecurityLogger::warning('uploads.replace.delete_old_failed', [
+            $this->logger->warning('uploads.replace.delete_old_failed', [
                 'upload_id' => (string) $upload->getKey(),
                 'error' => $e->getMessage(),
             ]);

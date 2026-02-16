@@ -16,7 +16,7 @@ final class ImageNormalizerTest extends TestCase
         config()->set('image-pipeline.max_edge', 10000);
         config()->set('image-pipeline.max_bytes', 10_000_000);
 
-        $normalizer = new ImageNormalizer(null, 90, new FileConstraints());
+        $normalizer = new ImageNormalizer(new FileConstraints(), null, 90);
 
         $image = new class {
             public function width(): int { return 2000; }
@@ -33,7 +33,7 @@ final class ImageNormalizerTest extends TestCase
         config()->set('image-pipeline.max_edge', 16384);
         config()->set('image-pipeline.max_bytes', 10_000_000);
 
-        $normalizer = new ImageNormalizer(null, 90, new FileConstraints());
+        $normalizer = new ImageNormalizer(new FileConstraints(), null, 90);
 
         $image = new class {
             public function width(): int { return 512; }
@@ -50,7 +50,7 @@ final class ImageNormalizerTest extends TestCase
         config()->set('image-pipeline.max_edge', 512);
         config()->set('image-pipeline.max_bytes', 10_000_000);
 
-        $normalizer = new ImageNormalizer(null, 90, new FileConstraints());
+        $normalizer = new ImageNormalizer(new FileConstraints(), null, 90);
 
         $image = new class {
             public function width(): int { return 1024; }
@@ -67,7 +67,7 @@ final class ImageNormalizerTest extends TestCase
         config()->set('image-pipeline.max_edge', 16384);
         config()->set('image-pipeline.max_bytes', 10_000_000);
 
-        $normalizer = new ImageNormalizer(null, 90, new FileConstraints());
+        $normalizer = new ImageNormalizer(new FileConstraints(), null, 90);
 
         $image = new class {
             public function width(): int { return 512; }
@@ -85,7 +85,7 @@ final class ImageNormalizerTest extends TestCase
         config()->set('image-pipeline.max_edge', 16384);
         config()->set('image-pipeline.max_bytes', 10_000_000);
 
-        $normalizer = new ImageNormalizer(null, 90, new FileConstraints());
+        $normalizer = new ImageNormalizer(new FileConstraints(), null, 90);
 
         $image = new class {
             public function width(): int { return 512; }
@@ -103,7 +103,7 @@ final class ImageNormalizerTest extends TestCase
         config()->set('image-pipeline.max_edge', 16384);
         config()->set('image-pipeline.max_bytes', 10_000_000);
 
-        $normalizer = new ImageNormalizer(null, 90, new FileConstraints());
+        $normalizer = new ImageNormalizer(new FileConstraints(), null, 90);
 
         $jpegCalled = false;
         $image = new class($jpegCalled) {

@@ -17,7 +17,7 @@ return new class extends Migration // Clase anónima de migración
             $table->uuid('id')->primary(); // PK UUID para rastreo
             $table->foreignId('tenant_id')->constrained('tenants')->cascadeOnDelete()->index('uploads_tenant_id_index'); // FK tenant con índice
             $table->string('owner_type')->nullable(); // Tipo de propietario (morph)
-            $table->unsignedBigInteger('owner_id')->nullable()->index('uploads_owner_id_index'); // ID del propietario con índice
+            $table->string('owner_id', 64)->nullable()->index('uploads_owner_id_index'); // ID del propietario (int/uuid/ulid) con índice
             $table->string('profile_id'); // ID de perfil de upload
             $table->string('disk'); // Disco de almacenamiento
             $table->string('path'); // Path relativo en el disco

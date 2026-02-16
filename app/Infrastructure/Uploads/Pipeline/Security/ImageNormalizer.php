@@ -21,34 +21,32 @@ final class ImageNormalizer
     /**
      * Tamaño máximo en bytes permitido para los archivos normalizados.
      */
-    private int $maxBytes;
-    private int $maxEdge;
-    private float $maxMegapixels;
+    private readonly int $maxBytes;
+    private readonly int $maxEdge;
+    private readonly float $maxMegapixels;
 
     /**
      * Constructor de la clase.
      *
      * Valida que la calidad esté en el rango permitido y resuelve las restricciones de archivo.
      *
+     * @param FileConstraints $constraints Restricciones de archivo activas.
      * @param LoggerInterface|null $logger Logger opcional para registrar eventos. Puede ser null.
      * @param int $quality Calidad de compresión para la imagen normalizada, entre 0 y 100.
-     * @param FileConstraints|null $constraints Opcionalmente se inyectan las restricciones globales. Si es null, se obtienen desde el contenedor de Laravel.
      * @throws InvalidArgumentException Si la calidad no está entre 0 y 100.
      */
     public function __construct(
+        FileConstraints $constraints,
         private readonly ?LoggerInterface $logger = null,
         private readonly int $quality = 90,
-        ?FileConstraints $constraints = null,
     ) {
         // Valida que la calidad esté en el rango permitido
         if ($quality < 0 || $quality > 100) {
             throw new InvalidArgumentException('ImageNormalizer quality must be between 0 and 100.');
         }
 
-        // Resuelve las restricciones de archivo, usando las inyectadas o obteniendo las globales
-        $resolvedConstraints = $constraints ?? app(FileConstraints::class);
         // Establece el tamaño máximo de bytes, asegurando que sea al menos 1
-        $this->maxBytes = max(1, $resolvedConstraints->maxBytes);
+        $this->maxBytes = max(1, $constraints->maxBytes);
         $this->maxEdge = max(1, (int) config('image-pipeline.max_edge', 16384));
         $this->maxMegapixels = max(0.0, (float) config('image-pipeline.max_megapixels', 48.0));
     }

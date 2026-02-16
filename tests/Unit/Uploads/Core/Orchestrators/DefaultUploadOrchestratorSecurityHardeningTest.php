@@ -6,6 +6,7 @@ namespace Tests\Unit\Uploads\Core\Orchestrators;
 
 use App\Application\Shared\Contracts\TenantContextInterface;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
+use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Domain\Uploads\ProcessingMode;
 use App\Domain\Uploads\ScanMode;
 use App\Domain\Uploads\ServingMode;
@@ -16,6 +17,8 @@ use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector;
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
 use App\Infrastructure\Uploads\Core\Contracts\MediaUploader;
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator;
+use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
+use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
 use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;
 use App\Infrastructure\Uploads\Core\Services\MediaReplacementService;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
@@ -23,6 +26,7 @@ use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
+use App\Infrastructure\Uploads\Profiles\GalleryProfile;
 use Illuminate\Http\UploadedFile;
 use InvalidArgumentException;
 use RuntimeException;
@@ -126,6 +130,214 @@ final class DefaultUploadOrchestratorSecurityHardeningTest extends TestCase
         }
     }
 
+    public function test_resolve_mime_for_secrets_falls_back_to_allowed_uploaded_mime_when_trusted_mime_is_not_allowed(): void
+    {
+        $guard = new DocumentUploadGuard();
+        $method = new \ReflectionMethod($guard, 'resolveMime');
+        $method->setAccessible(true);
+
+        $path = tempnam(sys_get_temp_dir(), 'upload_secret_mime_fallback_');
+        self::assertIsString($path);
+        file_put_contents($path, "plain text content\n");
+
+        $uploaded = new class($path) extends UploadedFile {
+            public function __construct(string $path)
+            {
+                parent::__construct($path, 'cert.p12', 'application/octet-stream', null, true);
+            }
+
+            public function getMimeType(): ?string
+            {
+                return 'application/octet-stream';
+            }
+        };
+
+        $profile = new UploadProfile(
+            id: new UploadProfileId('certificate_secret'),
+            kind: UploadKind::SECRET,
+            allowedMimes: ['application/x-pkcs12', 'application/octet-stream'],
+            maxBytes: 1024 * 1024,
+            scanMode: ScanMode::REQUIRED,
+            processingMode: ProcessingMode::NONE,
+            servingMode: ServingMode::FORBIDDEN,
+            disk: 'public',
+            pathCategory: 'secrets',
+            requiresOwner: false,
+        );
+
+        try {
+            $mime = $method->invoke($guard, $profile, $uploaded, $path);
+            $this->assertSame('application/octet-stream', $mime);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_validate_document_accepts_single_column_import_csv(): void
+    {
+        $orchestrator = $this->makeOrchestrator();
+        $method = new \ReflectionMethod($orchestrator, 'validateDocument');
+        $method->setAccessible(true);
+
+        $path = tempnam(sys_get_temp_dir(), 'upload_csv_single_col_');
+        self::assertIsString($path);
+        file_put_contents($path, "email\nalice@example.com\nbob@example.com\n");
+
+        $uploaded = new UploadedFile($path, 'import.csv', 'text/csv', null, true);
+        $profile = new UploadProfile(
+            id: new UploadProfileId('import_csv'),
+            kind: UploadKind::IMPORT,
+            allowedMimes: ['text/csv', 'text/plain', 'application/csv', 'text/x-csv'],
+            maxBytes: 1024 * 1024,
+            scanMode: ScanMode::REQUIRED,
+            processingMode: ProcessingMode::NONE,
+            servingMode: ServingMode::FORBIDDEN,
+            disk: 'public',
+            pathCategory: 'imports',
+            requiresOwner: false,
+        );
+
+        try {
+            $method->invoke($orchestrator, $profile, $uploaded);
+            $this->assertTrue(true);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_validate_document_accepts_import_with_atypical_header_row(): void
+    {
+        $orchestrator = $this->makeOrchestrator();
+        $method = new \ReflectionMethod($orchestrator, 'validateDocument');
+        $method->setAccessible(true);
+
+        $path = tempnam(sys_get_temp_dir(), 'upload_csv_header_');
+        self::assertIsString($path);
+        file_put_contents($path, "___header___\n<script literal text>\nplain text\n");
+
+        $uploaded = new UploadedFile($path, 'import.csv', 'text/plain', null, true);
+        $profile = new UploadProfile(
+            id: new UploadProfileId('import_csv'),
+            kind: UploadKind::IMPORT,
+            allowedMimes: ['text/csv', 'text/plain', 'application/csv', 'text/x-csv'],
+            maxBytes: 1024 * 1024,
+            scanMode: ScanMode::REQUIRED,
+            processingMode: ProcessingMode::NONE,
+            servingMode: ServingMode::FORBIDDEN,
+            disk: 'public',
+            pathCategory: 'imports',
+            requiresOwner: false,
+        );
+
+        try {
+            $method->invoke($orchestrator, $profile, $uploaded);
+            $this->assertTrue(true);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_validate_document_accepts_import_with_multiline_quoted_cells(): void
+    {
+        $orchestrator = $this->makeOrchestrator();
+        $method = new \ReflectionMethod($orchestrator, 'validateDocument');
+        $method->setAccessible(true);
+
+        $path = tempnam(sys_get_temp_dir(), 'upload_csv_multiline_');
+        self::assertIsString($path);
+        file_put_contents($path, "id,notes\n1,\"line one\nline two\"\n2,\"ok\"\n");
+
+        $uploaded = new UploadedFile($path, 'import.csv', 'text/csv', null, true);
+        $profile = new UploadProfile(
+            id: new UploadProfileId('import_csv'),
+            kind: UploadKind::IMPORT,
+            allowedMimes: ['text/csv', 'text/plain', 'application/csv', 'text/x-csv'],
+            maxBytes: 1024 * 1024,
+            scanMode: ScanMode::REQUIRED,
+            processingMode: ProcessingMode::NONE,
+            servingMode: ServingMode::FORBIDDEN,
+            disk: 'public',
+            pathCategory: 'imports',
+            requiresOwner: false,
+        );
+
+        try {
+            $method->invoke($orchestrator, $profile, $uploaded);
+            $this->assertTrue(true);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_validate_document_accepts_utf16le_import_payload(): void
+    {
+        $orchestrator = $this->makeOrchestrator();
+        $method = new \ReflectionMethod($orchestrator, 'validateDocument');
+        $method->setAccessible(true);
+
+        $path = tempnam(sys_get_temp_dir(), 'upload_csv_utf16_');
+        self::assertIsString($path);
+
+        $utf16Body = iconv('UTF-8', 'UTF-16LE//IGNORE', "email\nalice@example.com\n");
+        if (!is_string($utf16Body)) {
+            $this->markTestSkipped('iconv no está disponible en este entorno.');
+        }
+        file_put_contents($path, "\xFF\xFE" . $utf16Body);
+
+        $uploaded = new UploadedFile($path, 'import.csv', 'text/plain', null, true);
+        $profile = new UploadProfile(
+            id: new UploadProfileId('import_csv'),
+            kind: UploadKind::IMPORT,
+            allowedMimes: ['text/csv', 'text/plain', 'application/csv', 'text/x-csv'],
+            maxBytes: 1024 * 1024,
+            scanMode: ScanMode::REQUIRED,
+            processingMode: ProcessingMode::NONE,
+            servingMode: ServingMode::FORBIDDEN,
+            disk: 'public',
+            pathCategory: 'imports',
+            requiresOwner: false,
+        );
+
+        try {
+            $method->invoke($orchestrator, $profile, $uploaded);
+            $this->assertTrue(true);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_validate_document_rejects_import_payload_starting_with_php_tag(): void
+    {
+        $orchestrator = $this->makeOrchestrator();
+        $method = new \ReflectionMethod($orchestrator, 'validateDocument');
+        $method->setAccessible(true);
+
+        $path = tempnam(sys_get_temp_dir(), 'upload_csv_php_tag_');
+        self::assertIsString($path);
+        file_put_contents($path, "<?php echo 'x';\n1,2\n");
+
+        $uploaded = new UploadedFile($path, 'import.csv', 'text/plain', null, true);
+        $profile = new UploadProfile(
+            id: new UploadProfileId('import_csv'),
+            kind: UploadKind::IMPORT,
+            allowedMimes: ['text/csv', 'text/plain', 'application/csv', 'text/x-csv'],
+            maxBytes: 1024 * 1024,
+            scanMode: ScanMode::REQUIRED,
+            processingMode: ProcessingMode::NONE,
+            servingMode: ServingMode::FORBIDDEN,
+            disk: 'public',
+            pathCategory: 'imports',
+            requiresOwner: false,
+        );
+
+        try {
+            $this->expectException(InvalidArgumentException::class);
+            $method->invoke($orchestrator, $profile, $uploaded);
+        } finally {
+            @unlink($path);
+        }
+    }
+
     public function test_validate_document_rejects_secret_payload_with_weak_der_prefix(): void
     {
         $orchestrator = $this->makeOrchestrator();
@@ -202,13 +414,15 @@ final class DefaultUploadOrchestratorSecurityHardeningTest extends TestCase
             $quarantine,
             $this->createMock(ScanCoordinatorInterface::class),
             $this->createMock(UploadRepositoryInterface::class),
+            $this->createMock(UploadStorageInterface::class),
             new MediaReplacementService(
                 $this->createMock(MediaUploader::class),
                 $this->createMock(MediaArtifactCollector::class),
                 $this->createMock(MediaCleanupScheduler::class),
             ),
-            new AvatarProfile(),
             new PipelineResultMapper(),
+            new MediaProfileResolver(new AvatarProfile(), new GalleryProfile()),
+            new DocumentUploadGuard(),
         );
     }
 }

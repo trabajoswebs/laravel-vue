@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Application\Uploads\Actions;
 
+use App\Application\Uploads\Contracts\OwnerIdNormalizerInterface;
+use App\Application\Uploads\Contracts\UploadOrchestratorInterface;
 use App\Domain\Uploads\UploadProfile; // Ej.: perfil document_pdf
 use App\Infrastructure\Models\User; // Ej.: auth user
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia; // Ej.: wrapper de media
 use App\Application\Uploads\DTO\UploadResult; // Ej.: {id, status, correlationId}
-use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Ej.: orquestador
 
 /**
  * Acción de aplicación para subir archivos.
@@ -23,9 +24,12 @@ final class UploadFile
     /**
      * Constructor que inyecta el orquestador de uploads.
      * 
-     * @param DefaultUploadOrchestrator $orchestrator Orquestador encargado de la lógica de subida
+     * @param UploadOrchestratorInterface $orchestrator Orquestador encargado de la lógica de subida
      */
-    public function __construct(private readonly DefaultUploadOrchestrator $orchestrator) // Ej.: DI
+    public function __construct(
+        private readonly UploadOrchestratorInterface $orchestrator, // Ej.: DI
+        private readonly OwnerIdNormalizerInterface $ownerIdNormalizer,
+    )
     {}
 
     /**
@@ -50,14 +54,13 @@ final class UploadFile
         ?string $correlationId = null, // Ej.: "req_abc-123"|null
         array $meta = [], // Ej.: ['note' => 'Factura enero']
     ): UploadResult {
-        // Si tu orquestador aún no soporta meta/correlation, puedes ignorarlos aquí.
         return $this->orchestrator->upload(
-            $profile, // Ej.: perfil
-            $user, // Ej.: user
-            $media, // Ej.: media
-            is_numeric($ownerId) ? (int) $ownerId : null, // Ej.: ownerId int|null
-            $correlationId, // Ej.: correlationId|null
-            $meta, // Ej.: metadata
+            $profile,
+            $user,
+            $media,
+            $this->ownerIdNormalizer->normalize($ownerId),
+            $correlationId,
+            $meta,
         );
     }
 }

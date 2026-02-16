@@ -19,32 +19,40 @@ trait UsesDocumentValidation
      * Construye reglas ligeras para documentos (PDF/XLSX/CSV, etc.).
      *
      * - Valida tamaño máximo en bytes.
-     * - Usa mimetypes reales (no solo extensión).
-     * - Fija extensiones válidas derivadas de los MIME permitidos.
+     * - En perfiles no-import, aplica MIME/extension defensivos.
+     * - En imports, delega la validación de MIME/firma al guard de dominio para evitar falsos negativos.
      */
     protected function documentRules(string $field, UploadProfile $profile): array
     {
         $allowedMimes = $this->normalizeMimes($profile->allowedMimes);
-        $extensions = $this->extensionsFor($allowedMimes);
         $maxBytes = max(1, (int) $profile->maxBytes);
         $maxKb = (int) ceil($maxBytes / 1024);
+
+        if ($this->isImportProfile($profile)) {
+            return [
+                'bail',
+                'required',
+                'file',
+                'max:' . $maxKb,
+                $this->guardDocument($maxBytes),
+            ];
+        }
+
+        $extensions = $this->extensionsFor($allowedMimes);
 
         return [
             'bail',
             'required',
             'file',
-            File::types($extensions)->max($maxKb)->min(1),
+            File::types($extensions)->max($maxKb),
             'mimetypes:' . implode(',', $allowedMimes),
-            $this->guardDocument($allowedMimes, $maxBytes),
+            $this->guardDocument($maxBytes),
         ];
     }
 
-    /**
-     * @param list<string> $allowedMimes
-     */
-    private function guardDocument(array $allowedMimes, int $maxBytes): Closure
+    private function guardDocument(int $maxBytes): Closure
     {
-        return static function (string $attribute, mixed $value, Closure $fail) use ($allowedMimes, $maxBytes): void {
+        return static function (string $_attribute, mixed $value, Closure $fail) use ($maxBytes): void {
             if (!$value instanceof UploadedFile) {
                 return;
             }
@@ -52,14 +60,13 @@ trait UsesDocumentValidation
             $size = $value->getSize();
             if ($size !== null && $size > $maxBytes) {
                 $fail(__('validation.max.file', ['max' => (int) ceil($maxBytes / 1024)]));
-                return;
-            }
-
-            $detected = strtolower((string) $value->getMimeType());
-            if ($detected !== '' && !in_array($detected, $allowedMimes, true)) {
-                $fail(__('validation.mimetypes', ['attribute' => $attribute]));
             }
         };
+    }
+
+    private function isImportProfile(UploadProfile $profile): bool
+    {
+        return (string) $profile->pathCategory === 'imports';
     }
 
     /**

@@ -21,7 +21,7 @@ final class ImportCsvProfile extends UploadProfile // Configuración para CSV de
         parent::__construct(
             id: new UploadProfileId('import_csv'), // ID de perfil CSV import
             kind: UploadKind::IMPORT, // Tipo importación
-            allowedMimes: ['text/csv', 'text/plain'], // MIMEs comunes para CSV
+            allowedMimes: ['text/csv', 'text/plain', 'application/csv', 'text/x-csv'], // MIMEs comunes para CSV
             maxBytes: 10 * 1024 * 1024, // Límite 10MB
             scanMode: ScanMode::REQUIRED, // Escaneo obligatorio
             processingMode: ProcessingMode::NONE, // Sin procesamiento

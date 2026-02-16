@@ -32,6 +32,65 @@ export const toastVisuals: Record<
     },
 } as const;
 
+const TOAST_DEDUP_WINDOW_MS = 1200;
+const GENERIC_FALLBACK_SUPPRESS_WINDOW_MS = 2200;
+const GENERIC_AVATAR_ERROR_TITLES = new Set([
+    'no pudimos actualizar tu avatar. inténtalo de nuevo.',
+    'we could not update your avatar. please try again.',
+]);
+
+type ToastFingerprint = {
+    key: string;
+    at: number;
+    variant: ToastVariant;
+    title: string;
+};
+
+let lastToastFingerprint: ToastFingerprint | null = null;
+
+function normalizeToastText(value: string | null | undefined): string {
+    return (value ?? '').trim().toLowerCase();
+}
+
+function isGenericAvatarFallback(variant: ToastVariant, title: string): boolean {
+    if (variant !== 'error') {
+        return false;
+    }
+
+    return GENERIC_AVATAR_ERROR_TITLES.has(normalizeToastText(title));
+}
+
+function shouldSkipDuplicatedToast(variant: ToastVariant, title: string, description?: string | null): boolean {
+    const normalizedTitle = title.trim();
+    const normalizedDescription = (description ?? '').trim();
+    const key = `${variant}::${normalizedTitle}::${normalizedDescription}`;
+    const now = Date.now();
+
+    if (lastToastFingerprint && lastToastFingerprint.key === key && now - lastToastFingerprint.at <= TOAST_DEDUP_WINDOW_MS) {
+        return true;
+    }
+
+    // Cuando ya existe un error detallado reciente, ignora el fallback genérico del uploader.
+    if (
+        lastToastFingerprint &&
+        isGenericAvatarFallback(variant, normalizedTitle) &&
+        lastToastFingerprint.variant === 'error' &&
+        normalizeToastText(lastToastFingerprint.title) !== normalizeToastText(normalizedTitle) &&
+        now - lastToastFingerprint.at <= GENERIC_FALLBACK_SUPPRESS_WINDOW_MS
+    ) {
+        return true;
+    }
+
+    lastToastFingerprint = {
+        key,
+        at: now,
+        variant,
+        title: normalizedTitle,
+    };
+
+    return false;
+}
+
 const buildToastOptions = (variant: ToastVariant, description?: string | null) => {
     const visuals = toastVisuals[variant];
     const iconSizeClass = variant === 'event' ? 'h-4 w-4' : 'h-5 w-5';
@@ -50,6 +109,10 @@ const buildToastOptions = (variant: ToastVariant, description?: string | null) =
 };
 
 const showToast = (variant: ToastVariant, title: string, description?: string | null) => {
+    if (shouldSkipDuplicatedToast(variant, title, description)) {
+        return;
+    }
+
     const options = buildToastOptions(variant, description);
 
     if (variant === 'event') {
@@ -61,10 +124,10 @@ const showToast = (variant: ToastVariant, title: string, description?: string | 
         variant === 'info'
             ? 'info'
             : variant === 'warning'
-                ? 'warning'
-                : variant === 'error'
-                    ? 'error'
-                    : 'success';
+              ? 'warning'
+              : variant === 'error'
+                ? 'error'
+                : 'success';
 
     toast[toastMethod](title, options);
 };
@@ -88,12 +151,16 @@ export interface ToasterConfig {
     gap?: number;
 }
 
-// Singleton para prevenir múltiples instancias
+declare global {
+    interface Window {
+        __GLOBAL_TOASTER_INITIALIZED__?: boolean;
+    }
+}
+
 class ToasterManager {
     private static instance: ToasterManager | null = null;
     private toasterApp: App | null = null;
     private container: HTMLElement | null = null;
-    private isInitialized = false;
 
     private constructor() {}
 
@@ -104,154 +171,88 @@ class ToasterManager {
         return ToasterManager.instance;
     }
 
-    initialize(config: ToasterConfig = {}) {
-        // Prevenir múltiples inicializaciones
-        if (this.isInitialized) {
-            console.warn('[ToasterPlugin] Ya está inicializado. Ignorando reinicialización.');
+    initialize(config: ToasterConfig = {}): void {
+        if (typeof document === 'undefined') {
             return;
         }
 
-        try {
-            // Verificar entorno del navegador
-            if (typeof document === 'undefined') {
-                console.warn('[ToasterPlugin] No disponible en entorno SSR');
-                return;
-            }
-
-            // Configuración por defecto empresarial
-            const defaultConfig: Required<ToasterConfig> = {
-                position: 'bottom-right',
-                duration: 4000,
-                closeButton: true,
-                theme: 'system',
-                expand: false,
-                visibleToasts: 5,
-                gap: 8,
-                ...config,
-            };
-
-            // Validar configuración
-            this.validateConfig(defaultConfig);
-
-            // Crear contenedor de forma segura
-            this.createContainer();
-
-            // Crear aplicación Vue para el Toaster
-            this.toasterApp = createApp({
-                name: 'GlobalToaster',
-                render() {
-                    return h(VueSonner, {
-                        ...defaultConfig,
-                        class: 'toaster group',
-                    });
-                },
-            });
-
-            // Configurar manejo de errores
-            this.toasterApp.config.errorHandler = (err) => {
-                console.error('[ToasterPlugin] Error en Toaster:', err);
-            };
-
-            // Montar el Toaster
-            if (this.container) {
-                this.toasterApp.mount(this.container);
-                this.isInitialized = true;
-            }
-        } catch (error) {
-            console.error('[ToasterPlugin] Error durante inicialización:', error);
-            this.cleanup();
-        }
-    }
-
-    private createContainer() {
-        // Verificar si ya existe un contenedor
-        const existingContainer = document.getElementById('global-toaster');
-        if (existingContainer) {
-            console.warn('[ToasterPlugin] Contenedor ya existe. Reutilizando.');
-            this.container = existingContainer;
+        if (this.toasterApp || window.__GLOBAL_TOASTER_INITIALIZED__ === true) {
             return;
         }
 
-        // Crear nuevo contenedor
-        this.container = document.createElement('div');
-        this.container.id = 'global-toaster';
-        this.container.setAttribute('data-sonner-toaster', '');
+        const mergedConfig: Required<ToasterConfig> = {
+            position: 'bottom-right',
+            duration: 4000,
+            closeButton: true,
+            theme: 'system',
+            expand: false,
+            visibleToasts: 5,
+            gap: 8,
+            ...config,
+        };
 
-        // Agregar al DOM de forma segura
-        if (document.body) {
+        this.container = document.getElementById('global-toaster');
+        if (!this.container) {
+            this.container = document.createElement('div');
+            this.container.id = 'global-toaster';
+            this.container.setAttribute('data-sonner-toaster', '');
             document.body.appendChild(this.container);
-        } else {
-            throw new Error('document.body no está disponible');
         }
+
+        this.toasterApp = createApp({
+            name: 'GlobalToaster',
+            render() {
+                return h(VueSonner, {
+                    ...mergedConfig,
+                    class: 'toaster group',
+                });
+            },
+        });
+
+        this.toasterApp.mount(this.container);
+        window.__GLOBAL_TOASTER_INITIALIZED__ = true;
     }
 
-    private validateConfig(config: Required<ToasterConfig>) {
-        const validPositions = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'];
-
-        if (!validPositions.includes(config.position)) {
-            throw new Error(`Posición inválida: ${config.position}`);
+    cleanup(): void {
+        if (this.toasterApp) {
+            this.toasterApp.unmount();
+            this.toasterApp = null;
         }
 
-        if (config.duration < 1000 || config.duration > 30000) {
-            throw new Error('Duración debe estar entre 1000ms y 30000ms');
+        if (this.container?.parentNode) {
+            this.container.parentNode.removeChild(this.container);
         }
 
-        const validThemes = ['light', 'dark', 'system'];
-        if (!validThemes.includes(config.theme)) {
-            throw new Error(`Tema inválido: ${config.theme}`);
-        }
-    }
-
-    cleanup() {
-        try {
-            if (this.toasterApp) {
-                this.toasterApp.unmount();
-                this.toasterApp = null;
-            }
-
-            if (this.container && this.container.parentNode) {
-                this.container.parentNode.removeChild(this.container);
-                this.container = null;
-            }
-
-            this.isInitialized = false;
-        } catch (error) {
-            console.error('[ToasterPlugin] Error durante cleanup:', error);
+        this.container = null;
+        if (typeof window !== 'undefined') {
+            window.__GLOBAL_TOASTER_INITIALIZED__ = false;
         }
     }
 
     isReady(): boolean {
-        return this.isInitialized;
+        return this.toasterApp !== null;
     }
 }
 
 export const ToasterPlugin = {
     install(app: App, config: ToasterConfig = {}) {
         const manager = ToasterManager.getInstance();
-
-        // Inicializar el toaster
         manager.initialize(config);
 
-        // Proporcionar método de cleanup a la app principal
         app.config.globalProperties.$cleanupToaster = () => {
             manager.cleanup();
         };
 
-        // Cleanup automático cuando la app se desmonta
         const originalUnmount = app.unmount;
         app.unmount = function () {
             manager.cleanup();
             return originalUnmount.call(this);
         };
 
-        // Método para verificar si está listo
-        app.config.globalProperties.$isToasterReady = () => {
-            return manager.isReady();
-        };
+        app.config.globalProperties.$isToasterReady = () => manager.isReady();
     },
 };
 
-// Función de utilidad para cleanup manual si es necesario
 export const cleanupToaster = () => {
     ToasterManager.getInstance().cleanup();
 };

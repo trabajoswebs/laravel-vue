@@ -27,6 +27,9 @@ final class MimeNormalizer
         'image/x-png' => 'image/png',     // Variante de PNG
         'image/x-webp' => 'image/webp',   // Variante de WebP
         'image/x-avif' => 'image/avif',   // Variante de AVIF
+        'application/pkcs12' => 'application/x-pkcs12', // Alias PKCS#12
+        'application/pkcs-12' => 'application/x-pkcs12', // Alias PKCS#12 con guion
+        'application/x-pkcs-12' => 'application/x-pkcs12', // Alias histórico
     ];
 
     /**

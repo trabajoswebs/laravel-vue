@@ -12,7 +12,6 @@ use App\Infrastructure\Uploads\Core\DTO\QueuedUploadResult;
 use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
 use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
 use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadService;
@@ -29,6 +28,7 @@ use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Support\ImageUploadReporter;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
+use App\Infrastructure\Uploads\Pipeline\Support\MediaAttacher;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\HasMedia as HasMediaContract;
@@ -74,6 +74,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
         private readonly UploadSecurityLogger $securityLogger,
         private readonly MediaSecurityLogger $mediaLogger,
         private readonly AsyncJobDispatcherInterface $jobs,
+        private readonly MediaAttacher $attacher = new MediaAttacher(),
     ) {}
 
     /**
@@ -92,17 +93,10 @@ final class DefaultUploadService implements UploadService, MediaUploader
         $ownerKey = $this->resolveOwnerKey($owner);
         $uploadedFile = $this->unwrap($file);
 
-        $logContext = [
-            'correlation_id' => $correlation,
-            'profile' => $profile->collection(),
-            'user_id' => $ownerKey,
-            'filename' => $this->sanitizeFilenameForLog($uploadedFile->getClientOriginalName()),
-            'size' => $uploadedFile->getSize(),
-            'mime' => $uploadedFile->getMimeType(),
-        ];
+        $logContext = $this->buildLogContext($correlation, $profile, $ownerKey, $uploadedFile);
 
         $this->assertConstraints($uploadedFile, $profile);
-        [$quarantinedFile, $token] = $this->quarantineManager->duplicate(
+        [, $token] = $this->quarantineManager->duplicate(
             $uploadedFile,
             $profile,
             $correlation
@@ -184,14 +178,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
         ?int $retryAttempt = null,
     ): MediaResource {
         $ownerKey = $this->resolveOwnerKey($owner);
-        $logContext = [
-            'correlation_id' => $correlationId,
-            'profile' => $profile->collection(),
-            'user_id' => $ownerKey,
-            'filename' => $this->sanitizeFilenameForLog($quarantinedFile->getClientOriginalName()),
-            'size' => $quarantinedFile->getSize(),
-            'mime' => $quarantinedFile->getMimeType(),
-        ];
+        $logContext = $this->buildLogContext($correlationId, $profile, $ownerKey, $quarantinedFile);
 
         $this->securityLogger->started($logContext);
 
@@ -293,37 +280,6 @@ final class DefaultUploadService implements UploadService, MediaUploader
     }
 
     /**
-     * Método legado para compatibilidad. El escaneo real se ejecuta vía ScanCoordinator.
-     *
-     * @param string $bytes Contenido ya leído (no usado).
-     */
-    public function scan(string $bytes): void
-    {
-        // No-op: la ruta moderna pasa por ScanCoordinator con cuarentena.
-    }
-
-    /**
-     * Método legado para compatibilidad. La validación se hace vía FileConstraints/QuarantineManager.
-     *
-     * @param string $bytes Contenido ya leído (no usado).
-     */
-    public function validate(string $bytes): void
-    {
-        // No-op intencional.
-    }
-
-    /**
-     * Método legado para compatibilidad. La normalización se delega al pipeline.
-     *
-     * @param string $bytes Contenido ya leído (no usado).
-     * @return string Bytes sin modificar.
-     */
-    public function normalize(string $bytes): string
-    {
-        return $bytes;
-    }
-
-    /**
      * Adjunta el artefacto procesado a un modelo HasMedia.
      *
      * @param HasMediaContract $owner Entidad propietaria del archivo.
@@ -341,50 +297,7 @@ final class DefaultUploadService implements UploadService, MediaUploader
         bool $singleFile = false,
         ?string $correlationId = null
     ): Media {
-        $metadata = $artifact->metadata;
-
-        // Genera el nombre del archivo
-        $fileName = $this->buildFileName($metadata, $profile);
-
-        // Crea headers para el archivo
-        $headers = [
-            'ACL' => 'private',
-            'ContentType' => $metadata->mime,
-            'ContentDisposition' => sprintf('inline; filename="%s"', $fileName),
-        ];
-
-        // Configura el adder de medios
-        $adder = $owner->addMedia($artifact->path)
-            ->usingFileName($fileName)
-            ->addCustomHeaders($headers)
-            ->withCustomProperties([
-                'version' => $metadata->hash,
-                'uploaded_at' => now()->toIso8601String(),
-                'mime_type' => $metadata->mime,
-                'width' => $metadata->dimensions['width'] ?? null,
-                'height' => $metadata->dimensions['height'] ?? null,
-                'original_filename' => $metadata->originalFilename,
-                'quarantine_id' => $artifact->quarantineId?->identifier(),
-                'correlation_id' => $correlationId,
-                'headers' => $headers,
-                'size' => $artifact->size,
-            ]);
-
-        // Si es archivo único, aplica la configuración
-        if ($singleFile && method_exists($adder, 'singleFile')) {
-            $adder->singleFile();
-        }
-
-        try {
-            // Adjunta el archivo a la colección de medios
-            $media = $disk !== null && $disk !== ''
-                ? $adder->toMediaCollection($profile, $disk)
-                : $adder->toMediaCollection($profile);
-
-            return $media;
-        } catch (\Throwable $exception) {
-            throw UploadException::fromThrowable('Unable to attach upload to media collection.', $exception);
-        }
+        return $this->attacher->attach($owner, $artifact, $profile, $disk, $singleFile, $correlationId);
     }
 
     /**
@@ -400,65 +313,6 @@ final class DefaultUploadService implements UploadService, MediaUploader
         }
 
         throw new UploadValidationException('Media owner must implement Spatie\\MediaLibrary\\HasMedia');
-    }
-
-    /**
-     * Sanitiza y genera el nombre del archivo a adjuntar.
-     * 
-     * @param UploadMetadata $metadata Metadatos del archivo
-     * @param string $profile Perfil de la colección
-     * @return string Nombre del archivo generado
-     */
-    private function buildFileName(UploadMetadata $metadata, string $profile): string
-    {
-        $safeProfile = $this->sanitizeProfile($profile);
-        $extension = $this->sanitizeExtension($metadata->extension ?? 'bin');
-        $identifier = $metadata->hash ?? $this->generateSecureIdentifier();
-        $randomSuffix = substr(Str::uuid()->toString(), 0, 8);
-
-        return sprintf('%s-%s-%s.%s', $safeProfile, $identifier, $randomSuffix, $extension);
-    }
-
-    /**
-     * Normaliza el nombre del perfil para generar el filename.
-     * 
-     * @param string $profile Nombre del perfil
-     * @return string Nombre del perfil sanitizado
-     */
-    private function sanitizeProfile(string $profile): string
-    {
-        $normalized = strtolower($profile);
-        $normalized = preg_replace('/[^a-z0-9_-]/', '-', $normalized) ?? 'upload';
-        $normalized = trim($normalized, '-_');
-        if ($normalized === '') {
-            $normalized = 'upload';
-        }
-
-        return substr($normalized, 0, 40);
-    }
-
-    /**
-     * Sanitiza la extensión.
-     * 
-     * @param string $extension Extensión original
-     * @return string Extensión sanitizada
-     */
-    private function sanitizeExtension(string $extension): string
-    {
-        $clean = strtolower($extension);
-        $clean = preg_replace('/[^a-z0-9]/', '', $clean) ?? 'bin';
-
-        return $clean === '' ? 'bin' : substr($clean, 0, 10);
-    }
-
-    /**
-     * Genera identificador aleatorio seguro.
-     * 
-     * @return string Identificador único
-     */
-    private function generateSecureIdentifier(): string
-    {
-        return bin2hex(random_bytes(16));
     }
 
     /**
@@ -583,6 +437,22 @@ final class DefaultUploadService implements UploadService, MediaUploader
 
         $clean = preg_replace('/[^A-Za-z0-9._-]+/', '-', $name) ?? $name;
         return substr($clean, 0, 200);
+    }
+
+    private function buildLogContext(
+        string $correlationId,
+        MediaProfile $profile,
+        int|string $ownerKey,
+        UploadedFile $file
+    ): array {
+        return [
+            'correlation_id' => $correlationId,
+            'profile' => $profile->collection(),
+            'user_id' => $ownerKey,
+            'filename' => $this->sanitizeFilenameForLog($file->getClientOriginalName()),
+            'size' => $file->getSize(),
+            'mime' => $file->getMimeType(),
+        ];
     }
 
     /**

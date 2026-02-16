@@ -6,6 +6,7 @@ namespace App\Infrastructure\Uploads\Core\Orchestrators;
 
 use App\Application\Uploads\Contracts\UploadOrchestratorInterface;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
+use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Application\Uploads\DTO\UploadResult;
 use App\Application\Shared\Contracts\TenantContextInterface;
 use App\Domain\Uploads\ScanMode;
@@ -21,11 +22,7 @@ use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;
-use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
-use App\Infrastructure\Uploads\Profiles\AvatarProfile;
-use App\Infrastructure\Uploads\Profiles\GalleryProfile;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use RuntimeException;
@@ -48,8 +45,8 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
      * @param QuarantineManager $quarantine Gestor de archivos en cuarentena
      * @param ScanCoordinatorInterface $scanner Coordinador de escaneo antivirus
      * @param UploadRepositoryInterface $uploads Repositorio para persistencia de uploads
+     * @param UploadStorageInterface $storage Puerto de almacenamiento para persistencia de artefactos
      * @param MediaReplacementService $mediaReplacement Servicio para manejo de reemplazo de medios
-     * @param AvatarProfile $avatarProfile Perfil específico para avatares
      */
     public function __construct(
         private readonly TenantContextInterface $tenantContext,
@@ -57,9 +54,11 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
         private readonly QuarantineManager $quarantine,
         private readonly ScanCoordinatorInterface $scanner,
         private readonly UploadRepositoryInterface $uploads,
+        private readonly UploadStorageInterface $storage,
         private readonly MediaReplacementService $mediaReplacement,
-        private readonly AvatarProfile $avatarProfile,
         private readonly PipelineResultMapper $resultMapper,
+        private readonly MediaProfileResolver $mediaProfileResolver,
+        private readonly DocumentUploadGuard $documentGuard,
     ) {}
 
     /**
@@ -112,7 +111,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
     ): UploadResult {
         return match ($profile->kind) {
             // Si es imagen, usa el manejo específico para imágenes
-            UploadKind::IMAGE => $this->handleImage($profile, $actor, $file, $ownerId, $correlationId, $meta),
+            UploadKind::IMAGE => $this->handleImage($profile, $actor, $file, $correlationId, $meta),
             // Para otros tipos, usa el manejo de documentos
             default => $this->handleDocument($profile, $actor, $file, $ownerId, $correlationId, $meta),
         };
@@ -127,7 +126,6 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
      * @param UploadProfile $profile Perfil de upload para imágenes
      * @param User $actor Usuario que realiza la operación
      * @param UploadedMedia $file Archivo de imagen subido
-     * @param int|string|null $ownerId ID del propietario del archivo
      * @param string $correlationId ID de correlación para rastreo
      * @param array<string, mixed> $meta Metadatos adicionales
      * @return UploadResult Resultado de la operación de subida de imagen
@@ -136,7 +134,6 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
         UploadProfile $profile,
         User $actor,
         UploadedMedia $file,
-        int|string|null $ownerId,
         string $correlationId,
         array $meta,
     ): UploadResult {
@@ -219,7 +216,6 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
         $disk = (string) $profile->disk;
         $extension = $this->extensionFor($profile, $uploaded);
         $path = $this->paths->generate($profile, $ownerId, $extension);
-        $storage = Storage::disk($disk);
 
         $realPath = $quarantined->getRealPath();
         if (!is_string($realPath) || $realPath === '' || !is_file($realPath)) {
@@ -244,22 +240,15 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
             }
 
             try {
-                $writeOk = $storage->put($path, $handle);
-                if ($writeOk === false) {
-                    throw new RuntimeException('No se pudo persistir el archivo en storage');
-                }
+                $this->storage->writeStream($disk, $path, $handle);
                 $stored = true;
             } finally {
                 fclose($handle);
             }
 
-            try {
-                $remoteSize = $storage->size($path);
-                if (is_int($remoteSize) && $remoteSize > 0) {
-                    $finalSize = $remoteSize;
-                }
-            } catch (\Throwable) {
-                // Algunos adapters no resuelven size() de forma consistente.
+            $remoteSize = $this->storage->size($disk, $path);
+            if (is_int($remoteSize) && $remoteSize > 0) {
+                $finalSize = $remoteSize;
             }
 
             $metadata = new UploadMetadata(
@@ -295,7 +284,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
         } catch (\Throwable $exception) {
             if ($stored) {
                 try {
-                    $storage->delete($path);
+                    $this->storage->deleteIfExists($disk, $path);
                 } catch (\Throwable) {
                     // rollback best-effort
                 }
@@ -315,15 +304,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
      */
     private function extensionFor(UploadProfile $profile, UploadedFile $file): string
     {
-        $clientExt = strtolower((string) $file->getClientOriginalExtension());
-
-        return match ((string) $profile->pathCategory) {
-            'documents' => 'pdf',
-            'spreadsheets' => 'xlsx',
-            'imports' => 'csv',
-            'secrets' => 'p12',
-            default => $clientExt !== '' ? $clientExt : 'bin',
-        };
+        return $this->documentGuard->extensionFor($profile, $file);
     }
 
     /**
@@ -337,44 +318,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
      */
     private function validateDocument(UploadProfile $profile, UploadedFile $file): void
     {
-        $realPath = $file->getRealPath();
-        if (!is_string($realPath) || $realPath === '' || !is_file($realPath)) {
-            throw new InvalidArgumentException('No se pudo leer el archivo subido');
-        }
-
-        $size = $file->getSize();
-        if ($size === null) {
-            $size = filesize($realPath);
-        }
-
-        $size = (int) ($size ?? 0);
-        if ($size <= 0 || $size > (int) $profile->maxBytes) {
-            throw new InvalidArgumentException('Tamaño de archivo no permitido para el perfil');
-        }
-
-        $mime = $this->detectTrustedDocumentMime($file, $realPath);
-        $allowedMimes = array_values(array_unique(array_filter(array_map(
-            static fn(string $value): ?string => MimeNormalizer::normalize($value),
-            $profile->allowedMimes
-        ))));
-        if ($mime === null || !in_array($mime, $allowedMimes, true)) {
-            throw new InvalidArgumentException('MIME no permitido para el perfil');
-        }
-
-        $magic = $this->readMagicPrefix($realPath, 8);
-        $bytes = $magic !== '' ? bin2hex($magic) : '';
-
-        $signatureOk = match ((string) $profile->pathCategory) {
-            'documents' => str_starts_with($magic, '%PDF'),
-            'spreadsheets' => str_starts_with($bytes, '504b0304'),
-            'imports' => $mime === 'text/csv' || $mime === 'text/plain',
-            'secrets' => $this->isAcceptedSecretPayload($mime, (string) $file->getClientOriginalExtension(), $bytes),
-            default => false,
-        };
-
-        if (!$signatureOk) {
-            throw new InvalidArgumentException('Firma de archivo inválida para el perfil');
-        }
+        $this->documentGuard->validate($profile, $file);
     }
 
     /**
@@ -385,11 +329,7 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
      */
     private function resolveMediaProfile(UploadProfile $profile): MediaProfile
     {
-        return match ((string) $profile->id) {
-            'avatar_image' => $this->avatarProfile,
-            'gallery_image' => app(GalleryProfile::class),
-            default => throw new InvalidArgumentException('Perfil de imagen no soportado: ' . (string) $profile->id),
-        };
+        return $this->mediaProfileResolver->resolve($profile);
     }
 
     private function resolveTenantFirstMediaPath(object $media, int|string $tenantId): string
@@ -413,59 +353,6 @@ final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
         }
 
         return $clean;
-    }
-
-    private function detectTrustedDocumentMime(UploadedFile $file, string $realPath): ?string
-    {
-        $trusted = null;
-        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
-        if ($finfo !== false) {
-            try {
-                $mime = finfo_file($finfo, $realPath);
-                $trusted = MimeNormalizer::normalize(is_string($mime) ? $mime : null);
-            } finally {
-                finfo_close($finfo);
-            }
-        }
-
-        $fallback = MimeNormalizer::normalize($file->getMimeType());
-
-        if ($trusted === null || ($trusted === 'application/octet-stream' && $fallback !== null && $fallback !== 'application/octet-stream')) {
-            return $fallback;
-        }
-
-        return $trusted;
-    }
-
-    private function readMagicPrefix(string $path, int $bytes): string
-    {
-        $handle = fopen($path, 'rb');
-        if ($handle === false) {
-            return '';
-        }
-
-        try {
-            $data = fread($handle, $bytes);
-        } finally {
-            fclose($handle);
-        }
-
-        return is_string($data) ? $data : '';
-    }
-
-    private function isAcceptedSecretPayload(?string $mime, string $clientExtension, string $magicHex): bool
-    {
-        $normalizedExtension = strtolower(trim($clientExtension));
-        if ($normalizedExtension === '' || !in_array($normalizedExtension, ['p12', 'pfx'], true)) {
-            return false;
-        }
-
-        if ($mime !== null && !in_array($mime, ['application/x-pkcs12', 'application/octet-stream'], true)) {
-            return false;
-        }
-
-        // PKCS#12 suele venir como ASN.1 DER SEQUENCE con longitud explícita (30 82 ...).
-        return str_starts_with($magicHex, '3082');
     }
 
     /**

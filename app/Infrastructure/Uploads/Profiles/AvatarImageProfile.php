@@ -21,8 +21,8 @@ final class AvatarImageProfile extends UploadProfile // Define configuración de
         parent::__construct(
             id: new UploadProfileId('avatar_image'), // ID único del perfil avatar
             kind: UploadKind::IMAGE, // Se trata de una imagen
-            allowedMimes: ['image/jpeg', 'image/png', 'image/webp'], // MIMEs permitidos
-            maxBytes: (int) config('image-pipeline.limits.max_bytes', 5 * 1024 * 1024), // Reusa límite de imagen
+            allowedMimes: ['image/jpeg', 'image/png', 'image/webp', 'image/avif'], // MIMEs permitidos
+            maxBytes: (int) config('image-pipeline.max_bytes', 25 * 1024 * 1024), // Límite real de imagen
             scanMode: ScanMode::REQUIRED, // Escaneo obligatorio
             processingMode: ProcessingMode::IMAGE_PIPELINE, // Usa pipeline de imágenes
             servingMode: ServingMode::CONTROLLER_SIGNED, // Se sirve vía controlador con firma

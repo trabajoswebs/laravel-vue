@@ -19,7 +19,7 @@ use Psr\Log\LoggerInterface;
  * 🏗️ PATRÓN DE DISEÑO:
  *   - FACADE: Oculta la complejidad de MediaSecurityLogger
  *   - SINGLETON: Mantiene una única instancia del logger subyacente
- *   - STATIC FACADE: Proporciona API estática similar a Log::info()
+ *   - STATIC FACADE: Proporciona una API estática similar al logger de Laravel
  * 
  * 🔐 CARACTERÍSTICAS DE SEGURIDAD:
  *   ✅ SANITIZACIÓN AUTOMÁTICA - Todos los contextos son sanitizados

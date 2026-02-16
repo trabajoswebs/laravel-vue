@@ -13,11 +13,19 @@ app/ — código de aplicación organizado por capas
 │   │   │   ├── ReplaceFile.php — reemplaza un upload existente
 │   │   │   └── UploadFile.php — inicia una carga de archivo
 │   │   ├── Contracts/
+│   │   │   ├── OwnerIdNormalizerInterface.php — normaliza owner IDs externos a valor interno
 │   │   │   ├── UploadOrchestratorInterface.php — coordina pipeline de uploads
-│   │   │   └── UploadRepositoryInterface.php — persistencia de uploads
-│   │   └── DTO/
-│   │       ├── ReplacementResult.php — resultado de reemplazo
-│   │       └── UploadResult.php — resultado de carga
+│   │   │   ├── UploadRepositoryInterface.php — persistencia de uploads
+│   │   │   └── UploadStorageInterface.php — contrato de almacenamiento binario de uploads
+│   │   ├── DTO/
+│   │   │   ├── ReplacementResult.php — resultado de reemplazo
+│   │   │   └── UploadResult.php — resultado de carga
+│   │   ├── Exceptions/
+│   │   │   ├── InvalidOwnerIdException.php — ownerId inválido en la solicitud
+│   │   │   └── InvalidUploadFileException.php — archivo de carga inválido
+│   │   └── Support/
+│   │       ├── OwnerIdFormats.php — formatos soportados para ownerId
+│   │       └── OwnerIdMode.php — enum de modo de normalización de ownerId
 │   └── User/ — casos de uso de usuario/avatar
 │       ├── Actions/
 │       │   ├── DeleteAvatar.php — elimina avatar y limpia
@@ -120,7 +128,9 @@ app/ — código de aplicación organizado por capas
 │   ├── Uploads/ — infraestructura de media/uploads
 │   │   ├── README.md — guía de uploads
 │   │   ├── Core/ — núcleo común de media
-│   │   │   ├── Adapters/SpatieMediaResource.php — adapta recursos Spatie
+│   │   │   ├── Adapters/
+│   │   │   │   ├── LaravelUploadStorage.php — almacena binarios usando Storage
+│   │   │   │   └── SpatieMediaResource.php — adapta recursos Spatie
 │   │   │   ├── Contracts/
 │   │   │   │   ├── FileConstraints.php
 │   │   │   │   ├── MediaArtifactCollector.php
@@ -141,7 +151,10 @@ app/ — código de aplicación organizado por capas
 │   │   │   │   ├── Concerns/TracksMediaVersions.php — tracking de versiones
 │   │   │   │   ├── MediaCleanupState.php — estado de limpieza
 │   │   │   │   └── Upload.php — modelo de upload
-│   │   │   ├── Orchestrators/DefaultUploadOrchestrator.php — orquesta flujos
+│   │   │   ├── Orchestrators/
+│   │   │   │   ├── DefaultUploadOrchestrator.php — orquesta flujos
+│   │   │   │   ├── DocumentUploadGuard.php — valida uploads de documentos/secretos
+│   │   │   │   └── MediaProfileResolver.php — resuelve perfil según solicitud
 │   │   │   ├── Paths/
 │   │   │   │   ├── MediaLibrary/TenantAwareFileNamer.php — nombres por tenant (Spatie)
 │   │   │   │   ├── MediaLibrary/TenantAwarePathGenerator.php — rutas por tenant (Spatie)
@@ -149,7 +162,9 @@ app/ — código de aplicación organizado por capas
 │   │   │   │   └── TenantPathLayout.php — compone la estructura física de rutas por tenant
 │   │   │   ├── Registry/UploadProfileRegistry.php — catálogo de perfiles
 │   │   │   ├── Repositories/EloquentUploadRepository.php — repo uploads
-│   │   │   └── Services/MediaReplacementService.php — reemplazo de media
+│   │   │   └── Services/
+│   │   │       ├── ConfigurableOwnerIdNormalizer.php — normaliza ownerId según modo/formato
+│   │   │       └── MediaReplacementService.php — reemplazo de media
 │   │   ├── Http/
 │   │   │   ├── Controllers/
 │   │   │   │   ├── DownloadUploadController.php — descarga un upload
@@ -163,6 +178,7 @@ app/ — código de aplicación organizado por capas
 │   │   │   ├── Requests/
 │   │   │   │   ├── Concerns/UsesDocumentValidation.php — reglas doc
 │   │   │   │   ├── Concerns/UsesImageValidation.php — reglas imagen
+│   │   │   │   ├── Concerns/UsesOwnerIdValidation.php — valida ownerId aportado
 │   │   │   │   ├── HttpUploadedMedia.php — adapta archivo HTTP a dominio
 │   │   │   │   ├── ReplaceUploadRequest.php — valida reemplazo
 │   │   │   │   ├── Settings/DeleteAvatarRequest.php — valida borrado avatar
@@ -172,10 +188,12 @@ app/ — código de aplicación organizado por capas
 │   │   │   ├── Rules/SecureImageValidation.php — regla compuesta para imágenes
 │   │   │   └── Support/MediaServingResponder.php — centraliza respuestas HTTP para servir media
 │   │   ├── Pipeline/ — pipelines y seguridad de media
-│   │   │   ├── Contracts/UploadMetadata.php
-│   │   │   ├── Contracts/UploadPipeline.php
-│   │   │   ├── Contracts/UploadResult.php
-│   │   │   ├── Contracts/UploadService.php
+│   │   │   ├── Contracts/
+│   │   │   │   ├── ImageUploadPipelineInterface.php — interfaz específica para pipeline de imágenes
+│   │   │   │   ├── UploadMetadata.php
+│   │   │   │   ├── UploadPipeline.php
+│   │   │   │   ├── UploadResult.php
+│   │   │   │   └── UploadService.php
 │   │   │   ├── DTO/InternalPipelineResult.php
 │   │   │   ├── DefaultUploadPipeline.php
 │   │   │   ├── DefaultUploadService.php
@@ -222,6 +240,9 @@ app/ — código de aplicación organizado por capas
 │   │   │   │   └── QuarantineToken.php — token de seguimiento
 │   │   │   ├── Scanning/
 │   │   │   │   ├── GitYaraRuleManager.php — gestiona reglas Yara desde git
+│   │   │   │   ├── LaravelCacheScanCircuitStore.php — almacén de circuit breaker en cache Laravel
+│   │   │   │   ├── ScanCircuitBreaker.php — corta escaneos si hay fallos consecutivos
+│   │   │   │   ├── ScanCircuitStoreInterface.php — contrato de storage para circuit breaker
 │   │   │   │   ├── ScanCoordinator.php — orquesta escaneos
 │   │   │   │   ├── ScanCoordinatorInterface.php — contrato de coordinador
 │   │   │   │   ├── Scanners/AbstractScanner.php — base para escáneres
@@ -242,6 +263,7 @@ app/ — código de aplicación organizado por capas
 │   │   │   ├── Services/MediaCleanupScheduler.php — agenda limpiezas
 │   │   │   ├── Support/ImageUploadReporter.php — reporter de imagen
 │   │   │   ├── Support/MediaArtifactCollector.php — recolector de artefactos
+│   │   │   ├── Support/MediaAttacher.php — adjunta media a modelos Spatie de forma segura
 │   │   │   ├── Support/MediaCleanupArtifactsBuilder.php — construye lotes de artefactos para limpieza
 │   │   │   ├── Support/PipelineResultMapper.php — mapea resultados
 │   │   │   └── Support/QuarantineManager.php — gestiona cuarentenas

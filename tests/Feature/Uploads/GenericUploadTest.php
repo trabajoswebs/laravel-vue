@@ -178,15 +178,19 @@ final class GenericUploadTest extends TestCase
     {
         [$user, $tenant] = $this->makeTenantUser();
 
-        $uploadId = $this->actingAs($user)
+        $storeResponse = $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
             ->withHeader('Accept', 'application/json')
             ->post(route('uploads.store'), [
                 'profile_id' => 'certificate_secret',
                 // Cabecera DER tipo PKCS#12 (0x30...) para pasar validación de firma mínima.
                 'file' => UploadedFile::fake()->createWithContent('cert.p12', "\x30\x82\x04\x00" . random_bytes(2044))->mimeType('application/octet-stream'),
-            ])
-            ->json('id');
+            ]);
+
+        $storeResponse->assertCreated();
+        $uploadId = $storeResponse->json('id');
+        $this->assertIsString($uploadId);
+        $this->assertNotSame('', $uploadId);
 
         Log::spy();
 

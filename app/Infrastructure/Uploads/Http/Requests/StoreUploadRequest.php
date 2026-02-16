@@ -12,6 +12,7 @@ use App\Infrastructure\Models\User;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
 use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesDocumentValidation;
 use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesImageValidation;
+use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesOwnerIdValidation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\ValidationException;
 
@@ -29,6 +30,7 @@ final class StoreUploadRequest extends FormRequest
     // Traits para funcionalidades adicionales
     use UsesImageValidation;
     use UsesDocumentValidation;
+    use UsesOwnerIdValidation;
     use SanitizesInputs;
 
     /**
@@ -81,8 +83,8 @@ final class StoreUploadRequest extends FormRequest
             'profile_id' => ['required', 'string', $profileRule],
             // Reglas para el archivo dependen del tipo de perfil
             'file' => $profile ? $this->fileRulesForProfile($profile) : ['required', 'file'],
-            // ID del propietario es opcional y debe ser un entero
-            'owner_id' => ['nullable', 'integer'],
+            // ID del propietario validado según modo configurado (int|uuid|ulid)
+            'owner_id' => $this->ownerIdRules(),
 
             // Campo adicional para correlación de solicitudes
             'correlation_id' => ['nullable', 'string', 'max:64', 'alpha_dash'],

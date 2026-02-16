@@ -25,12 +25,14 @@ final class EloquentUploadRepository implements UploadRepositoryInterface // Imp
      */
     public function store(UploadResult $result, UploadProfile $profile, User $actor, int|string|null $ownerId = null): void // Persiste metadata
     {
+        $ownerValue = $this->normalizeOwnerIdForStorage($ownerId);
+
         Upload::query()->updateOrCreate( // Inserta o actualiza por PK UUID
             ['id' => $result->id], // Usa id como clave primaria
             [
                 'tenant_id' => $result->tenantId, // Tenant propietario del upload
-                'owner_type' => $ownerId ? User::class : null, // Tipo de owner si aplica
-                'owner_id' => $ownerId ? (int) $ownerId : null, // ID del owner si aplica
+                'owner_type' => $ownerValue !== null ? User::class : null, // Tipo de owner si aplica
+                'owner_id' => $ownerValue, // ID del owner si aplica
                 'profile_id' => $result->profileId, // Perfil de upload
                 'disk' => $result->disk, // Disco de almacenamiento
                 'path' => $result->path, // Path relativo
@@ -42,5 +44,15 @@ final class EloquentUploadRepository implements UploadRepositoryInterface // Imp
                 'created_by_user_id' => $actor->getKey(), // Usuario que subió
             ]
         ); // Fin updateOrCreate
+    }
+
+    private function normalizeOwnerIdForStorage(int|string|null $ownerId): ?string
+    {
+        if ($ownerId === null) {
+            return null;
+        }
+
+        $value = is_string($ownerId) ? trim($ownerId) : (string) $ownerId;
+        return $value !== '' ? $value : null;
     }
 }

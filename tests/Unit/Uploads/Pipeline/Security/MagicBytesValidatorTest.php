@@ -6,8 +6,8 @@ namespace Tests\Unit\Uploads\Pipeline\Security;
 
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Application\Shared\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use Tests\TestCase;
 
 final class MagicBytesValidatorTest extends TestCase
@@ -19,7 +19,7 @@ final class MagicBytesValidatorTest extends TestCase
         $path = $this->tempFileWithBytes($jpeg);
 
         try {
-            $validator = new MagicBytesValidator(app(UploadSecurityLogger::class));
+            $validator = new MagicBytesValidator(new NullMagicLogger());
             $validator->validate($path, new FileConstraints(), ['correlation_id' => 'cid-1']);
 
             $this->assertTrue(true);
@@ -33,7 +33,7 @@ final class MagicBytesValidatorTest extends TestCase
         $path = $this->tempFileWithBytes("%PDF-1.7\n" . str_repeat('A', 64));
 
         try {
-            $validator = new MagicBytesValidator(app(UploadSecurityLogger::class));
+            $validator = new MagicBytesValidator(new NullMagicLogger());
 
             $this->expectException(UploadValidationException::class);
             $validator->validate($path, new FileConstraints(), ['correlation_id' => 'cid-2']);
@@ -50,7 +50,7 @@ final class MagicBytesValidatorTest extends TestCase
         $path = $this->tempFileWithBytes('plain text payload');
 
         try {
-            $validator = new MagicBytesValidator(app(UploadSecurityLogger::class));
+            $validator = new MagicBytesValidator(new NullMagicLogger());
             $validator->validate($path, new FileConstraints(), ['correlation_id' => 'cid-3']);
 
             $this->assertTrue(true);
@@ -72,7 +72,7 @@ final class MagicBytesValidatorTest extends TestCase
         $path = $this->tempFileWithBytes($jpeg);
 
         try {
-            $validator = new MagicBytesValidator(app(UploadSecurityLogger::class));
+            $validator = new MagicBytesValidator(new NullMagicLogger());
             $validator->validate($path, new FileConstraints(), ['correlation_id' => 'cid-jpg-alias']);
 
             $this->assertTrue(true);
@@ -90,4 +90,15 @@ final class MagicBytesValidatorTest extends TestCase
 
         return $path;
     }
+}
+
+final class NullMagicLogger implements LoggerInterface
+{
+    public function debug(string $message, array $context = []): void {}
+    public function info(string $message, array $context = []): void {}
+    public function notice(string $message, array $context = []): void {}
+    public function warning(string $message, array $context = []): void {}
+    public function error(string $message, array $context = []): void {}
+    public function critical(string $message, array $context = []): void {}
+    public function alert(string $message, array $context = []): void {}
 }

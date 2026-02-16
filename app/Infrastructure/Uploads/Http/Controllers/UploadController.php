@@ -6,6 +6,8 @@ namespace App\Infrastructure\Uploads\Http\Controllers;
 
 use App\Application\Uploads\Actions\ReplaceFile;
 use App\Application\Uploads\Actions\UploadFile;
+use App\Application\Uploads\Exceptions\InvalidOwnerIdException;
+use App\Application\Uploads\Exceptions\InvalidUploadFileException;
 use App\Domain\Uploads\UploadProfileId;
 use App\Infrastructure\Http\Controllers\Controller;
 use App\Infrastructure\Uploads\Core\Models\Upload;
@@ -16,6 +18,7 @@ use App\Infrastructure\Uploads\Http\Requests\StoreUploadRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use App\Support\Logging\SecurityLogger;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response as HttpStatus;
 
 /**
@@ -60,6 +63,14 @@ final class UploadController extends Controller
                 $request->correlationId(),
                 $request->meta(),
             );
+        } catch (InvalidOwnerIdException $e) {
+            throw ValidationException::withMessages([
+                'owner_id' => [$e->getMessage()],
+            ]);
+        } catch (InvalidUploadFileException $e) {
+            throw ValidationException::withMessages([
+                'file' => [$e->getMessage()],
+            ]);
         } catch (\Throwable $e) {
             // Registra errores durante la subida de archivos
             SecurityLogger::error('uploads.store_failed', [
@@ -133,6 +144,14 @@ final class UploadController extends Controller
                 $request->meta(),
                 $upload,
             );
+        } catch (InvalidOwnerIdException $e) {
+            throw ValidationException::withMessages([
+                'owner_id' => [$e->getMessage()],
+            ]);
+        } catch (InvalidUploadFileException $e) {
+            throw ValidationException::withMessages([
+                'file' => [$e->getMessage()],
+            ]);
         } catch (\Throwable $e) {
             // Registra errores durante la operación de reemplazo
             SecurityLogger::error('uploads.replace_failed', [

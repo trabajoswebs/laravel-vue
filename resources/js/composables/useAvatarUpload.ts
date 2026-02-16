@@ -1,72 +1,68 @@
-import { router, usePage } from '@inertiajs/vue3'; // Inertia router + page props (Ej. router.reload({ only: ['auth'] }))
-import { computed, onBeforeUnmount, ref } from 'vue'; // Reactividad Vue (Ej. ref(false) -> { value: false })
-import { useI18n } from 'vue-i18n'; // i18n (Ej. t('key') -> "Texto traducido")
-import { notify } from '@/plugins/toaster-plugin'; // Toasts centralizados (notify.error('X') -> estilos consistentes)
-import type { Config } from 'ziggy-js'; // Tipo config Ziggy (Ej. Config.location -> "https://app.test")
-import { route } from 'ziggy-js'; // Resolución de rutas Ziggy (Ej. route('home') -> "/")
+import { notify } from '@/plugins/toaster-plugin';
+import { router, usePage } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { Config } from 'ziggy-js';
+import { route } from 'ziggy-js';
 
-import { sendFormData, type NormalizedError } from '@/lib/http/xhrFormData'; // XHR helper (Ej. sendFormData(...) -> { data, status })
-import type { AppPageProps, User } from '@/types'; // Tipos app (Ej. User.email -> "a@b.com")
+import { sendFormData, type NormalizedError } from '@/lib/http/xhrFormData';
+import type { AppPageProps, User } from '@/types';
 
-// Tipo para los errores que devuelve el backend (Ej. { avatar: ["Mensaje"] })
+// ============================================================================
+// TYPES
+// ============================================================================
+
 type ErrorBag = Record<string, string[]>;
 
-// Restricciones para la validación del archivo de avatar (UX; el backend valida también)
 interface AvatarValidationConstraints {
-    maxBytes: number; // Tamaño máximo en bytes (Ej. 25 * 1024 * 1024)
-    minDimension: number; // Dimensión mínima en píxeles (Ej. 128)
-    maxMegapixels: number; // Límite de megapíxeles (Ej. 48)
-    allowedMimeTypes: readonly string[]; // Tipos MIME permitidos (Ej. ['image/jpeg', 'image/png'])
+    maxBytes: number;
+    minDimension: number;
+    maxMegapixels: number;
+    allowedMimeTypes: readonly string[];
 }
 
-// Opciones configurables para el hook
 interface UseAvatarUploadOptions {
-    /**
-     * Nombre de la ruta de actualización (Ziggy) o URL absoluta.
-     * @default 'settings.avatar.update'
-     */
     uploadRoute?: string;
-
-    /**
-     * Nombre de la ruta de eliminación (Ziggy) o URL absoluta.
-     * @default 'settings.avatar.destroy'
-     */
     deleteRoute?: string;
-
-    /**
-     * Refrescar los props `auth` tras completar la operación.
-     * @default true
-     */
     refreshAuthOnSuccess?: boolean;
-
-    /**
-     * Restringe validaciones en cliente. Debe empatar con backend.
-     */
     constraints?: Partial<AvatarValidationConstraints>;
 }
 
-// Resultado de la validación local del archivo
 interface UploadValidationResult {
-    width: number; // Ej. 400
-    height: number; // Ej. 400
-    bytes: number; // Ej. 123456
-    sanitizedName: string; // Ej. "mi_avatar.png"
+    width: number;
+    height: number;
+    bytes: number;
+    sanitizedName: string;
 }
 
-// Representa una subida en curso que puede cancelarse
 interface OngoingUpload {
-    controller: AbortController | null; // Ej. new AbortController()
+    controller: AbortController | null;
 }
 
-// Datos devueltos tras una subida exitosa
 export interface AvatarUploadSuccessPayload {
-    filename: string; // Ej. "mi_avatar.png"
-    width: number; // Ej. 400
-    height: number; // Ej. 400
-    bytes: number; // Ej. 123456
+    filename: string;
+    width: number;
+    height: number;
+    bytes: number;
 }
 
-// Etiquetas para mostrar los tipos MIME en mensajes de error
+type AvatarOverride = {
+    avatar_url?: string | null;
+    avatar_thumb_url?: string | null;
+    avatar_version?: string | number | null;
+};
+
+interface RejectionMeta {
+    status?: number;
+    aborted?: boolean;
+    name?: string;
+    toastShown?: boolean;
+}
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
 export const MIME_EXTENSION_LABELS: Record<string, string> = {
     'image/jpeg': 'JPEG',
     'image/png': 'PNG',
@@ -75,51 +71,49 @@ export const MIME_EXTENSION_LABELS: Record<string, string> = {
     'image/avif': 'AVIF',
 };
 
-// Opciones por defecto
 const DEFAULT_OPTIONS = {
     uploadRoute: 'settings.avatar.update',
     deleteRoute: 'settings.avatar.destroy',
     refreshAuthOnSuccess: true,
 } as const satisfies Omit<Required<UseAvatarUploadOptions>, 'constraints'>;
 
-// Restricciones por defecto
 const DEFAULT_CONSTRAINTS: AvatarValidationConstraints = {
-    maxBytes: 25 * 1024 * 1024, // 25MB (mantener alineado con backend)
-    minDimension: 128, // 128x128 px
-    maxMegapixels: 48, // 48 megapíxeles
+    maxBytes: 25 * 1024 * 1024, // 25MB
+    minDimension: 128,
+    maxMegapixels: 48,
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'],
 };
 
-// Comprueba si el navegador soporta AbortController para cancelar peticiones
-const SUPPORTS_ABORT = typeof AbortController !== 'undefined'; // Ej. true en browsers modernos
-const FALLBACK_FILENAME = 'avatar'; // Ej. "avatar"
-const CACHE_BUSTER_PARAM = '_cb'; // Ej. "/avatar.png?_cb=123"
-const IMAGE_READ_TIMEOUT_MS = 10_000; // 10s
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']); // Hosts típicos dev
+const SUPPORTS_ABORT = typeof AbortController !== 'undefined';
+const FALLBACK_FILENAME = 'avatar';
+const CACHE_BUSTER_PARAM = '_cb';
+const IMAGE_READ_TIMEOUT_MS = 10_000;
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+const SUCCESS_MESSAGE_DURATION = 3000;
 
-/**
- * Verifica si una cadena es una URL absoluta (http:// o https://).
- * @example isAbsoluteUrl('https://x.com') -> true
- */
+// Magic numbers para detección de MIME
+const MAGIC_NUMBERS = {
+    JPEG: [0xff, 0xd8, 0xff],
+    PNG: [0x89, 0x50, 0x4e, 0x47],
+    GIF: [0x47, 0x49, 0x46],
+    WEBP: { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] },
+    AVIF: { offset: 4, bytes: [0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66] },
+} as const;
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
 function isAbsoluteUrl(target: string): boolean {
     return /^https?:\/\//i.test(target);
 }
 
-/**
- * Resuelve una ruta de Ziggy o una URL absoluta.
- * @example resolveRoute('settings.avatar.update', config) -> '/settings/avatar'
- * @example resolveRoute('https://api.example.com/upload', null) -> 'https://api.example.com/upload'
- */
 function resolveRoute(target: string, ziggyConfig: Config | null): string {
     if (!target || typeof target !== 'string') {
         throw new Error('Route name or URL must be a non-empty string.');
     }
 
-    if (target.startsWith('/')) {
-        return target;
-    }
-
-    if (isAbsoluteUrl(target)) {
+    if (target.startsWith('/') || isAbsoluteUrl(target)) {
         return target;
     }
 
@@ -130,10 +124,6 @@ function resolveRoute(target: string, ziggyConfig: Config | null): string {
     return route(target, undefined, false, ziggyConfig);
 }
 
-/**
- * Limpia un nombre de archivo de caracteres peligrosos o no deseados.
- * @example sanitizeFilename('my avatar <script>.jpg') -> 'my avatar .jpg'
- */
 function sanitizeFilename(value: string | undefined): string {
     if (!value || typeof value !== 'string') {
         return FALLBACK_FILENAME;
@@ -148,10 +138,6 @@ function sanitizeFilename(value: string | undefined): string {
     return cleaned.length > 0 ? cleaned : FALLBACK_FILENAME;
 }
 
-/**
- * Convierte un tamaño en bytes a una cadena legible (MB).
- * @example formatBytes(2560000, 'es') -> "2,4 MB" (según locale)
- */
 function formatBytes(bytes: number, locale: string): string {
     const megabytes = bytes / (1024 * 1024);
     const formatter = new Intl.NumberFormat(locale, {
@@ -161,11 +147,8 @@ function formatBytes(bytes: number, locale: string): string {
     return `${formatter.format(megabytes)} MB`;
 }
 
-/**
- * Lee las dimensiones reales de un archivo de imagen con un timeout.
- * @example readImageDimensions(file) -> Promise<{ width: 400, height: 400 }>
- */
 async function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
+    // Intenta usar createImageBitmap (más rápido)
     if (typeof window !== 'undefined' && 'createImageBitmap' in window && typeof createImageBitmap === 'function') {
         try {
             const bitmap = await createImageBitmap(file);
@@ -175,34 +158,33 @@ async function readImageDimensions(file: File): Promise<{ width: number; height:
             }
             return dimensions;
         } catch (error) {
-            // Nota: warning solo informativo, cae al fallback Image()
-            console.warn('createImageBitmap failed, falling back to Image()', error);
+            if (import.meta.env.DEV) {
+                console.warn('createImageBitmap failed, falling back to Image()', error);
+            }
         }
     }
 
+    // Fallback: Image()
     return new Promise((resolve, reject) => {
         const image = new Image();
         const objectUrl = URL.createObjectURL(file);
 
-        const timeoutId =
-            typeof window !== 'undefined'
-                ? window.setTimeout(() => {
-                      URL.revokeObjectURL(objectUrl);
-                      reject(new Error('Image decode timeout exceeded.'));
-                  }, IMAGE_READ_TIMEOUT_MS)
-                : undefined;
+        const timeoutId = setTimeout(() => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Image decode timeout exceeded.'));
+        }, IMAGE_READ_TIMEOUT_MS);
+
+        const cleanup = () => {
+            clearTimeout(timeoutId);
+            URL.revokeObjectURL(objectUrl);
+        };
 
         image.decoding = 'async';
 
         image.onload = () => {
-            if (timeoutId !== undefined) {
-                clearTimeout(timeoutId);
-            }
-
+            cleanup();
             const width = image.naturalWidth || image.width;
             const height = image.naturalHeight || image.height;
-
-            URL.revokeObjectURL(objectUrl);
 
             if (!width || !height) {
                 reject(new Error('Invalid image dimensions.'));
@@ -213,11 +195,7 @@ async function readImageDimensions(file: File): Promise<{ width: number; height:
         };
 
         image.onerror = () => {
-            if (timeoutId !== undefined) {
-                clearTimeout(timeoutId);
-            }
-
-            URL.revokeObjectURL(objectUrl);
+            cleanup();
             reject(new Error('Unable to read image dimensions.'));
         };
 
@@ -225,34 +203,20 @@ async function readImageDimensions(file: File): Promise<{ width: number; height:
     });
 }
 
-/**
- * Obtiene el origin actual a partir de Ziggy o window.location.
- * @example resolveCurrentOrigin('https://app.test') -> 'https://app.test'
- */
 function resolveCurrentOrigin(locationCandidate: string | null | undefined): string | null {
-    const candidates = [locationCandidate];
-
-    if (typeof window !== 'undefined' && window.location?.origin) {
-        candidates.push(window.location.origin);
-    }
+    const candidates = [locationCandidate, typeof window !== 'undefined' ? window.location?.origin : null].filter(Boolean);
 
     for (const candidate of candidates) {
-        if (!candidate) continue;
-
         try {
-            return new URL(candidate).origin;
+            return new URL(candidate as string).origin;
         } catch {
-            // Ignorar valores inválidos
+            continue;
         }
     }
 
     return null;
 }
 
-/**
- * Normaliza URLs de assets que apuntan a hosts locales no accesibles desde el navegador actual.
- * @example normalizeAssetHost('http://localhost/media/a.png', 'https://app.test') -> 'https://app.test/media/a.png'
- */
 function normalizeAssetHost(url: string, preferredOrigin: string | null): string {
     if (!url) return url;
 
@@ -275,47 +239,33 @@ function normalizeAssetHost(url: string, preferredOrigin: string | null): string
     }
 }
 
-/**
- * Detecta el tipo MIME real de un archivo leyendo sus primeros bytes (magic numbers).
- * @example detectMimeType(fileJPEG) -> "image/jpeg"
- */
 async function detectMimeType(file: File): Promise<string | null> {
     try {
         const buffer = await file.slice(0, 12).arrayBuffer();
         const bytes = new Uint8Array(buffer);
 
-        // JPEG (FF D8 FF)
-        if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+        // JPEG
+        if (matchesMagicNumber(bytes, MAGIC_NUMBERS.JPEG)) {
             return 'image/jpeg';
         }
 
-        // PNG (89 50 4E 47)
-        if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+        // PNG
+        if (matchesMagicNumber(bytes, MAGIC_NUMBERS.PNG)) {
             return 'image/png';
         }
 
-        // GIF (47 49 46)
-        if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+        // GIF
+        if (matchesMagicNumber(bytes, MAGIC_NUMBERS.GIF)) {
             return 'image/gif';
         }
 
-        // WebP (.... WEBP)
-        if (bytes.length >= 12 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+        // WebP
+        if (matchesMagicNumberWithOffset(bytes, MAGIC_NUMBERS.WEBP)) {
             return 'image/webp';
         }
 
-        // AVIF (ftypavif)
-        if (
-            bytes.length >= 12 &&
-            bytes[4] === 0x66 &&
-            bytes[5] === 0x74 &&
-            bytes[6] === 0x79 &&
-            bytes[7] === 0x70 &&
-            bytes[8] === 0x61 &&
-            bytes[9] === 0x76 &&
-            bytes[10] === 0x69 &&
-            bytes[11] === 0x66
-        ) {
+        // AVIF
+        if (matchesMagicNumberWithOffset(bytes, MAGIC_NUMBERS.AVIF)) {
             return 'image/avif';
         }
     } catch (error) {
@@ -327,31 +277,26 @@ async function detectMimeType(file: File): Promise<string | null> {
     return null;
 }
 
-/**
- * Crea un string resumen de tipos MIME permitidos para mostrar al usuario.
- * @example buildAllowedSummary(['image/jpeg','image/png']) -> "JPEG, PNG"
- */
+function matchesMagicNumber(bytes: Uint8Array, signature: readonly number[]): boolean {
+    if (bytes.length < signature.length) return false;
+    return signature.every((byte, index) => bytes[index] === byte);
+}
+
+function matchesMagicNumberWithOffset(bytes: Uint8Array, config: { offset: number; bytes: readonly number[] }): boolean {
+    if (bytes.length < config.offset + config.bytes.length) return false;
+    return config.bytes.every((byte, index) => bytes[config.offset + index] === byte);
+}
+
 function buildAllowedSummary(mimeTypes: readonly string[]): string {
     return mimeTypes.map((mime) => MIME_EXTENSION_LABELS[mime] ?? mime).join(', ');
 }
 
-/**
- * Extrae la extensión de un nombre de archivo.
- * @example getExtensionFromName('foto.png') -> "png"
- */
 function getExtensionFromName(name: string | undefined): string | null {
     if (!name) return null;
-
     const match = name.split('.').pop();
-    if (!match) return null;
-
-    return match.trim().toLowerCase();
+    return match ? match.trim().toLowerCase() : null;
 }
 
-/**
- * Verifica si un archivo coincide con los tipos MIME o extensiones permitidas.
- * NOTA: validación UX; el backend valida firma/MIME reales.
- */
 function matchesAllowedMime(file: File, allowed: Set<string>, fallbackExtensions: readonly string[]): boolean {
     const mime = file.type?.toLowerCase() ?? '';
 
@@ -360,63 +305,238 @@ function matchesAllowedMime(file: File, allowed: Set<string>, fallbackExtensions
     }
 
     const extension = getExtensionFromName(file.name);
-    if (!extension) return false;
-
-    return fallbackExtensions.some((value) => value === extension);
+    return extension ? fallbackExtensions.includes(extension) : false;
 }
 
-/**
- * Hook de Vue para gestionar la subida y eliminación de avatares.
- *
- * Objetivos clave de este refactor:
- * - Unificar la forma de rechazar errores (status/aborted/name) con rejectWithMeta().
- * - Marcar fallos de configuración (Ziggy/route missing) con name='ConfigError'.
- * - Mantener 422/403/429 como “errores esperables” para que el caller pueda silenciar logs.
- * - Evitar “churn” de estados/errores: setAvatarError ahora MERGE y no pisa otros campos.
- */
-export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
-    const { t, locale } = useI18n(); // Ej. t('profile.title') -> "Perfil"
+// ============================================================================
+// ERROR HANDLING UTILITIES
+// ============================================================================
 
-    // Fusiona opciones
-    const mergedOptions = {
+function coerceMessage(value: unknown): string | undefined {
+    if (typeof value === 'string' && value.trim() !== '') {
+        return value.trim();
+    }
+    return undefined;
+}
+
+function pickAnyErrorMessage(bag: Record<string, unknown> | undefined): string | undefined {
+    if (!bag || typeof bag !== 'object' || Array.isArray(bag)) {
+        return undefined;
+    }
+
+    const firstKey = Object.keys(bag)[0];
+    if (!firstKey) return undefined;
+
+    const value = bag[firstKey];
+
+    if (Array.isArray(value)) {
+        return value.map(coerceMessage).find(Boolean);
+    }
+
+    return coerceMessage(value);
+}
+
+function extractPayloadMessage(payload: unknown): string | undefined {
+    if (!payload) return undefined;
+
+    const direct = coerceMessage(payload);
+    if (direct) return direct;
+
+    if (typeof payload === 'string') {
+        try {
+            const parsed = JSON.parse(payload);
+            if (parsed && typeof parsed === 'object') {
+                const parsedMessage = extractPayloadMessage(parsed);
+                if (parsedMessage) return parsedMessage;
+            }
+        } catch {
+            // No es JSON válido
+        }
+    }
+
+    if (typeof payload === 'object' && !Array.isArray(payload)) {
+        const raw = payload as Record<string, unknown>;
+
+        const message = coerceMessage(raw.message) ?? coerceMessage(raw.error);
+        if (message) return message;
+
+        if (raw.errors && typeof raw.errors === 'object' && !Array.isArray(raw.errors)) {
+            const nestedError = pickAnyErrorMessage(raw.errors as Record<string, unknown>);
+            if (nestedError) return nestedError;
+        }
+
+        if (raw.error && typeof raw.error === 'object') {
+            const nested = extractPayloadMessage(raw.error);
+            if (nested) return nested;
+        }
+    }
+
+    return undefined;
+}
+
+function pickServerMessage(err: NormalizedError): string | undefined {
+    if (err && typeof err === 'object') {
+        const direct = coerceMessage(err.message) ?? extractPayloadMessage(err.data);
+        if (direct) return direct;
+
+        const statusMessage = coerceMessage(err.statusText);
+        if (statusMessage) return statusMessage;
+    }
+
+    return undefined;
+}
+
+function pickErrorFromBag(bag: ErrorBag, field = 'avatar'): string | undefined {
+    const value = bag[field];
+    if (!Array.isArray(value)) return undefined;
+    return value.map(coerceMessage).find(Boolean);
+}
+
+function sanitizeMessage(message: string | undefined, fallback: string): string {
+    if (!message) return fallback;
+
+    const trimmed = message.trim();
+
+    // Filtro de mensajes genéricos inútiles
+    if (/excepci[oó]n no controlada/i.test(trimmed) || /^uncontrolled exception/i.test(trimmed)) {
+        return fallback;
+    }
+
+    return trimmed;
+}
+
+function resolveAvatarErrorMessage(err: NormalizedError, normalized: ErrorBag, fallback: string): string {
+    const message =
+        pickServerMessage(err) ??
+        pickErrorFromBag(normalized) ??
+        pickAnyErrorMessage(err.errors as Record<string, unknown> | undefined) ??
+        coerceMessage(err.message) ??
+        coerceMessage(err.statusText) ??
+        fallback;
+
+    return sanitizeMessage(message, fallback);
+}
+
+function normalizeErrors(errorBag: Record<string, string | string[]>): ErrorBag {
+    const result: ErrorBag = {};
+
+    Object.entries(errorBag).forEach(([field, message]) => {
+        if (!message) return;
+
+        if (Array.isArray(message)) {
+            result[field] = message.map((value) => value.toString());
+            return;
+        }
+
+        result[field] = [message.toString()];
+    });
+
+    return result;
+}
+
+function createRejection(message: string, meta: RejectionMeta = {}): Promise<never> {
+    const { status = 0, aborted = false, name = 'HttpError', toastShown = false } = meta;
+
+    const error: any = Object.assign(new Error(message), {
+        status,
+        aborted,
+        name,
+        toastShown,
+    });
+
+    return Promise.reject(error);
+}
+
+function emitAvatarErrorToast(message: string): boolean {
+    if (typeof message !== 'string' || message.trim() === '') {
+        return false;
+    }
+
+    notify.error(message);
+    return true;
+}
+
+function rejectWithAvatarError(message: string, meta: RejectionMeta = {}): Promise<never> {
+    const toastShown = emitAvatarErrorToast(message);
+
+    return createRejection(message, {
+        ...meta,
+        toastShown: meta.toastShown ?? toastShown,
+    });
+}
+
+// ============================================================================
+// MAIN COMPOSABLE
+// ============================================================================
+
+export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
+    const { t, locale } = useI18n();
+
+    // ========================================================================
+    // CONFIGURATION
+    // ========================================================================
+
+    const config = {
         uploadRoute: options.uploadRoute ?? DEFAULT_OPTIONS.uploadRoute,
         deleteRoute: options.deleteRoute ?? DEFAULT_OPTIONS.deleteRoute,
         refreshAuthOnSuccess: options.refreshAuthOnSuccess ?? DEFAULT_OPTIONS.refreshAuthOnSuccess,
     };
 
-    // Fusiona restricciones
-    const mergedConstraints: AvatarValidationConstraints = {
+    const constraints: AvatarValidationConstraints = {
         ...DEFAULT_CONSTRAINTS,
         ...options.constraints,
     };
 
-    // Conjuntos/listas para validación rápida
-    const allowedMimeSet = new Set(mergedConstraints.allowedMimeTypes.map((mime) => mime.toLowerCase())); // Ej. Set("image/png")
-    const allowedExtensions = mergedConstraints.allowedMimeTypes.map((mime) => mime.split('/').pop() ?? '').filter((value) => value !== ''); // Ej. ["jpeg","png",...]
-    const allowedSummary = buildAllowedSummary(mergedConstraints.allowedMimeTypes); // Ej. "JPEG, PNG, WebP"
-    const acceptAttribute = mergedConstraints.allowedMimeTypes.join(','); // Ej. "image/jpeg,image/png"
+    const allowedMimeSet = new Set(constraints.allowedMimeTypes.map((mime) => mime.toLowerCase()));
+    const allowedExtensions = constraints.allowedMimeTypes.map((mime) => mime.split('/').pop() ?? '').filter(Boolean);
+    const allowedSummary = buildAllowedSummary(constraints.allowedMimeTypes);
+    const acceptAttribute = constraints.allowedMimeTypes.join(',');
 
-    // Page props + Ziggy
-    const page = usePage<AppPageProps>(); // Ej. page.props.auth.user
+    // ========================================================================
+    // PAGE PROPS & ZIGGY
+    // ========================================================================
+
+    const page = usePage<AppPageProps>();
+
     const ziggyConfig = computed<Config | null>(() => {
         const config = page.props.ziggy as Config | undefined;
         return config ?? null;
     });
+
     const currentOrigin = computed<string | null>(() => {
         const ziggyLocation = page.props.ziggy?.location ?? null;
         return resolveCurrentOrigin(ziggyLocation);
     });
 
-    // Usuario autenticado
     const authUser = computed<User | null>(() => (page.props.auth?.user as User | undefined) ?? null);
 
-    // Cache buster para evitar que el navegador te sirva el avatar viejo
-    const avatarCacheBuster = ref<number>(0);
-    // Override local inmediato tras PATCH/DELETE para no depender de router.reload()
-    type AvatarOverride = { avatar_url?: string | null; avatar_thumb_url?: string | null; avatar_version?: string | number | null };
-    const avatarOverride = ref<AvatarOverride | null>(null);
+    // ========================================================================
+    // STATE MANAGEMENT
+    // ========================================================================
 
-    // Devuelve el “valor crudo” de avatar desde props
+    const avatarCacheBuster = ref<number>(0);
+    const avatarOverride = ref<AvatarOverride | null>(null);
+    const currentUpload = ref<OngoingUpload | null>(null);
+
+    // UI State
+    const isUploading = ref(false);
+    const isDeleting = ref(false);
+    const uploadProgress = ref<number | null>(null);
+    const errors = ref<ErrorBag>({});
+    const generalError = ref<string | null>(null);
+    const recentlySuccessful = ref<boolean>(false);
+    const successMessage = ref<string | null>(null);
+
+    // ========================================================================
+    // COMPUTED PROPERTIES
+    // ========================================================================
+
+    const hasAvatar = computed<boolean>(() => getRawAvatarValue(authUser.value) !== null);
+
+    // ========================================================================
+    // AVATAR URL RESOLUTION
+    // ========================================================================
+
     const getRawAvatarValue = (user: User | null | undefined): string | null => {
         if (!user) return null;
 
@@ -429,16 +549,15 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
         ];
 
         for (const candidate of candidates) {
-            if (typeof candidate !== 'string') continue;
-
-            const trimmed = candidate.trim();
-            if (trimmed !== '') return trimmed;
+            if (typeof candidate === 'string') {
+                const trimmed = candidate.trim();
+                if (trimmed !== '') return trimmed;
+            }
         }
 
         return null;
     };
 
-    // URL final del avatar (normaliza host + cache buster)
     const resolveAvatarUrl = (user: User | null | undefined): string | null => {
         const base = getRawAvatarValue(user);
         if (!base) return null;
@@ -456,20 +575,10 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
         return `${normalizedBase}${separator}${CACHE_BUSTER_PARAM}=${encodeURIComponent(cacheToken)}`;
     };
 
-    // Estados reactivos UI
-    const isUploading = ref(false); // Ej. true mientras PATCH en curso
-    const isDeleting = ref(false); // Ej. true mientras DELETE en curso
-    const uploadProgress = ref<number | null>(null); // Ej. 0..100
-    const errors = ref<ErrorBag>({}); // Ej. { avatar: ["..."] }
-    const generalError = ref<string | null>(null); // Ej. "No se pudo..."
-    const recentlySuccessful = ref<boolean>(false);
-    const successMessage = ref<string | null>(null);
-    const currentUpload = ref<OngoingUpload | null>(null); // Ej. { controller: AbortController }
+    // ========================================================================
+    // STATE MANAGEMENT HELPERS
+    // ========================================================================
 
-    // Si hay avatar
-    const hasAvatar = computed<boolean>(() => getRawAvatarValue(authUser.value) !== null);
-
-    // Limpia override y cache local (wrapper local para no chocar con store global)
     const setLocalAvatarOverride = (override?: AvatarOverride | null) => {
         if (!override) {
             avatarOverride.value = null;
@@ -477,83 +586,47 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
         }
 
         avatarOverride.value = {
-            avatar_url: typeof override.avatar_url === 'string' ? override.avatar_url.trim() : override.avatar_url ?? null,
-            avatar_thumb_url: typeof override.avatar_thumb_url === 'string' ? override.avatar_thumb_url.trim() : override.avatar_thumb_url ?? null,
+            avatar_url: typeof override.avatar_url === 'string' ? override.avatar_url.trim() : (override.avatar_url ?? null),
+            avatar_thumb_url: typeof override.avatar_thumb_url === 'string' ? override.avatar_thumb_url.trim() : (override.avatar_thumb_url ?? null),
             avatar_version: override.avatar_version ?? null,
         };
 
-        avatarCacheBuster.value = Date.now(); // Refuerza cache bust local // Ej.: inmediato tras PATCH
+        avatarCacheBuster.value = Date.now();
     };
 
-    // Limpia errores
     const resetErrors = () => {
         errors.value = {};
         generalError.value = null;
     };
 
-    // Normaliza bag de errores backend
-    const normalizeErrors = (errorBag: Record<string, string | string[]>): ErrorBag => {
-        const result: ErrorBag = {};
-
-        Object.entries(errorBag).forEach(([field, message]) => {
-            if (!message) return;
-
-            if (Array.isArray(message)) {
-                result[field] = message.map((value) => value.toString());
-                return;
-            }
-
-            result[field] = [message.toString()];
-        });
-
-        return result;
-    };
-
-    /**
-     * Setea error para el campo avatar SIN pisar otros campos ya presentes.
-     * Motivo: si el backend te devuelve más cosas (otros campos), no los borras por accidente.
-     * @example errors.value={name:["x"]} + setAvatarError("a") -> {name:["x"], avatar:["a"]}
-     */
     const setAvatarError = (message: string) => {
         errors.value = { ...errors.value, avatar: [message] };
         generalError.value = message;
     };
 
-    /**
-     * Rechazo uniforme: el caller SIEMPRE recibe metadata.
-     *
-     * Convención de `name`:
-     * - AbortError: cancelación explícita/AbortController
-     * - ConfigError: fallo de configuración (Ziggy/route)
-     * - ClientValidationError: fallo UX/local (archivo inválido antes de enviar)
-     * - NetworkError: status 0 sin abort (CORS / offline / timeout)
-     * - HttpError: resto de errores HTTP
-     */
-    const rejectWithMeta = (
-        message: string,
-        { status: metaStatus = 0, aborted = false, name = 'HttpError' }: { status?: number; aborted?: boolean; name?: string } = {},
-    ) => {
-        const ex: any = Object.assign(new Error(message), {
-            status: metaStatus,
-            aborted,
-            name,
-        });
-
-        return Promise.reject(ex);
-    };
-
-    // Refresca auth en props (para que el avatar cambie sin hard reload)
     const refreshAuth = () => {
-        if (!mergedOptions.refreshAuthOnSuccess) return;
+        if (!config.refreshAuthOnSuccess) return;
 
         try {
             router.reload({ only: ['auth', 'flash'] });
         } catch (error) {
-            console.warn('Failed to reload auth data after avatar operation.', error);
+            if (import.meta.env.DEV) {
+                console.warn('Failed to reload auth data after avatar operation.', error);
+            }
         }
     };
 
-    // Abortar subida actual (el caller puede llamar cancelUpload())
+    const showSuccessMessage = (message: string) => {
+        notify.event(message);
+        successMessage.value = message;
+        recentlySuccessful.value = true;
+        setTimeout(() => (recentlySuccessful.value = false), SUCCESS_MESSAGE_DURATION);
+    };
+
+    // ========================================================================
+    // UPLOAD CONTROL
+    // ========================================================================
+
     const abortCurrentUpload = (options?: { silent?: boolean }) => {
         const ongoing = currentUpload.value;
         if (!ongoing) return;
@@ -572,114 +645,10 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
         }
     };
 
-    // Helpers para extraer mensajes del backend / payloads raros
-    const coerceMessage = (value: unknown): string | undefined => {
-        if (typeof value === 'string' && value.trim() !== '') return value.trim();
-        return undefined;
-    };
+    // ========================================================================
+    // VALIDATION
+    // ========================================================================
 
-    const pickAnyErrorMessage = (bag: Record<string, unknown> | undefined): string | undefined => {
-        if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return undefined;
-
-        const firstKey = Object.keys(bag)[0];
-        if (!firstKey) return undefined;
-
-        const value = (bag as Record<string, unknown>)[firstKey];
-
-        if (Array.isArray(value)) {
-            return value.map(coerceMessage).find(Boolean);
-        }
-
-        return coerceMessage(value);
-    };
-
-    const extractPayloadMessage = (payload: unknown): string | undefined => {
-        if (!payload) return undefined;
-
-        const direct = coerceMessage(payload);
-        if (direct) return direct;
-
-        if (typeof payload === 'string') {
-            try {
-                const parsed = JSON.parse(payload);
-                if (parsed && typeof parsed === 'object') {
-                    const parsedMessage = extractPayloadMessage(parsed);
-                    if (parsedMessage) return parsedMessage;
-                }
-            } catch {
-                // No es JSON: seguimos
-            }
-        }
-
-        if (typeof payload === 'object' && !Array.isArray(payload)) {
-            const raw = payload as Record<string, unknown>;
-
-            const message = coerceMessage(raw.message) ?? coerceMessage(raw.error);
-            if (message) return message;
-
-            if (raw.errors && typeof raw.errors === 'object' && !Array.isArray(raw.errors)) {
-                const nestedError = pickAnyErrorMessage(raw.errors as Record<string, unknown>);
-                if (nestedError) return nestedError;
-            }
-
-            if (raw.error && typeof raw.error === 'object') {
-                const nested = extractPayloadMessage(raw.error);
-                if (nested) return nested;
-            }
-        }
-
-        return undefined;
-    };
-
-    const pickServerMessage = (err: NormalizedError): string | undefined => {
-        if (err && typeof err === 'object') {
-            const direct = coerceMessage(err.message) ?? extractPayloadMessage(err.data);
-            if (direct) return direct;
-
-            const statusMessage = coerceMessage(err.statusText);
-            if (statusMessage) return statusMessage;
-        }
-
-        return undefined;
-    };
-
-    const pickErrorFromBag = (bag: ErrorBag, field = 'avatar'): string | undefined => {
-        const value = bag[field];
-        if (!Array.isArray(value)) return undefined;
-        return value.map(coerceMessage).find(Boolean);
-    };
-
-    const sanitizeMessage = (message: string | undefined, fallback: string): string => {
-        if (!message) return fallback;
-
-        const trimmed = message.trim();
-
-        // Filtro de mensajes genéricos para no mostrar basura al usuario
-        if (/excepci[oó]n no controlada/i.test(trimmed) || /^uncontrolled exception/i.test(trimmed)) {
-            return fallback;
-        }
-
-        return trimmed;
-    };
-
-    const resolveAvatarErrorMessage = (err: NormalizedError, normalized: ErrorBag, fallback: string): string => {
-        const message =
-            pickServerMessage(err) ??
-            pickErrorFromBag(normalized) ??
-            pickAnyErrorMessage(err.errors as Record<string, unknown> | undefined) ??
-            coerceMessage(err.message) ??
-            coerceMessage(err.statusText) ??
-            fallback;
-
-        return sanitizeMessage(message, fallback);
-    };
-
-    // Limpieza al desmontar
-    onBeforeUnmount(() => {
-        abortCurrentUpload({ silent: true });
-    });
-
-    // Validación local (UX)
     const validateAvatarFile = async (file: File): Promise<UploadValidationResult> => {
         const sanitizedName = sanitizeFilename(file.name);
 
@@ -695,8 +664,8 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
             throw new Error(message);
         }
 
-        if (file.size > mergedConstraints.maxBytes) {
-            const maxFormatted = formatBytes(mergedConstraints.maxBytes, locale.value);
+        if (file.size > constraints.maxBytes) {
+            const maxFormatted = formatBytes(constraints.maxBytes, locale.value);
             const message = t('profile.avatar_error_size', { max: maxFormatted });
             setAvatarError(message);
             throw new Error(message);
@@ -726,16 +695,16 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
             throw error instanceof Error ? error : new Error(message);
         }
 
-        if (metadata.width < mergedConstraints.minDimension || metadata.height < mergedConstraints.minDimension) {
-            const message = t('profile.avatar_error_dimensions', { min: mergedConstraints.minDimension });
+        if (metadata.width < constraints.minDimension || metadata.height < constraints.minDimension) {
+            const message = t('profile.avatar_error_dimensions', { min: constraints.minDimension });
             setAvatarError(message);
             throw new Error(message);
         }
 
         const megapixels = (metadata.width * metadata.height) / 1_000_000;
 
-        if (megapixels > mergedConstraints.maxMegapixels + 0.001) {
-            const message = t('profile.avatar_error_megapixels', { max: mergedConstraints.maxMegapixels });
+        if (megapixels > constraints.maxMegapixels + 0.001) {
+            const message = t('profile.avatar_error_megapixels', { max: constraints.maxMegapixels });
             setAvatarError(message);
             throw new Error(message);
         }
@@ -748,54 +717,97 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
         };
     };
 
-    /**
-     * Sube un archivo como avatar.
-     * Devuelve payload de éxito o rechaza con error “status-aware” vía rejectWithMeta().
-     */
+    // ========================================================================
+    // ERROR HANDLERS
+    // ========================================================================
+
+    const handleUploadError = (error: unknown, normalized: ErrorBag, fallback: string): Promise<never> => {
+        const err = error as NormalizedError;
+        const status = err.status || 0;
+
+        // Detecta abort/cancel
+        const isAborted =
+            currentUpload.value?.controller?.signal?.aborted === true ||
+            (err as { aborted?: boolean })?.aborted === true ||
+            (err as { name?: string })?.name === 'AbortError';
+
+        if (isAborted) {
+            const message = t('profile.avatar_error_cancelled_upload');
+            setAvatarError(message);
+            return createRejection(message, { status: 0, aborted: true, name: 'AbortError' });
+        }
+
+        const message = resolveAvatarErrorMessage(err, normalized, fallback);
+
+        // 422: Validation error
+        if (status === 422) {
+            errors.value = normalized;
+            setAvatarError(message);
+            return rejectWithAvatarError(message, { status: 422, name: 'HttpError' });
+        }
+
+        // 403: Forbidden
+        if (status === 403) {
+            setAvatarError(message);
+            return rejectWithAvatarError(message, { status: 403, name: 'HttpError' });
+        }
+
+        // 429: Rate limit
+        if (status === 429) {
+            const retry = err.retryAfter ?? 0;
+            const fullMessage = retry > 0 ? `${message} (retry in ${retry}s)` : message;
+            setAvatarError(fullMessage);
+            return rejectWithAvatarError(fullMessage, { status: 429, name: 'HttpError' });
+        }
+
+        // Default: Generic error
+        setAvatarError(message);
+        const errorName = status === 0 ? 'NetworkError' : 'HttpError';
+        return rejectWithAvatarError(message, { status, name: errorName });
+    };
+
+    // ========================================================================
+    // UPLOAD AVATAR
+    // ========================================================================
+
     const uploadAvatar = async (file: File | null | undefined): Promise<AvatarUploadSuccessPayload> => {
         resetErrors();
 
-        // Validación básica input
         if (!(file instanceof File)) {
             const message = t('profile.avatar_error_required');
             setAvatarError(message);
-            return rejectWithMeta(message, { status: 0, name: 'ClientValidationError' });
+            return rejectWithAvatarError(message, { status: 0, name: 'ClientValidationError' });
         }
 
-        // Validación UX (tamaño, dimensiones, mime, etc.)
+        // Client-side validation
         let validation: UploadValidationResult;
-
         try {
             validation = await validateAvatarFile(file);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            return rejectWithMeta(message, { status: 0, name: 'ClientValidationError' });
+            return rejectWithAvatarError(message, { status: 0, name: 'ClientValidationError' });
         }
 
-        // Resolver URL (Ziggy/absolute)
+        // Resolve upload URL
         let uploadUrl: string;
-
         try {
-            uploadUrl = resolveRoute(mergedOptions.uploadRoute, ziggyConfig.value);
+            uploadUrl = resolveRoute(config.uploadRoute, ziggyConfig.value);
         } catch {
             const message = t('profile.avatar_error_route_missing');
             setAvatarError(message);
-            // Aquí es donde cambias el name: ConfigError (lo que preguntabas)
-            return rejectWithMeta(message, { status: 0, name: 'ConfigError' });
+            return rejectWithAvatarError(message, { status: 0, name: 'ConfigError' });
         }
 
-        // Cancela cualquier subida previa
+        // Cancel any previous upload
         abortCurrentUpload({ silent: true });
 
-        // Prepara abort controller
+        // Prepare upload
         const controller = SUPPORTS_ABORT ? new AbortController() : null;
         currentUpload.value = { controller };
 
-        // FormData
         const formData = new FormData();
         formData.append('avatar', file);
 
-        // Estados UI
         isUploading.value = true;
         uploadProgress.value = 0;
 
@@ -816,23 +828,18 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
             const override: AvatarOverride = {
                 avatar_url: typeof payload.avatar_url === 'string' ? payload.avatar_url : null,
                 avatar_thumb_url: typeof payload.avatar_thumb_url === 'string' ? payload.avatar_thumb_url : null,
-                avatar_version: typeof payload.avatar_version === 'number' || typeof payload.avatar_version === 'string'
-                    ? payload.avatar_version
-                    : null,
+                avatar_version:
+                    typeof payload.avatar_version === 'number' || typeof payload.avatar_version === 'string' ? payload.avatar_version : null,
             };
+
             setLocalAvatarOverride(override);
             refreshAuth();
 
-            // Cambia el cache buster para forzar refresh del avatar (fallback si no hay versión)
+            // Update cache buster
             avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
 
-            // Éxito
             const message = typeof payload.message === 'string' ? payload.message : 'Avatar actualizado correctamente.';
-            // Usamos el mismo estilo de toast “event” que el guardado de perfil para coherencia visual.
-            notify.event(message);
-            successMessage.value = message;
-            recentlySuccessful.value = true;
-            setTimeout(() => (recentlySuccessful.value = false), 3000);
+            showSuccessMessage(message);
 
             return {
                 filename: validation.sanitizedName,
@@ -846,78 +853,30 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
             const normalized = normalizeErrors((err.errors as Record<string, string | string[]> | undefined) ?? {});
             const fallback = status === 0 ? t('profile.avatar_error_network') : t('profile.avatar_error_generic');
 
-            // Detecta abort/cancel (no toast)
-            const isAborted = controller?.signal?.aborted === true || (err as { aborted?: boolean })?.aborted === true || err?.name === 'AbortError';
-
-            if (isAborted) {
-                const message = t('profile.avatar_error_cancelled_upload');
-                setAvatarError(message);
-                return rejectWithMeta(message, { status: 0, aborted: true, name: 'AbortError' });
-            }
-
-            // 422 (validación backend): toast error + bag + metadata
-            if (status === 422) {
-                errors.value = normalized;
-                const message = resolveAvatarErrorMessage(err, normalized, fallback);
-                setAvatarError(message);
-                notify.error(message);
-                return rejectWithMeta(message, { status: 422, name: 'HttpError' });
-            }
-
-            // 403 (forbidden): toast error + metadata
-            if (status === 403) {
-                const message = resolveAvatarErrorMessage(err, normalized, fallback);
-                setAvatarError(message);
-                notify.error(message);
-                return rejectWithMeta(message, { status: 403, name: 'HttpError' });
-            }
-
-            // 429 (rate limit): toast warning + metadata
-            if (status === 429) {
-                const retry = err.retryAfter ?? 0;
-                const base = resolveAvatarErrorMessage(err, normalized, fallback);
-                const message = retry > 0 ? `${base} (retry in ${retry}s)` : base;
-                setAvatarError(message);
-                notify.warning(message);
-                return rejectWithMeta(message, { status: 429, name: 'HttpError' });
-            }
-
-            // Default: error genérico (red / 5xx / etc.)
-            const message = resolveAvatarErrorMessage(err, normalized, fallback);
-            setAvatarError(message);
-            notify.error(message);
-
-            // Si es status 0, lo marcamos como NetworkError para que el caller lo trate distinto si quiere
-            const name = status === 0 ? 'NetworkError' : 'HttpError';
-            return rejectWithMeta(message, { status, name });
+            return handleUploadError(error, normalized, fallback);
         } finally {
-            // Finalizer solo resetea estado local de subida
             currentUpload.value = null;
             isUploading.value = false;
             uploadProgress.value = null;
         }
     };
 
-    /**
-     * Elimina el avatar actual.
-     * Rechazos también “status-aware” vía rejectWithMeta() para consistencia con uploadAvatar().
-     */
+    // ========================================================================
+    // REMOVE AVATAR
+    // ========================================================================
+
     const removeAvatar = async (): Promise<void> => {
         resetErrors();
-
-        // Cancela cualquier subida en curso
         abortCurrentUpload({ silent: true });
 
-        // Resolver URL
+        // Resolve delete URL
         let deleteUrl: string;
-
         try {
-            deleteUrl = resolveRoute(mergedOptions.deleteRoute, ziggyConfig.value);
+            deleteUrl = resolveRoute(config.deleteRoute, ziggyConfig.value);
         } catch {
             const message = t('profile.avatar_error_route_missing');
             setAvatarError(message);
-            // Misma convención: ConfigError
-            return rejectWithMeta(message, { status: 0, name: 'ConfigError' });
+            return rejectWithAvatarError(message, { status: 0, name: 'ConfigError' });
         }
 
         const controller = SUPPORTS_ABORT ? new AbortController() : null;
@@ -937,91 +896,75 @@ export function useAvatarUpload(options: UseAvatarUploadOptions = {}) {
             const override: AvatarOverride = {
                 avatar_url: typeof payload.avatar_url === 'string' ? payload.avatar_url : null,
                 avatar_thumb_url: typeof payload.avatar_thumb_url === 'string' ? payload.avatar_thumb_url : null,
-                avatar_version: typeof payload.avatar_version === 'number' || typeof payload.avatar_version === 'string'
-                    ? payload.avatar_version
-                    : null,
+                avatar_version:
+                    typeof payload.avatar_version === 'number' || typeof payload.avatar_version === 'string' ? payload.avatar_version : null,
             };
+
             setLocalAvatarOverride(override.avatar_url || override.avatar_thumb_url ? override : null);
             refreshAuth();
 
             avatarCacheBuster.value = Date.now() + Math.floor(Math.random() * 1000);
 
             const message = typeof payload.message === 'string' ? payload.message : 'Avatar eliminado correctamente.';
-            // Misma línea visual que el resto de toasts de perfil.
-            notify.event(message);
-            successMessage.value = message;
-            recentlySuccessful.value = true;
-            setTimeout(() => (recentlySuccessful.value = false), 3000);
+            showSuccessMessage(message);
 
-        return;
+            return;
         } catch (error) {
             const err = error as NormalizedError;
             const status = err.status || 0;
             const normalized = normalizeErrors((err.errors as Record<string, string | string[]> | undefined) ?? {});
             const fallback = status === 0 ? t('profile.avatar_error_network') : t('profile.avatar_error_generic');
 
-            const isAborted = controller?.signal?.aborted === true || (err as { aborted?: boolean })?.aborted === true || err?.name === 'AbortError';
-
-            if (isAborted) {
-                const message = t('profile.avatar_error_cancelled_upload');
-                setAvatarError(message);
-                return rejectWithMeta(message, { status: 0, aborted: true, name: 'AbortError' });
-            }
-
-            if (status === 422) {
-                errors.value = normalized;
-                const message = resolveAvatarErrorMessage(err, normalized, fallback);
-                setAvatarError(message);
-                notify.error(message);
-                return rejectWithMeta(message, { status: 422, name: 'HttpError' });
-            }
-
-            if (status === 403) {
-                const message = resolveAvatarErrorMessage(err, normalized, fallback);
-                setAvatarError(message);
-                notify.error(message);
-                return rejectWithMeta(message, { status: 403, name: 'HttpError' });
-            }
-
-            if (status === 429) {
-                const retry = err.retryAfter ?? 0;
-                const base = resolveAvatarErrorMessage(err, normalized, fallback);
-                const message = retry > 0 ? `${base} (retry in ${retry}s)` : base;
-                setAvatarError(message);
-                notify.warning(message);
-                return rejectWithMeta(message, { status: 429, name: 'HttpError' });
-            }
-
-            const message = resolveAvatarErrorMessage(err, normalized, fallback);
-            setAvatarError(message);
-            notify.error(message);
-
-            const name = status === 0 ? 'NetworkError' : 'HttpError';
-            return rejectWithMeta(message, { status, name });
+            return handleUploadError(error, normalized, fallback);
         } finally {
             isDeleting.value = false;
         }
     };
 
+    // ========================================================================
+    // LIFECYCLE
+    // ========================================================================
+
+    onBeforeUnmount(() => {
+        abortCurrentUpload({ silent: true });
+    });
+
+    // ========================================================================
+    // PUBLIC API
+    // ========================================================================
+
     return {
-        authUser, // Ej. { id: 1, name: "Johan" }
-        hasAvatar, // Ej. true
-        isUploading, // Ej. true/false
-        isDeleting, // Ej. true/false
-        uploadProgress, // Ej. 0..100 o null
-        errors, // Ej. { avatar: ["..."] }
-        generalError, // Ej. "..."
-        recentlySuccessful, // Flag para mostrar mensaje inline de éxito
-        successMessage, // Último mensaje de éxito
-        uploadAvatar, // Fn: subir avatar
-        removeAvatar, // Fn: eliminar avatar
-        resetErrors, // Fn: limpiar errores
-        resolveAvatarUrl, // Fn: URL del avatar
-        avatarCacheBuster, // Ej. 1700000000000
-        cancelUpload: abortCurrentUpload, // Fn: cancelar subida
-        constraints: mergedConstraints, // Ej. { maxBytes: ..., allowedMimeTypes: ... }
-        allowedMimeSummary: allowedSummary, // Ej. "JPEG, PNG, WebP..."
-        formatBytesLabel: (bytes: number) => formatBytes(bytes, locale.value), // Ej. formatBytesLabel(1048576) -> "1 MB"
-        acceptMimeTypes: acceptAttribute, // Ej. "image/jpeg,image/png,..."
+        // User data
+        authUser,
+        hasAvatar,
+
+        // Upload state
+        isUploading,
+        isDeleting,
+        uploadProgress,
+
+        // Errors
+        errors,
+        generalError,
+
+        // Success
+        recentlySuccessful,
+        successMessage,
+
+        // Actions
+        uploadAvatar,
+        removeAvatar,
+        resetErrors,
+        cancelUpload: abortCurrentUpload,
+
+        // Utilities
+        resolveAvatarUrl,
+        avatarCacheBuster,
+        formatBytesLabel: (bytes: number) => formatBytes(bytes, locale.value),
+
+        // Configuration
+        constraints,
+        allowedMimeSummary: allowedSummary,
+        acceptMimeTypes: acceptAttribute,
     };
 }

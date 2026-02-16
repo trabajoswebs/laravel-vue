@@ -6,6 +6,7 @@ namespace Tests\Unit\Uploads\Core\Orchestrators;
 
 use App\Application\Shared\Contracts\TenantContextInterface;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
+use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Domain\Uploads\ProcessingMode;
 use App\Domain\Uploads\ScanMode;
 use App\Domain\Uploads\ServingMode;
@@ -16,6 +17,8 @@ use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector;
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
 use App\Infrastructure\Uploads\Core\Contracts\MediaUploader;
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator;
+use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
+use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
 use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;
 use App\Infrastructure\Uploads\Core\Services\MediaReplacementService;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
@@ -73,13 +76,15 @@ final class DefaultUploadOrchestratorProfileResolutionTest extends TestCase
             $quarantine,
             $this->createMock(ScanCoordinatorInterface::class),
             $this->createMock(UploadRepositoryInterface::class),
+            $this->createMock(UploadStorageInterface::class),
             new MediaReplacementService(
                 $this->createMock(MediaUploader::class),
                 $this->createMock(MediaArtifactCollector::class),
                 $this->createMock(MediaCleanupScheduler::class),
             ),
-            new AvatarProfile(),
             new PipelineResultMapper(),
+            new MediaProfileResolver(new AvatarProfile(), new GalleryProfile()),
+            new DocumentUploadGuard(),
         );
     }
 

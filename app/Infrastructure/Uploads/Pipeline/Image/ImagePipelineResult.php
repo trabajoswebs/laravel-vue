@@ -126,6 +126,15 @@ final class ImagePipelineResult
     }
 
     /**
+     * Transfiere la responsabilidad de cleanup cuando el archivo fue movido
+     * a su destino final por otro componente.
+     */
+    public function releaseCleanupOwnership(): void
+    {
+        $this->cleaned = true;
+    }
+
+    /**
      * Elimina manualmente el archivo temporal asociado a este resultado.
      *
      * Si el archivo ya fue limpiado previamente o no se encuentra en un directorio
@@ -150,7 +159,7 @@ final class ImagePipelineResult
         }
 
         if (!@unlink($this->path)) {
-            SecurityLogger::notice('image_pipeline_cleanup_failed', [
+            SecurityLogger::warning('image_pipeline_cleanup_failed', [
                 'path' => basename($this->path), // Registra solo el nombre del archivo por seguridad
             ]);
         }

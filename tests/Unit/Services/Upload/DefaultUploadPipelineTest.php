@@ -10,10 +10,10 @@ use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException; //
 use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
 use App\Application\Shared\Contracts\MetricsInterface;
+use App\Application\Shared\Contracts\LoggerInterface;
 use Tests\TestCase; // Clase base para tests de Laravel
 
 final class DefaultUploadPipelineTest extends TestCase
@@ -115,7 +115,7 @@ final class DefaultUploadPipelineTest extends TestCase
         }
         $this->tempDirectories[] = $workingDirectory;
 
-        $securityLogger = new UploadSecurityLogger();
+        $securityLogger = new NullMagicLogger();
         $magicBytes = new MagicBytesValidator($securityLogger);
         $metrics = $this->createMock(MetricsInterface::class);
         $metrics->method('increment')->willReturnCallback(static function (): void {});
@@ -235,7 +235,7 @@ final class DefaultUploadPipelineTest extends TestCase
         // Añadimos el directorio a la lista para limpiarlo después
         $this->tempDirectories[] = $workingDirectory;
 
-        $securityLogger = new UploadSecurityLogger();
+        $securityLogger = new NullMagicLogger();
         $magicBytes = new MagicBytesValidator($securityLogger);
         $metrics = $this->createMock(MetricsInterface::class);
         $metrics->method('increment')->willReturnCallback(static function (): void {});
@@ -398,4 +398,15 @@ final class DefaultUploadPipelineTest extends TestCase
         // Finalmente eliminamos el directorio raíz
         @rmdir($directory);
     }
+}
+
+final class NullMagicLogger implements LoggerInterface
+{
+    public function debug(string $message, array $context = []): void {}
+    public function info(string $message, array $context = []): void {}
+    public function notice(string $message, array $context = []): void {}
+    public function warning(string $message, array $context = []): void {}
+    public function error(string $message, array $context = []): void {}
+    public function critical(string $message, array $context = []): void {}
+    public function alert(string $message, array $context = []): void {}
 }

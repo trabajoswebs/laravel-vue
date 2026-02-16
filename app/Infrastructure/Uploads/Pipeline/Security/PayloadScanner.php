@@ -139,7 +139,7 @@ final class PayloadScanner
         // Itera sobre cada patrón sospechoso
         foreach ($this->patterns as $pattern) {
             // Intenta hacer coincidir el patrón con el fragmento de contenido
-            $match = @preg_match($pattern, $snippet);
+            $match = $this->safePregMatch($pattern, $snippet);
             // Si la coincidencia falla, el patrón es inválido
             if ($match === false) {
                 // Registra un warning sobre el patrón inválido
@@ -197,7 +197,7 @@ final class PayloadScanner
             }
 
             // Validar el patrón en construcción: si es inválido, se registra y se descarta
-            if (@preg_match($candidate, '') === false) {
+            if ($this->safePregMatch($candidate, '') === false) {
                 $this->logger->warning('image_payload_pattern_invalid_config', '', ['pattern' => $candidate], null);
                 continue;
             }
@@ -209,5 +209,18 @@ final class PayloadScanner
         return array_values(
             array_filter($patterns, static fn(string $p): bool => $p !== '')
         );
+    }
+
+    private function safePregMatch(string $pattern, string $subject): int|false
+    {
+        set_error_handler(static function (): bool {
+            return true;
+        }, E_WARNING);
+
+        try {
+            return preg_match($pattern, $subject);
+        } finally {
+            restore_error_handler();
+        }
     }
 }
