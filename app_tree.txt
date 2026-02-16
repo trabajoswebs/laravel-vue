@@ -55,6 +55,44 @@ app/ — código de aplicación organizado por capas
 │       ├── UploadKind.php — enum tipo de carga
 │       ├── UploadProfile.php — perfil de upload (restricciones)
 │       └── UploadProfileId.php — identificador de perfil
+├── Http/ — controladores y middleware raíz (stack Inertia/Auth)
+│   ├── Controllers/
+│   │   ├── Auth/ — flujo de autenticación
+│   │   │   ├── AuthenticatedSessionController.php — login/logout
+│   │   │   ├── ConfirmablePasswordController.php — confirmación de contraseña
+│   │   │   ├── EmailVerificationNotificationController.php — envía correo de verificación
+│   │   │   ├── EmailVerificationPromptController.php — muestra aviso de verificación
+│   │   │   ├── NewPasswordController.php — reseteo con token
+│   │   │   ├── PasswordResetLinkController.php — solicita enlace de reset
+│   │   │   ├── RegisteredUserController.php — registro de usuarios
+│   │   │   └── VerifyEmailController.php — confirma email
+│   │   ├── Controller.php — base para controladores
+│   │   ├── Health/HealthController.php — endpoint de salud
+│   │   ├── LanguageController.php — cambio/estado de idioma
+│   │   ├── Media/.gitkeep — marcador de directorio vacío
+│   │   └── Settings/
+│   │       ├── PasswordController.php — cambio de contraseña
+│   │       └── ProfileController.php — edición de perfil
+│   ├── Middleware/
+│   │   ├── HandleAppearance.php — aplica tema/apariencia
+│   │   ├── HandleInertiaRequests.php — integra Inertia y share globales
+│   │   ├── PreventBruteForce.php — limita intentos de fuerza bruta
+│   │   ├── SanitizeInput.php — sanitiza la entrada
+│   │   ├── SecurityHeaders.php — cabeceras de seguridad
+│   │   ├── TrustProxies.php — configura proxies de confianza
+│   │   └── UserAudit.php — auditoría por solicitud/usuario
+│   ├── Requests/
+│   │   ├── Auth/LoginRequest.php — validación de login
+│   │   ├── Concerns/SanitizesInputs.php — trait de normalización
+│   │   └── Settings/ProfileUpdateRequest.php — validación de perfil
+├── Models/
+│   ├── Tenant.php — modelo Eloquent de tenant (root)
+│   └── User.php — modelo Eloquent de usuario (root)
+├── Providers/
+│   ├── AppServiceProvider.php — bindings y boot genérico (root)
+│   ├── AuthServiceProvider.php — policies y gates
+│   ├── EventServiceProvider.php — eventos/listeners
+│   └── HtmlPurifierServiceProvider.php — configuración de purificador HTML
 ├── Infrastructure/ — adaptadores e implementaciones concretas
 │   ├── Auth/Policies/ — autorizaciones
 │   │   ├── Concerns/HandlesMediaOwnership.php — comprueba propiedad de media

@@ -4,10 +4,10 @@ declare(strict_types=1); // Tipado estricto
 
 namespace App\Infrastructure\Uploads\Profiles; // Namespace de perfiles de uploads infra
 
-use App\Domain\Uploads\ProcessingMode; // Enum de procesamiento
-use App\Domain\Uploads\ScanMode; // Enum de escaneo
-use App\Domain\Uploads\ServingMode; // Enum de serving
-use App\Domain\Uploads\UploadKind; // Enum de tipo de upload
+use App\Support\Enums\Uploads\ProcessingMode; // Enum de procesamiento
+use App\Support\Enums\Uploads\ScanMode; // Enum de escaneo
+use App\Support\Enums\Uploads\ServingMode; // Enum de serving
+use App\Support\Enums\Uploads\UploadKind; // Enum de tipo de upload
 use App\Domain\Uploads\UploadProfile; // Perfil base
 use App\Domain\Uploads\UploadProfileId; // VO de identificador
 

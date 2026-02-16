@@ -33,13 +33,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Spatie\Multitenancy\Http\Middleware\NeedsTenant; // Exige tenant current en rutas tenant-aware
 use Spatie\Multitenancy\Http\Middleware\EnsureValidTenantSession; // Valida que sesión y tenant no estén desalineados
 
-// Compat: clases movidas desde App\Infrastructure\Http a App\Http (PR-2).
-if (! class_exists('App\Infrastructure\Http\Controllers\Controller', false)) {
-    class_alias(\App\Http\Controllers\Controller::class, 'App\Infrastructure\Http\Controllers\Controller');
-}
-if (! trait_exists('App\Infrastructure\Http\Requests\Concerns\SanitizesInputs', false)) {
-    class_alias(\App\Http\Requests\Concerns\SanitizesInputs::class, 'App\Infrastructure\Http\Requests\Concerns\SanitizesInputs');
-}
+// Compat block removed: controllers migrated to App\Http\Controllers.
 
 /**
  * Configura y crea la instancia de la aplicación Laravel.

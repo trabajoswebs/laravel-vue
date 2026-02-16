@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Http\Controllers\Media;
 
-use App\Infrastructure\Http\Controllers\Controller; // Base controller
+use App\Http\Controllers\Controller; // Base controller
 use App\Infrastructure\Uploads\Http\Support\MediaServingResponder;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile; // Perfil avatar

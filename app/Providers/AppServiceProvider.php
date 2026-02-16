@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Infrastructure\Providers;
+namespace App\Providers;
 
 use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
 use App\Application\Shared\Contracts\ClockInterface;

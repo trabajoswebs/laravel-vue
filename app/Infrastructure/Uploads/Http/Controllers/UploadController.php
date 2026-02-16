@@ -9,7 +9,7 @@ use App\Application\Uploads\Actions\UploadFile;
 use App\Application\Uploads\Exceptions\InvalidOwnerIdException;
 use App\Application\Uploads\Exceptions\InvalidUploadFileException;
 use App\Domain\Uploads\UploadProfileId;
-use App\Infrastructure\Http\Controllers\Controller;
+use App\Http\Controllers\Controller;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
 use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;

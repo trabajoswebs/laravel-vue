@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Domain\Uploads; // Namespace de uploads de dominio
+namespace App\Support\Enums\Uploads; // Namespace de enums de uploads
 
 /**
  * Modo de procesamiento para archivos subidos.

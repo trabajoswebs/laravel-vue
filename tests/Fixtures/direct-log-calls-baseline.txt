@@ -56,9 +56,9 @@ app/Infrastructure/Localization/TranslationService.php:283
 app/Infrastructure/Localization/TranslationService.php:287
 app/Infrastructure/Localization/TranslationService.php:289
 app/Infrastructure/Localization/TranslationService.php:414
-app/Infrastructure/Providers/HtmlPurifierServiceProvider.php:107
-app/Infrastructure/Providers/HtmlPurifierServiceProvider.php:44
-app/Infrastructure/Providers/HtmlPurifierServiceProvider.php:91
+app/Providers/HtmlPurifierServiceProvider.php:107
+app/Providers/HtmlPurifierServiceProvider.php:44
+app/Providers/HtmlPurifierServiceProvider.php:91
 app/Infrastructure/Security/SecurityHelper.php:124
 app/Infrastructure/Security/SecurityHelper.php:166
 app/Infrastructure/Security/SecurityHelper.php:265

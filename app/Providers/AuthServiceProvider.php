@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Infrastructure\Providers;
+namespace App\Providers;
 
 use App\Models\User;
 use App\Infrastructure\Auth\Policies\UserPolicy;

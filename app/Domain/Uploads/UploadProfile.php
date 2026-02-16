@@ -4,6 +4,11 @@ declare(strict_types=1); // Tipado estricto
 
 namespace App\Domain\Uploads; // Namespace de uploads de dominio
 
+use App\Support\Enums\Uploads\ProcessingMode;
+use App\Support\Enums\Uploads\ScanMode;
+use App\Support\Enums\Uploads\ServingMode;
+use App\Support\Enums\Uploads\UploadKind;
+
 /**
  * Describe un perfil de subida (avatar, PDF, CSV, etc.).
  */

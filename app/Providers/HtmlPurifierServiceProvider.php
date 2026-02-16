@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Infrastructure\Providers;
+namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use HTMLPurifier;

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Http\Requests;
 
-use App\Domain\Uploads\UploadKind;
+use App\Support\Enums\Uploads\UploadKind;
 use App\Domain\Uploads\UploadProfile;
 use App\Domain\Uploads\UploadProfileId;
-use App\Infrastructure\Http\Requests\Concerns\SanitizesInputs;
+use App\Http\Requests\Concerns\SanitizesInputs;
 use App\Models\User;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
 use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesDocumentValidation;

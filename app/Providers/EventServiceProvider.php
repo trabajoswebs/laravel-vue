@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Providers;
+namespace App\Providers;
 
 use App\Infrastructure\Uploads\Pipeline\Listeners\RunPendingMediaCleanup;
 use App\Infrastructure\Uploads\Pipeline\Listeners\QueueAvatarPostProcessing;
