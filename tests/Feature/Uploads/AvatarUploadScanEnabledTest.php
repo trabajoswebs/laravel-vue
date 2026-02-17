@@ -8,7 +8,7 @@ use App\Application\Uploads\Actions\UploadFile;
 use App\Domain\Uploads\UploadProfileId;
 use App\Models\User;
 use App\Models\Tenant;
-use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
+use App\Modules\Uploads\Registry\UploadProfileRegistry;
 use App\Modules\Uploads\Requests\HttpUploadedMedia;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;

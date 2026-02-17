@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Infrastructure\Uploads\Core\Paths; // Namespace de infraestructura de uploads
+namespace App\Modules\Uploads\Paths; // Namespace de infraestructura de uploads
 
 use App\Support\Contracts\TenantContextInterface; // Contexto de tenant
 use App\Domain\Uploads\UploadProfile; // Perfil de upload

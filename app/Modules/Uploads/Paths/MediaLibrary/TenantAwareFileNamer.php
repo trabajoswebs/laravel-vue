@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Infrastructure\Uploads\Core\Paths\MediaLibrary; // Namespace de paths de media
+namespace App\Modules\Uploads\Paths\MediaLibrary; // Namespace de paths de media
 
 use Spatie\MediaLibrary\Conversions\Conversion; // Conversion de Media Library
 use Spatie\MediaLibrary\Support\FileNamer\FileNamer; // Base FileNamer de Spatie

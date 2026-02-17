@@ -9,7 +9,7 @@ use App\Models\User;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Support\Enums\Uploads\ServingMode;
 use App\Domain\Uploads\UploadProfileId;
-use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
+use App\Modules\Uploads\Registry\UploadProfileRegistry;
 
 class UploadPolicy
 {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Infrastructure\Uploads\Core\Registry; // Namespace de infraestructura de uploads
+namespace App\Modules\Uploads\Registry; // Namespace de infraestructura de uploads
 
 use App\Domain\Uploads\UploadProfile; // Perfil de dominio
 use App\Domain\Uploads\UploadProfileId; // VO de ID de perfil

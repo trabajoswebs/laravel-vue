@@ -4,10 +4,10 @@ namespace Tests\Feature\Uploads;
 
 use App\Support\Contracts\TenantContextInterface;
 use App\Domain\Uploads\UploadProfileId;
-use App\Infrastructure\Uploads\Core\Paths\MediaLibrary\TenantAwarePathGenerator;
-use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;
-use App\Infrastructure\Uploads\Core\Paths\TenantPathLayout;
-use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
+use App\Modules\Uploads\Paths\MediaLibrary\TenantAwarePathGenerator;
+use App\Modules\Uploads\Paths\TenantPathGenerator;
+use App\Modules\Uploads\Paths\TenantPathLayout;
+use App\Modules\Uploads\Registry\UploadProfileRegistry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;

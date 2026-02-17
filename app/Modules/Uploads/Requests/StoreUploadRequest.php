@@ -9,7 +9,7 @@ use App\Domain\Uploads\UploadProfile;
 use App\Domain\Uploads\UploadProfileId;
 use App\Http\Requests\Concerns\SanitizesInputs;
 use App\Models\User;
-use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
+use App\Modules\Uploads\Registry\UploadProfileRegistry;
 use App\Modules\Uploads\Requests\Concerns\UsesDocumentValidation;
 use App\Modules\Uploads\Requests\Concerns\UsesImageValidation;
 use App\Modules\Uploads\Requests\Concerns\UsesOwnerIdValidation;

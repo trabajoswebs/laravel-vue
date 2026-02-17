@@ -3,7 +3,7 @@
 namespace Tests\Feature\Uploads;
 
 use App\Support\Contracts\TenantContextInterface;
-use App\Infrastructure\Uploads\Core\Paths\MediaLibrary\TenantAwarePathGenerator;
+use App\Modules\Uploads\Paths\MediaLibrary\TenantAwarePathGenerator;
 use InvalidArgumentException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;

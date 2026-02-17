@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Paths;
+namespace App\Modules\Uploads\Paths;
 
 use App\Domain\Uploads\UploadProfile;
 use Illuminate\Support\Carbon;

@@ -15,7 +15,7 @@ use App\Domain\Uploads\UploadProfile;
 use App\Models\User;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
-use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;
+use App\Modules\Uploads\Paths\TenantPathGenerator;
 use App\Infrastructure\Uploads\Core\Services\MediaReplacementService;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;

@@ -47,7 +47,7 @@ class UploadFailureCleanupTest extends TestCase
 
         $file = UploadedFile::fake()->createWithContent('doc.pdf', "%PDF-1.4\nbody");
         $orchestrator = $this->app->make(UploadOrchestratorInterface::class);
-        $profile = $this->app->make(\App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry::class)->get(new UploadProfileId('document_pdf'));
+        $profile = $this->app->make(\App\Modules\Uploads\Registry\UploadProfileRegistry::class)->get(new UploadProfileId('document_pdf'));
 
         // Act: expect failure and cleanup
         $this->expectException(RuntimeException::class);

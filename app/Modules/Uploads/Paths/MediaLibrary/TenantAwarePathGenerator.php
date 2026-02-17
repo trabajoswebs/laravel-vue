@@ -17,14 +17,14 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Paths\MediaLibrary;
+namespace App\Modules\Uploads\Paths\MediaLibrary;
 
 use App\Support\Contracts\TenantContextInterface;
 use App\Domain\Uploads\UploadProfileId;
 use App\Models\User;
-use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;
-use App\Infrastructure\Uploads\Core\Paths\TenantPathLayout;
-use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
+use App\Modules\Uploads\Paths\TenantPathGenerator;
+use App\Modules\Uploads\Paths\TenantPathLayout;
+use App\Modules\Uploads\Registry\UploadProfileRegistry;
 use InvalidArgumentException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator;

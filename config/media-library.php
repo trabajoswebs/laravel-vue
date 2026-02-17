@@ -76,12 +76,12 @@ return [
     /*
      * This is the class that is responsible for naming generated files.
      */
-    'file_namer' => App\Infrastructure\Uploads\Core\Paths\MediaLibrary\TenantAwareFileNamer::class,
+    'file_namer' => App\Modules\Uploads\Paths\MediaLibrary\TenantAwareFileNamer::class,
 
     /*
      * The class that contains the strategy for determining a media file's path.
      */
-    'path_generator' => App\Infrastructure\Uploads\Core\Paths\MediaLibrary\TenantAwarePathGenerator::class,
+    'path_generator' => App\Modules\Uploads\Paths\MediaLibrary\TenantAwarePathGenerator::class,
 
     /*
      * The class that contains the strategy for determining how to remove files.

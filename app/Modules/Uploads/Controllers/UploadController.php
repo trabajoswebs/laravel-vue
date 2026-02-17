@@ -11,7 +11,7 @@ use App\Application\Uploads\Exceptions\InvalidUploadFileException;
 use App\Domain\Uploads\UploadProfileId;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Uploads\Core\Models\Upload;
-use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
+use App\Modules\Uploads\Registry\UploadProfileRegistry;
 use App\Modules\Uploads\Requests\HttpUploadedMedia;
 use App\Modules\Uploads\Requests\ReplaceUploadRequest;
 use App\Modules\Uploads\Requests\StoreUploadRequest;

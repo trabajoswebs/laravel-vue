@@ -16,7 +16,7 @@ use App\Infrastructure\Uploads\Core\Services\ConfigurableOwnerIdNormalizer;
 use App\Infrastructure\Uploads\Core\Services\MediaReplacementService; // Servicio de reemplazo
 use App\Support\Contracts\MetricsInterface; // Métricas
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
-use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles
+use App\Modules\Uploads\Registry\UploadProfileRegistry; // Registro de perfiles
 use App\Infrastructure\Uploads\Core\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
 use App\Infrastructure\Uploads\Profiles\AvatarImageProfile; // Perfil avatar
 use App\Infrastructure\Uploads\Profiles\CertificateSecretProfile; // Perfil certificados
