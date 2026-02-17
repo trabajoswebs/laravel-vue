@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Infrastructure\Auth\Policies;
+namespace App\Modules\User\Policies;
 
 use App\Models\User;
-use App\Infrastructure\Auth\Policies\Concerns\HandlesMediaOwnership;
-use App\Infrastructure\Auth\Policies\Concerns\HandlesTenantMembership; // Trait para validar pertenencia a tenant
+use App\Support\Policies\Concerns\HandlesMediaOwnership;
+use App\Support\Policies\Concerns\HandlesTenantMembership; // Trait para validar pertenencia a tenant
 
 /**
  * Política de Autorización para el Modelo User

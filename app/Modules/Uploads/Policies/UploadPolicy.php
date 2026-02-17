@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Auth\Policies;
+namespace App\Modules\Uploads\Policies;
 
-use App\Infrastructure\Auth\Policies\Concerns\HandlesTenantMembership;
+use App\Support\Policies\Concerns\HandlesTenantMembership;
 use App\Models\User;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Support\Enums\Uploads\ServingMode;

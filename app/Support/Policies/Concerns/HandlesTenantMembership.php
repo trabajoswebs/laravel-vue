@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Activa tipado estricto
 
-namespace App\Infrastructure\Auth\Policies\Concerns; // Namespace de traits de policies
+namespace App\Support\Policies\Concerns; // Namespace de traits de policies
 
 use App\Models\User; // Modelo de usuario
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Infrastructure\Auth\Policies\Concerns;
+namespace App\Support\Policies\Concerns;
 
 use App\Models\User;
 
