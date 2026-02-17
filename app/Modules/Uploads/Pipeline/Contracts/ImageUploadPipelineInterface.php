@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Contracts;
+namespace App\Modules\Uploads\Pipeline\Contracts;
 
 use App\Modules\Uploads\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
+use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
 use Illuminate\Http\UploadedFile;
 use SplFileObject;
 

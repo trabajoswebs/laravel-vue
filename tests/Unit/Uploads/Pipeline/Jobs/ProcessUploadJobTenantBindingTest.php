@@ -8,7 +8,7 @@ use App\Support\Contracts\MetricsInterface;
 use App\Application\User\Contracts\UserRepository;
 use App\Models\User;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessUploadJob;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;

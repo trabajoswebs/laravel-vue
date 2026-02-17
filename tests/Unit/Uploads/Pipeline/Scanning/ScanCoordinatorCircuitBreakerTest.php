@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Uploads\Pipeline\Scanning;
 
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinator;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\ScanFailedException;
+use App\Modules\Uploads\Pipeline\Exceptions\ScanFailedException;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCircuitStoreInterface;
 use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Http\UploadedFile;

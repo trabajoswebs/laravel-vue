@@ -6,11 +6,11 @@ namespace App\Infrastructure\Uploads\Pipeline\Support;
 
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
+use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
 use Illuminate\Http\UploadedFile;
 use App\Support\Logging\SecurityLogger;

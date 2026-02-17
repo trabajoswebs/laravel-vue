@@ -6,7 +6,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Security;
 
 use App\Support\Contracts\LoggerInterface;
 use App\Modules\Uploads\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 
 /**
  * Valida firmas mágicas ("magic bytes") con máxima seguridad.

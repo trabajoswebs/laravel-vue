@@ -9,11 +9,11 @@ use App\Models\User;
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
+use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
-use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
@@ -311,14 +311,14 @@ final class DefaultUploadServiceCleanupTest extends TestCase
                 }
             });
 
-        $metadataFirst = new \App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata(
+        $metadataFirst = new \App\Modules\Uploads\Pipeline\Contracts\UploadMetadata(
             mime: 'image/jpeg',
             extension: 'jpg',
             hash: 'hash-first',
             dimensions: null,
             originalFilename: 'avatar.jpg',
         );
-        $metadataSecond = new \App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata(
+        $metadataSecond = new \App\Modules\Uploads\Pipeline\Contracts\UploadMetadata(
             mime: 'image/jpeg',
             extension: 'jpg',
             hash: 'hash-second',

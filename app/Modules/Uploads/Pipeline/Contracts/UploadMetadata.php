@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Contracts;
+namespace App\Modules\Uploads\Pipeline\Contracts;
 
 /**
  * Metadata estructurada asociada a un artefacto subido.

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline\Scanning;
 
 use App\Support\Security\Exceptions\AntivirusException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\ScanFailedException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
+use App\Modules\Uploads\Pipeline\Exceptions\ScanFailedException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCircuitBreaker;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Http\UploadedFile;

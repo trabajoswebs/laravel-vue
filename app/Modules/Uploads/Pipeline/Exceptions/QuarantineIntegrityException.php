@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Exceptions;
+namespace App\Modules\Uploads\Pipeline\Exceptions;
 
 /**
  * Se lanza cuando el artefacto en cuarentena cambia o pierde integridad.

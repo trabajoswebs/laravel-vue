@@ -6,8 +6,8 @@ namespace Tests\Unit\Services\Upload;
 
 // Importamos las clases necesarias para los tests
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline de subida por defecto
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException; // Excepción para validación de subida
-use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException; // Excepción para validación de subida
+use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
 use App\Modules\Uploads\Contracts\FileConstraints;

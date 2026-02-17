@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Exceptions;
+namespace App\Modules\Uploads\Pipeline\Exceptions;
 
 /**
  * Errores relacionados con la cuarentena (persistencia temporal).

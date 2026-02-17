@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Support;
 
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
-use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadException;
+use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
+use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadException;
 use Illuminate\Support\Str;
 use Spatie\MediaLibrary\HasMedia as HasMediaContract;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;

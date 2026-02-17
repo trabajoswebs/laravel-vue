@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Uploads\Pipeline\Security;
 
 use App\Modules\Uploads\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Support\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
 use Tests\TestCase;

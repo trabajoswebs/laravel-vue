@@ -24,8 +24,8 @@ use App\Infrastructure\Uploads\Profiles\DocumentPdfProfile; // Perfil PDF
 use App\Infrastructure\Uploads\Profiles\GalleryImageProfile; // Perfil galería
 use App\Infrastructure\Uploads\Profiles\ImportCsvProfile; // Perfil CSV
 use App\Infrastructure\Uploads\Profiles\SpreadsheetXlsxProfile; // Perfil XLSX
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline; // Contrato pipeline
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadService; // Contrato servicio upload
+use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline; // Contrato pipeline
+use App\Modules\Uploads\Pipeline\Contracts\UploadService; // Contrato servicio upload
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline por defecto
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService; // Servicio por defecto
 use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter; // Adaptador pipeline imagen

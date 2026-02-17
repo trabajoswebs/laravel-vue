@@ -12,11 +12,11 @@ use App\Modules\Uploads\Requests\Settings\UpdateAvatarRequest;   // Ej. valida i
 use App\Modules\Uploads\Requests\HttpUploadedMedia;
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Models\User;                                  // Ej. modelo User
-use App\Infrastructure\Uploads\Pipeline\Exceptions\NormalizationFailedException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\QuarantineException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\ScanFailedException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
+use App\Modules\Uploads\Pipeline\Exceptions\NormalizationFailedException;
+use App\Modules\Uploads\Pipeline\Exceptions\QuarantineException;
+use App\Modules\Uploads\Pipeline\Exceptions\ScanFailedException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use Illuminate\Auth\Access\AuthorizationException;    // Ej. excepciones de autorización
 use Illuminate\Http\JsonResponse;                     // Ej. respuesta JSON

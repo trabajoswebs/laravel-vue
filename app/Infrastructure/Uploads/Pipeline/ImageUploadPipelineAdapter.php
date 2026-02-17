@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline;
 
 use App\Modules\Uploads\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Pipeline\Contracts\ImageUploadPipelineInterface;
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
-use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadException;
+use App\Modules\Uploads\Pipeline\Contracts\ImageUploadPipelineInterface;
+use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
+use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline;
+use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadException;
 use App\Infrastructure\Uploads\Pipeline\Image\ImagePipeline;
 use App\Infrastructure\Uploads\Pipeline\Image\ImagePipelineResult;
 use Illuminate\Http\UploadedFile;

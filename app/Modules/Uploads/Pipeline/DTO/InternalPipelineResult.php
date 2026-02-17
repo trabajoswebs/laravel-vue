@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\DTO;
+namespace App\Modules\Uploads\Pipeline\DTO;
 
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
+use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
 
 /**
  * DTO mínimo para resultados de pipelines de subida.

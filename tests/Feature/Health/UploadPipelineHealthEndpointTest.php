@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Health;
 
-use App\Infrastructure\Uploads\Pipeline\Health\UploadPipelineHealthCheck;
+use App\Modules\Uploads\Pipeline\Health\UploadPipelineHealthCheck;
 use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
 use Illuminate\Foundation\Testing\RefreshDatabase;

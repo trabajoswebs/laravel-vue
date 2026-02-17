@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\Unit\Uploads;
 
 use App\Application\Uploads\DTO\UploadResult as ApplicationUploadResult;
-use App\Infrastructure\Uploads\Pipeline\Contracts\UploadMetadata;
-use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
+use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
+use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;
 use PHPUnit\Framework\TestCase;
 

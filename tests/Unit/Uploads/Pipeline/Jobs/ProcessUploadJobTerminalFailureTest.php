@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Jobs;
 
-use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
+use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessUploadJob;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
