@@ -10,8 +10,8 @@ use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadException;
-use App\Infrastructure\Uploads\Pipeline\Image\ImagePipeline;
-use App\Infrastructure\Uploads\Pipeline\Image\ImagePipelineResult;
+use App\Modules\Uploads\Pipeline\Image\ImagePipeline;
+use App\Modules\Uploads\Pipeline\Image\ImagePipelineResult;
 use Illuminate\Http\UploadedFile;
 use SplFileObject;
 

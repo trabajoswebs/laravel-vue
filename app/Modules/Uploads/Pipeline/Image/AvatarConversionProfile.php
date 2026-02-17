@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Image;
+namespace App\Modules\Uploads\Pipeline\Image;
 
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Contracts\MediaOwner;

@@ -6,7 +6,7 @@ namespace App\Models;
 
 use App\Modules\Uploads\Contracts\MediaOwner; // Contrato que marca modelos propietarios de medios
 use App\Infrastructure\Uploads\Core\Models\Concerns\TracksMediaVersions; // Trait que versiona media para cache busting
-use App\Infrastructure\Uploads\Pipeline\Image\AvatarConversionProfile;
+use App\Modules\Uploads\Pipeline\Image\AvatarConversionProfile;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
 use App\Models\Tenant; // Modelo de tenant para relaciones
 use Illuminate\Database\Eloquent\Casts\Attribute;

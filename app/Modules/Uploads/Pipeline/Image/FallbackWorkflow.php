@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Image;
+namespace App\Modules\Uploads\Pipeline\Image;
 
-use App\Infrastructure\Uploads\Pipeline\Image\ImagePipelineResult;
+use App\Modules\Uploads\Pipeline\Image\ImagePipelineResult;
 use Illuminate\Http\UploadedFile;
 use InvalidArgumentException;
 use RuntimeException;

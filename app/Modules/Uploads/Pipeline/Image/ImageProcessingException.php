@@ -4,7 +4,7 @@
 declare(strict_types=1);
 
 // 2. Espacio de nombres para componentes del pipeline de imágenes.
-namespace App\Infrastructure\Uploads\Pipeline\Image;
+namespace App\Modules\Uploads\Pipeline\Image;
 
 /**
  * Excepción específica del pipeline con información sobre recuperabilidad.

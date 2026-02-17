@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Image;
+namespace App\Modules\Uploads\Pipeline\Image;
 
 use App\Support\Logging\SecurityLogger;
 use Illuminate\Support\Str;

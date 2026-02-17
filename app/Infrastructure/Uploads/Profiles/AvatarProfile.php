@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Profiles;
 
 use App\Modules\Uploads\Contracts\MediaOwner;
-use App\Infrastructure\Uploads\Pipeline\Image\AvatarConversionProfile;
+use App\Modules\Uploads\Pipeline\Image\AvatarConversionProfile;
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Contracts\MediaProfile;
 use Spatie\Image\Enums\Fit;

@@ -4,13 +4,13 @@
 declare(strict_types=1);
 
 // 2. Espacio de nombres para componentes del pipeline de imágenes.
-namespace App\Infrastructure\Uploads\Pipeline\Image;
+namespace App\Modules\Uploads\Pipeline\Image;
 
 // 3. Importaciones de clases y facades necesarios.
 use Imagick;
 use Throwable;
-use App\Infrastructure\Uploads\Pipeline\Image\ImagePipelineResult;
-use App\Infrastructure\Uploads\Pipeline\Image\ImageProcessingException;
+use App\Modules\Uploads\Pipeline\Image\ImagePipelineResult;
+use App\Modules\Uploads\Pipeline\Image\ImageProcessingException;
 
 /**
  * Encapsula el flujo basado en Imagick para normalizar imágenes.

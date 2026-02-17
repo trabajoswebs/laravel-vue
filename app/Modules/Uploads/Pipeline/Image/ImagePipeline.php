@@ -4,16 +4,16 @@
 declare(strict_types=1);
 
 // 2. Espacio de nombres para servicios de aplicación.
-namespace App\Infrastructure\Uploads\Pipeline\Image;
+namespace App\Modules\Uploads\Pipeline\Image;
 
 // 3. Importaciones de traits, clases y facades necesarios.
-use App\Infrastructure\Uploads\Pipeline\Image\Concerns\GuardsUploadedImage;
-use App\Infrastructure\Uploads\Pipeline\Image\FallbackWorkflow;
-use App\Infrastructure\Uploads\Pipeline\Image\ImagickWorkflow;
-use App\Infrastructure\Uploads\Pipeline\Image\PipelineArtifacts;
-use App\Infrastructure\Uploads\Pipeline\Image\PipelineConfig;
-use App\Infrastructure\Uploads\Pipeline\Image\ImageProcessingException;
-use App\Infrastructure\Uploads\Pipeline\Image\PipelineLogger;
+use App\Modules\Uploads\Pipeline\Image\Concerns\GuardsUploadedImage;
+use App\Modules\Uploads\Pipeline\Image\FallbackWorkflow;
+use App\Modules\Uploads\Pipeline\Image\ImagickWorkflow;
+use App\Modules\Uploads\Pipeline\Image\PipelineArtifacts;
+use App\Modules\Uploads\Pipeline\Image\PipelineConfig;
+use App\Modules\Uploads\Pipeline\Image\ImageProcessingException;
+use App\Modules\Uploads\Pipeline\Image\PipelineLogger;
 use App\Modules\Uploads\Contracts\FileConstraints;
 use Illuminate\Http\UploadedFile;
 use InvalidArgumentException;

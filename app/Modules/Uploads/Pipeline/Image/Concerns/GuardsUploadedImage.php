@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Image\Concerns;
+namespace App\Modules\Uploads\Pipeline\Image\Concerns;
 
 use App\Modules\Uploads\Contracts\FileConstraints;
 use Illuminate\Http\UploadedFile;

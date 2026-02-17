@@ -29,7 +29,7 @@ use App\Modules\Uploads\Pipeline\Contracts\UploadService; // Contrato servicio u
 use App\Modules\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline por defecto
 use App\Modules\Uploads\Pipeline\DefaultUploadService; // Servicio por defecto
 use App\Modules\Uploads\Pipeline\ImageUploadPipelineAdapter; // Adaptador pipeline imagen
-use App\Infrastructure\Uploads\Pipeline\Image\ImagePipeline; // Pipeline de imagen
+use App\Modules\Uploads\Pipeline\Image\ImagePipeline; // Pipeline de imagen
 use App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository; // Repo de cuarentena
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository; // Contrato de cuarentena
 use App\Infrastructure\Uploads\Pipeline\Scanning\GitYaraRuleManager; // Gestor Yara git
