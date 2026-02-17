@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Security\Logging;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 

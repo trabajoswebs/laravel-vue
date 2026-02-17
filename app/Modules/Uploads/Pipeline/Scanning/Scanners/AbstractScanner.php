@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Uploads\Pipeline\Scanning\Scanners;
 
 use App\Support\Security\Exceptions\AntivirusException;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Http\UploadedFile;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;

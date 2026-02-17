@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Security;
 
-use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
+use App\Modules\Uploads\Pipeline\Security\MimeNormalizer;
 use Tests\TestCase;
 
 final class MimeNormalizerTest extends TestCase

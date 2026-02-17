@@ -6,8 +6,8 @@ namespace App\Modules\Uploads\Providers;
 
 use App\Support\Logging\SecurityLogger;
 use App\Modules\Uploads\Middleware\RateLimitUploads;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;

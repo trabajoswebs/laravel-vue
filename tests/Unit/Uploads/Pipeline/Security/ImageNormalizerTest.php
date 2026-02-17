@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Uploads\Pipeline\Security;
 
 use App\Modules\Uploads\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Pipeline\Security\ImageNormalizer;
+use App\Modules\Uploads\Pipeline\Security\ImageNormalizer;
 use Tests\TestCase;
 
 final class ImageNormalizerTest extends TestCase

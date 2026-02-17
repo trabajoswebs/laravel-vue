@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Security\Logging;
+namespace App\Modules\Uploads\Pipeline\Security\Logging;
 
 use Illuminate\Support\Facades\Log;
 final class MediaSecurityLogger

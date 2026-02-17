@@ -2,8 +2,8 @@
 
 namespace App\Http\Middleware;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;

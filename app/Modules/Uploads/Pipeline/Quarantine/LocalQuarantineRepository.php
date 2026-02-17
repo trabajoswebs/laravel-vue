@@ -8,7 +8,7 @@ use App\Support\Logging\SecurityLogger;
 // Importamos las clases necesarias
 use App\Modules\Uploads\Pipeline\Exceptions\QuarantineException; // Excepción para fallos en cuarentena
 use App\Modules\Uploads\Pipeline\Exceptions\QuarantineIntegrityException; // Excepción para fallos de integridad
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Filesystem\FilesystemAdapter; // Adaptador de sistema de archivos de Laravel
 use RuntimeException; // Excepción estándar de PHP
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;

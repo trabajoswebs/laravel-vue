@@ -7,7 +7,7 @@ namespace App\Modules\Uploads\Pipeline\Optimizer;
 use App\Modules\Uploads\Pipeline\Optimizer\Adapters\LocalOptimizationAdapter;
 use App\Modules\Uploads\Pipeline\Optimizer\Adapters\RemoteDownloader;
 use App\Modules\Uploads\Pipeline\Optimizer\Adapters\RemoteUploader;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Arr;
 use App\Support\Logging\SecurityLogger;

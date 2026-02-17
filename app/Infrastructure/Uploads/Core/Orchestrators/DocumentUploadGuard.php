@@ -6,7 +6,7 @@ namespace App\Infrastructure\Uploads\Core\Orchestrators;
 
 use App\Application\Uploads\Exceptions\InvalidUploadFileException;
 use App\Domain\Uploads\UploadProfile;
-use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
+use App\Modules\Uploads\Pipeline\Security\MimeNormalizer;
 use Illuminate\Http\UploadedFile;
 
 final class DocumentUploadGuard

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Logging;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Psr\Log\LoggerInterface;
 
 /**

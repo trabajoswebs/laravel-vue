@@ -9,7 +9,7 @@ use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Support\Contracts\MetricsInterface;
 use App\Support\Contracts\LoggerInterface;
 use App\Modules\Uploads\Pipeline\Contracts\ImageUploadPipelineInterface;
-use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
+use App\Modules\Uploads\Pipeline\Security\MagicBytesValidator;
 use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;

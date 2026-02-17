@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Uploads\Middleware;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use Closure;
 use Illuminate\Http\Request;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;

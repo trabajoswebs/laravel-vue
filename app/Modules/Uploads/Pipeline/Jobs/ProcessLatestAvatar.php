@@ -8,7 +8,7 @@ use App\Support\Contracts\ClockInterface;
 use App\Support\Contracts\LoggerInterface;
 use App\Models\User;
 use App\Models\Tenant;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;

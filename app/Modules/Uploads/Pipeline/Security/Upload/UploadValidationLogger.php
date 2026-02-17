@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Security\Upload;
+namespace App\Modules\Uploads\Pipeline\Security\Upload;
 
 use Psr\Log\LoggerInterface;
 use Throwable;

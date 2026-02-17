@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Security;
+namespace App\Modules\Uploads\Pipeline\Security;
 
 /**
  * Clase encargada de normalizar tipos MIME y aplicar alias comunes.

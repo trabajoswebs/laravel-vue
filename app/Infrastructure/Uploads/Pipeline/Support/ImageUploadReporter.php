@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Support;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use App\Support\Logging\SecurityLogger;
 /**

@@ -14,11 +14,11 @@ use Intervention\Image\ImageManager;
 use RuntimeException;
 use Throwable;
 use App\Modules\Uploads\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Pipeline\Security\ImageMetadataReader;
-use App\Infrastructure\Uploads\Pipeline\Security\ImageNormalizer;
-use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
-use App\Infrastructure\Uploads\Pipeline\Security\PayloadScanner;
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadValidationLogger;
+use App\Modules\Uploads\Pipeline\Security\ImageMetadataReader;
+use App\Modules\Uploads\Pipeline\Security\ImageNormalizer;
+use App\Modules\Uploads\Pipeline\Security\MimeNormalizer;
+use App\Modules\Uploads\Pipeline\Security\PayloadScanner;
+use App\Modules\Uploads\Pipeline\Security\Upload\UploadValidationLogger;
 
 /**
  * Regla de validación endurecida para archivos de imagen.

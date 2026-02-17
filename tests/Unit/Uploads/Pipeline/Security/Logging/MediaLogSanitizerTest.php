@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Security\Logging;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Tests\TestCase;
 
 final class MediaLogSanitizerTest extends TestCase

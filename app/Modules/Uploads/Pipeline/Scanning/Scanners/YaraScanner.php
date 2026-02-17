@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Uploads\Pipeline\Scanning\Scanners;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Modules\Uploads\Pipeline\Scanning\YaraRuleManager;
 use App\Support\Security\Exceptions\AntivirusException;
 

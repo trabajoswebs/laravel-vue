@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Security\Exceptions;
+namespace App\Modules\Uploads\Pipeline\Security\Exceptions;
 
 use RuntimeException;
 

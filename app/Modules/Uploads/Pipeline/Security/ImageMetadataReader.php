@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Security;
+namespace App\Modules\Uploads\Pipeline\Security;
 
-use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
-use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadValidationLogger;
+use App\Modules\Uploads\Pipeline\Security\MimeNormalizer;
+use App\Modules\Uploads\Pipeline\Security\Upload\UploadValidationLogger;
 
 /**
  * Clase encargada de leer y validar metadatos de imágenes.

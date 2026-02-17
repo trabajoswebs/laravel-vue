@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Uploads\Pipeline\Scanning;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
+use App\Modules\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
 use App\Support\Logging\SecurityLogger;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;

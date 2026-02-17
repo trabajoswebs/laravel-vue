@@ -9,7 +9,7 @@ use App\Modules\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline de subida po
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException; // Excepción para validación de subida
 use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Modules\Uploads\Pipeline\ImageUploadPipelineAdapter;
-use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
+use App\Modules\Uploads\Pipeline\Security\MagicBytesValidator;
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Support\Contracts\MetricsInterface;

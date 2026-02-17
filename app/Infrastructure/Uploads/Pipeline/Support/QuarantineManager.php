@@ -11,7 +11,7 @@ use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
-use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;
+use App\Modules\Uploads\Pipeline\Security\MimeNormalizer;
 use Illuminate\Http\UploadedFile;
 use App\Support\Logging\SecurityLogger;
 use Illuminate\Support\Str;

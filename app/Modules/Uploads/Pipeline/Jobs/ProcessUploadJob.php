@@ -14,7 +14,7 @@ use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Modules\Uploads\Contracts\MediaOwner;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Support\Logging\SecurityLogger;
 use App\Support\Contracts\MetricsInterface;
 use Illuminate\Bus\Queueable;

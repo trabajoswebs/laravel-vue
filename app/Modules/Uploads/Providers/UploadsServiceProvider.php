@@ -44,7 +44,7 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Psr\Log\LoggerInterface;
 use App\Support\Contracts\LoggerInterface as AppLoggerInterface;
-use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator; // Validador de magic bytes
+use App\Modules\Uploads\Pipeline\Security\MagicBytesValidator; // Validador de magic bytes
 use App\Infrastructure\Uploads\Pipeline\Services\MediaCleanupScheduler; // Scheduler de cleanup
 use App\Infrastructure\Uploads\Pipeline\Support\MediaArtifactCollector; // Colector de artefactos
 use App\Application\Uploads\Contracts\UploadOrchestratorInterface; // Contrato de orquestador

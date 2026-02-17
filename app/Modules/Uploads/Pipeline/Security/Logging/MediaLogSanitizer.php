@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Security\Logging;
+namespace App\Modules\Uploads\Pipeline\Security\Logging;
 
 final class MediaLogSanitizer
 {

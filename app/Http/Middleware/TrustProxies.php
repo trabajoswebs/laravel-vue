@@ -2,8 +2,8 @@
 
 namespace App\Http\Middleware;
 
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
-use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
+use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 // Importamos las clases necesarias para el middleware
 use Illuminate\Http\Middleware\TrustProxies as Middleware; // Clase base de Laravel para confianza en proxies
 use Illuminate\Http\Request; // Clase para manejar las solicitudes HTTP
