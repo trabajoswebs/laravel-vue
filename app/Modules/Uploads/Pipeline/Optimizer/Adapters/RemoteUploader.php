@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters;
+namespace App\Modules\Uploads\Pipeline\Optimizer\Adapters;
 
 use Illuminate\Filesystem\FilesystemAdapter;
 use RuntimeException;

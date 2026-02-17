@@ -8,7 +8,7 @@ use App\Support\Contracts\ClockInterface; // Reloj desacoplado; ej. now()
 use App\Support\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
 use App\Application\User\Jobs\Enums\ConversionReadyState; // Enum de estado de conversions; ej. READY
 use App\Models\Tenant; // Modelo Tenant para makeCurrent; ej. Tenant #3
-use App\Infrastructure\Uploads\Pipeline\Optimizer\OptimizerService; // Servicio de optimización de imágenes; ej. optimize media
+use App\Modules\Uploads\Pipeline\Optimizer\OptimizerService; // Servicio de optimización de imágenes; ej. optimize media
 use App\Models\User; // Modelo User propietario
 use Illuminate\Bus\Queueable; // Trait de colas; ej. onQueue('media')
 use Illuminate\Cache\RedisStore; // Cache Redis para contadores; ej. release count

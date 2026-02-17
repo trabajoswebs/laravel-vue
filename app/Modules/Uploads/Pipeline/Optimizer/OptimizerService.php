@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Optimizer;
+namespace App\Modules\Uploads\Pipeline\Optimizer;
 
-use App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters\LocalOptimizationAdapter;
-use App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters\RemoteDownloader;
-use App\Infrastructure\Uploads\Pipeline\Optimizer\Adapters\RemoteUploader;
+use App\Modules\Uploads\Pipeline\Optimizer\Adapters\LocalOptimizationAdapter;
+use App\Modules\Uploads\Pipeline\Optimizer\Adapters\RemoteDownloader;
+use App\Modules\Uploads\Pipeline\Optimizer\Adapters\RemoteUploader;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Arr;

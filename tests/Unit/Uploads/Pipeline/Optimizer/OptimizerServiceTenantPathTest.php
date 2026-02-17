@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Optimizer;
 
-use App\Infrastructure\Uploads\Pipeline\Optimizer\OptimizerService;
+use App\Modules\Uploads\Pipeline\Optimizer\OptimizerService;
 use RuntimeException;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\TestCase;
