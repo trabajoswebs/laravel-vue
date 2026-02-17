@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Shared\Adapters;
+namespace App\Support\Adapters;
 
 use App\Support\Contracts\ClockInterface;
 use Carbon\CarbonImmutable;

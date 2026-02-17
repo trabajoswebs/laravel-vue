@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Shared\Metrics;
+namespace App\Support\Metrics;
 
 use App\Support\Contracts\MetricsInterface;
 use Illuminate\Support\Facades\Log;

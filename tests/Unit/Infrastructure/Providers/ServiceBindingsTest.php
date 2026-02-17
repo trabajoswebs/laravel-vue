@@ -8,7 +8,7 @@ use App\Support\Contracts\ClockInterface;
 use App\Support\Contracts\TenantContextInterface;
 use App\Application\User\Contracts\UserRepository as UserRepositoryContract;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
-use App\Infrastructure\Shared\Adapters\LaravelClock;
+use App\Support\Adapters\LaravelClock;
 use App\Infrastructure\Tenancy\TenantContext;
 use App\Infrastructure\User\Adapters\EloquentUserRepository;
 use App\Infrastructure\Uploads\Core\Repositories\EloquentUploadRepository;
