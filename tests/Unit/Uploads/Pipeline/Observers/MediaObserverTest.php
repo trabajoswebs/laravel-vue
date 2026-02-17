@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Observers;
 
-use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
-use App\Infrastructure\Uploads\Pipeline\Observers\MediaObserver;
+use App\Modules\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
+use App\Modules\Uploads\Pipeline\Observers\MediaObserver;
 use Illuminate\Support\Facades\Bus;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\TestCase;

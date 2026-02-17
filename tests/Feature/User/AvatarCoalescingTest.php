@@ -6,8 +6,8 @@ namespace Tests\Feature\User;
 
 use App\Models\User;
 use App\Models\Tenant;
-use App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia;
-use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar;
+use App\Modules\Uploads\Pipeline\Jobs\PostProcessAvatarMedia;
+use App\Modules\Uploads\Pipeline\Jobs\ProcessLatestAvatar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;

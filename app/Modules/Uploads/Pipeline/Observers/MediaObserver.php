@@ -4,12 +4,12 @@
 declare(strict_types=1);
 
 // 2. Espacio de nombres para el observador de modelos Media.
-namespace App\Infrastructure\Uploads\Pipeline\Observers;
+namespace App\Modules\Uploads\Pipeline\Observers;
 
 // 3. Importaciones de clases necesarias.
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler;
-use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
-use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
+use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
+use App\Modules\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
 use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 use App\Support\Logging\SecurityLogger;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;

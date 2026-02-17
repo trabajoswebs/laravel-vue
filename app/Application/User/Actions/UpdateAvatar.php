@@ -12,7 +12,7 @@ use App\Domain\Uploads\UploadProfileId; // VO de perfil
 use App\Modules\Uploads\Registry\UploadProfileRegistry; // Registro de perfiles
 use App\Modules\Uploads\Requests\HttpUploadedMedia; // Adaptador de archivo HTTP
 use App\Models\User; // Modelo User que actúa como owner
-use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor de avatar
+use App\Modules\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor de avatar
 use Illuminate\Support\Str; // Helper para UUID
 
 /**

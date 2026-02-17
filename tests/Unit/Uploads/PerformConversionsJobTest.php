@@ -6,7 +6,7 @@ namespace Tests\Unit\Uploads;
 
 use App\Models\User;
 use App\Models\Tenant;
-use App\Infrastructure\Uploads\Pipeline\Jobs\PerformConversionsJob;
+use App\Modules\Uploads\Pipeline\Jobs\PerformConversionsJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\MediaLibrary\Conversions\ConversionCollection;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;

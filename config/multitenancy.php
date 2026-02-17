@@ -48,8 +48,8 @@ return [
 
     // Jobs tenant-aware explícitos (aunque no implementen la interfaz TenantAware).
     'tenant_aware_jobs' => [
-        \App\Infrastructure\Uploads\Pipeline\Jobs\PostProcessAvatarMedia::class, // Ej.: media=5 tenant=3
-        \App\Infrastructure\Uploads\Pipeline\Jobs\PerformConversionsJob::class, // Ej.: conversions bajo tenant=3
+        \App\Modules\Uploads\Pipeline\Jobs\PostProcessAvatarMedia::class, // Ej.: media=5 tenant=3
+        \App\Modules\Uploads\Pipeline\Jobs\PerformConversionsJob::class, // Ej.: conversions bajo tenant=3
     ], // Ej.: [...]
 
     // Jobs marcados como no tenant-aware (vacío aquí).

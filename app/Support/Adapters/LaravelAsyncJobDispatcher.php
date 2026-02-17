@@ -6,7 +6,7 @@ namespace App\Support\Adapters;
 
 use App\Support\Contracts\AsyncJobDispatcherInterface;
 use App\Application\User\Jobs\CleanupMediaArtifacts;
-use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
+use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use DateTimeInterface;
 
 /**

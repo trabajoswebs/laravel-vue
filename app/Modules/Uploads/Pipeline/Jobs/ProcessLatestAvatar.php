@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Jobs;
+namespace App\Modules\Uploads\Pipeline\Jobs;
 
 use App\Support\Contracts\ClockInterface;
 use App\Support\Contracts\LoggerInterface;
@@ -18,8 +18,8 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
-use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
-use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
+use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
+use App\Modules\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
 use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 
 /**

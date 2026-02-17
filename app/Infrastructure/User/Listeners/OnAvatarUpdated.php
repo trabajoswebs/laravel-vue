@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\User\Listeners;
 
 use App\Application\User\Events\AvatarUpdated; // Evento de aplicación al actualizar avatar; ej. user_id=1
-use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor para avatar
+use App\Modules\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor para avatar
 use Illuminate\Support\Facades\Log; // Logger para dejar trazas; ej. warning si falta tenant
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media de Spatie; ej. media_id=5
 

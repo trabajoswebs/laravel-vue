@@ -4,14 +4,14 @@
 declare(strict_types=1);
 
 // 2. Espacio de nombres para el Job de conversión de medios.
-namespace App\Infrastructure\Uploads\Pipeline\Jobs;
+namespace App\Modules\Uploads\Pipeline\Jobs;
 
 // 3. Importaciones de clases necesarias.
 use App\Support\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
 use App\Models\Tenant; // Modelo Tenant para makeCurrent; ej. Tenant #3
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler; // Scheduler de limpieza; ej. flushExpired
 use App\Models\User; // Modelo User para validar avatar
-use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob; // Limpieza directa de artefactos
+use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob; // Limpieza directa de artefactos
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 use Illuminate\Contracts\Debug\ExceptionHandler; // Reporta excepciones; ej. app(ExceptionHandler)

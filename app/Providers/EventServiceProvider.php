@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use App\Infrastructure\Uploads\Pipeline\Listeners\RunPendingMediaCleanup;
-use App\Infrastructure\Uploads\Pipeline\Listeners\QueueAvatarPostProcessing;
+use App\Modules\Uploads\Pipeline\Listeners\RunPendingMediaCleanup;
+use App\Modules\Uploads\Pipeline\Listeners\QueueAvatarPostProcessing;
 use App\Application\User\Events\AvatarDeleted;
 use App\Application\User\Events\AvatarUpdated;
 use App\Infrastructure\User\Listeners\OnAvatarDeleted;

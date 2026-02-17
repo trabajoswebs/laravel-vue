@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Listeners;
+namespace App\Modules\Uploads\Pipeline\Listeners;
 
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler;
 use App\Support\Contracts\LoggerInterface;

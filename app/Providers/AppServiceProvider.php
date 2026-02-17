@@ -12,7 +12,7 @@ use App\Domain\Security\Rules\AvatarHeaderRules;
 use App\Domain\Security\Rules\RateLimitSignatureRules;
 use App\Application\User\Contracts\UserAvatarRepository as UserAvatarRepositoryContract;
 use App\Application\User\Contracts\UserRepository as UserRepositoryContract;
-use App\Infrastructure\Uploads\Pipeline\Observers\MediaObserver;
+use App\Modules\Uploads\Pipeline\Observers\MediaObserver;
 use App\Support\Adapters\LaravelAsyncJobDispatcher;
 use App\Support\Adapters\LaravelClock;
 use App\Support\Adapters\LaravelEventBus;

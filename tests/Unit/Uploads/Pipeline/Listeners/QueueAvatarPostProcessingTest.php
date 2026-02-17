@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\Unit\Uploads\Pipeline\Listeners;
 
 use App\Support\Contracts\LoggerInterface;
-use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar;
-use App\Infrastructure\Uploads\Pipeline\Listeners\QueueAvatarPostProcessing;
+use App\Modules\Uploads\Pipeline\Jobs\ProcessLatestAvatar;
+use App\Modules\Uploads\Pipeline\Listeners\QueueAvatarPostProcessing;
 use Illuminate\Support\Facades\Queue;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\TestCase;

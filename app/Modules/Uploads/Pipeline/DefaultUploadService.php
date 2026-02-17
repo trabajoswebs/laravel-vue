@@ -23,7 +23,7 @@ use App\Modules\Uploads\Pipeline\Exceptions\UploadException;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
-use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessUploadJob;
+use App\Modules\Uploads\Pipeline\Jobs\ProcessUploadJob;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Support\ImageUploadReporter;

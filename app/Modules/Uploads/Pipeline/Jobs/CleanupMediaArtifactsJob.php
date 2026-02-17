@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Jobs;
+namespace App\Modules\Uploads\Pipeline\Jobs;
 
 use App\Support\Contracts\LoggerInterface;
 use Illuminate\Bus\Queueable;

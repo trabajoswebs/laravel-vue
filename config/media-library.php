@@ -197,7 +197,7 @@ return [
      * your custom jobs extend the ones provided by the package.
      */
     'jobs' => [
-        'perform_conversions' => App\Infrastructure\Uploads\Pipeline\Jobs\PerformConversionsJob::class,
+        'perform_conversions' => App\Modules\Uploads\Pipeline\Jobs\PerformConversionsJob::class,
         'generate_responsive_images' => Spatie\MediaLibrary\ResponsiveImages\Jobs\GenerateResponsiveImagesJob::class,
     ],
 
