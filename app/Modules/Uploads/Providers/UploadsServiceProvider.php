@@ -26,9 +26,9 @@ use App\Infrastructure\Uploads\Profiles\ImportCsvProfile; // Perfil CSV
 use App\Infrastructure\Uploads\Profiles\SpreadsheetXlsxProfile; // Perfil XLSX
 use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline; // Contrato pipeline
 use App\Modules\Uploads\Pipeline\Contracts\UploadService; // Contrato servicio upload
-use App\Infrastructure\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline por defecto
-use App\Infrastructure\Uploads\Pipeline\DefaultUploadService; // Servicio por defecto
-use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter; // Adaptador pipeline imagen
+use App\Modules\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline por defecto
+use App\Modules\Uploads\Pipeline\DefaultUploadService; // Servicio por defecto
+use App\Modules\Uploads\Pipeline\ImageUploadPipelineAdapter; // Adaptador pipeline imagen
 use App\Infrastructure\Uploads\Pipeline\Image\ImagePipeline; // Pipeline de imagen
 use App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository; // Repo de cuarentena
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository; // Contrato de cuarentena

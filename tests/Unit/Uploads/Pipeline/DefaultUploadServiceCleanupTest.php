@@ -10,7 +10,7 @@ use App\Support\Security\Exceptions\AntivirusException;
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline;
-use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
+use App\Modules\Uploads\Pipeline\DefaultUploadService;
 use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadException;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
