@@ -4,8 +4,8 @@ namespace App\Http\Middleware;
 
 use App\Support\Security\SecurityHelper;
 use App\Http\Requests\Concerns\SanitizesInputs;
-use App\Infrastructure\Sanitization\DisplayName;
-use App\Infrastructure\Localization\TranslationService;
+use App\Support\Sanitization\DisplayName;
+use App\Support\Localization\TranslationService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;

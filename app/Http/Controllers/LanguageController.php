@@ -7,7 +7,7 @@ use App\Support\Security\SecurityHelper;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Log;
-use App\Infrastructure\Localization\TranslationService;
+use App\Support\Localization\TranslationService;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Redirect;

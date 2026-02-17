@@ -4,7 +4,7 @@ namespace App\Http\Requests\Settings;
 
 use App\Support\Security\SecurityHelper;
 use App\Models\User;
-use App\Infrastructure\Sanitization\DisplayName;
+use App\Support\Sanitization\DisplayName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;

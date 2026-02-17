@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Infrastructure\Localization;
+namespace App\Support\Localization;
 
 // Importamos las clases necesarias
 use App\Support\Security\SecurityHelper; // Helper para sanitización de seguridad

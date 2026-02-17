@@ -6,7 +6,7 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Support\Security\SecurityHelper;
-use App\Infrastructure\Localization\TranslationService;
+use App\Support\Localization\TranslationService;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Sanitization;
+namespace App\Support\Sanitization;
 
 use App\Support\Security\SecurityHelper;
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Infrastructure\Sanitization;
 
-use App\Infrastructure\Sanitization\DisplayName;
+use App\Support\Sanitization\DisplayName;
 use Tests\TestCase;
 
 final class DisplayNameTest extends TestCase
