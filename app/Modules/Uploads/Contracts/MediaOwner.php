@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Contracts;
+namespace App\Modules\Uploads\Contracts;
 
 use Spatie\MediaLibrary\HasMedia;
 

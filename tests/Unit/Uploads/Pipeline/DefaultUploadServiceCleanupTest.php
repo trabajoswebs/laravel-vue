@@ -7,8 +7,8 @@ namespace Tests\Unit\Uploads\Pipeline;
 use App\Support\Contracts\AsyncJobDispatcherInterface;
 use App\Models\User;
 use App\Support\Security\Exceptions\AntivirusException;
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
@@ -157,7 +157,7 @@ final class DefaultUploadServiceCleanupTest extends TestCase
         file_put_contents($path, 'payload');
 
         $uploaded = new UploadedFile($path, 'avatar.jpg', 'image/jpeg', null, true);
-        $uploadedMedia = new class($uploaded) implements \App\Infrastructure\Uploads\Core\Contracts\UploadedMedia {
+        $uploadedMedia = new class($uploaded) implements \App\Modules\Uploads\Contracts\UploadedMedia {
             public function __construct(private UploadedFile $raw) {}
             public function originalName(): string { return $this->raw->getClientOriginalName(); }
             public function mimeType(): ?string { return $this->raw->getMimeType(); }
@@ -219,7 +219,7 @@ final class DefaultUploadServiceCleanupTest extends TestCase
         file_put_contents($path, 'payload');
 
         $uploaded = new UploadedFile($path, 'avatar.jpg', 'image/jpeg', null, true);
-        $uploadedMedia = new class($uploaded) implements \App\Infrastructure\Uploads\Core\Contracts\UploadedMedia {
+        $uploadedMedia = new class($uploaded) implements \App\Modules\Uploads\Contracts\UploadedMedia {
             public function __construct(private UploadedFile $raw) {}
             public function originalName(): string { return $this->raw->getClientOriginalName(); }
             public function mimeType(): ?string { return $this->raw->getMimeType(); }

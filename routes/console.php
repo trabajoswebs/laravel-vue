@@ -1,6 +1,6 @@
 <?php
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
+use App\Modules\Uploads\Contracts\MediaCleanupScheduler;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Console\Commands\TenancyBootstrapExistingUsers;

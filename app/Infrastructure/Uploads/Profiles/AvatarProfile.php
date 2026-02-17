@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Profiles;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaOwner;
 use App\Infrastructure\Uploads\Pipeline\Image\AvatarConversionProfile;
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\MediaProfile;
 use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 

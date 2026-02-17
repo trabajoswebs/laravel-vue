@@ -6,7 +6,7 @@ namespace Tests\Unit\Uploads\Pipeline;
 
 use App\Support\Contracts\AsyncJobDispatcherInterface;
 use App\Models\User;
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaOwner;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;

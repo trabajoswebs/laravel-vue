@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Uploads\Requests;
 
-use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
+use App\Modules\Uploads\Contracts\UploadedMedia;
 use Illuminate\Http\UploadedFile;
 
 /**

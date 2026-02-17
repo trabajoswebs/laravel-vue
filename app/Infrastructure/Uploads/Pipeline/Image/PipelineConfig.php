@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Image;
 
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\FileConstraints;
 
 /**
  * Encapsula los parámetros configurables del pipeline para facilitar su reutilización.

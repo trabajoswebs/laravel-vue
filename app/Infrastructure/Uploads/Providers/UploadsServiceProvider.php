@@ -4,9 +4,9 @@ declare(strict_types=1); // Tipado estricto
 
 namespace App\Infrastructure\Uploads\Providers; // Namespace del provider de uploads
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract; // Contrato colector
-use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract; // Contrato cleanup
-use App\Infrastructure\Uploads\Core\Contracts\MediaUploader as MediaUploaderContract; // Contrato de uploader
+use App\Modules\Uploads\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract; // Contrato colector
+use App\Modules\Uploads\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract; // Contrato cleanup
+use App\Modules\Uploads\Contracts\MediaUploader as MediaUploaderContract; // Contrato de uploader
 use App\Application\Uploads\Contracts\OwnerIdNormalizerInterface;
 use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Infrastructure\Uploads\Core\Adapters\LaravelUploadStorage;

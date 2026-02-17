@@ -8,7 +8,7 @@ use App\Application\Uploads\Contracts\OwnerIdNormalizerInterface;
 use App\Application\Uploads\Contracts\UploadOrchestratorInterface;
 use App\Domain\Uploads\UploadProfile; // Ej.: perfil document_pdf
 use App\Models\User; // Ej.: auth user
-use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia; // Ej.: wrapper de media
+use App\Modules\Uploads\Contracts\UploadedMedia; // Ej.: wrapper de media
 use App\Application\Uploads\DTO\UploadResult; // Ej.: {id, status, correlationId}
 
 /**

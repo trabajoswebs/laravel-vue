@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Core\Contracts\MediaUploader;
-use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
-use App\Infrastructure\Uploads\Core\DTO\QueuedUploadResult;
+use App\Modules\Uploads\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\MediaUploader;
+use App\Modules\Uploads\Contracts\UploadedMedia;
+use App\Modules\Uploads\DTO\QueuedUploadResult;
 use App\Support\Contracts\AsyncJobDispatcherInterface;
-use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
+use App\Modules\Uploads\Contracts\MediaResource;
 use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;

@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Core\Services;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector;
-use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Core\Contracts\MediaUploader;
-use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
-use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
-use App\Infrastructure\Uploads\Core\DTO\MediaReplacementResult;
-use App\Infrastructure\Uploads\Core\DTO\MediaReplacementSnapshot;
-use App\Infrastructure\Uploads\Core\DTO\MediaReplacementItemSnapshot;
+use App\Modules\Uploads\Contracts\MediaArtifactCollector;
+use App\Modules\Uploads\Contracts\MediaCleanupScheduler;
+use App\Modules\Uploads\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\MediaUploader;
+use App\Modules\Uploads\Contracts\UploadedMedia;
+use App\Modules\Uploads\Contracts\MediaResource;
+use App\Modules\Uploads\DTO\MediaReplacementResult;
+use App\Modules\Uploads\DTO\MediaReplacementSnapshot;
+use App\Modules\Uploads\DTO\MediaReplacementItemSnapshot;
 
 /**
  * Orquesta reemplazo de media y prepara snapshots básicos para cleanup.

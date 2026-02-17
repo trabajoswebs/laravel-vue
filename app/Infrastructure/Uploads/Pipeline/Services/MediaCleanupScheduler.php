@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Services;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract;
-use App\Infrastructure\Uploads\Core\DTO\CleanupStatePayload;
-use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
+use App\Modules\Uploads\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract;
+use App\Modules\Uploads\DTO\CleanupStatePayload;
+use App\Modules\Uploads\Contracts\MediaResource;
 use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use App\Infrastructure\Uploads\Core\Models\MediaCleanupState;

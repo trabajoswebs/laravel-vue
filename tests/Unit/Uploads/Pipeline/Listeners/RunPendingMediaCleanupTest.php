@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Uploads\Pipeline\Listeners;
 
 use App\Support\Contracts\LoggerInterface;
-use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
+use App\Modules\Uploads\Contracts\MediaCleanupScheduler;
 use App\Infrastructure\Uploads\Pipeline\Listeners\RunPendingMediaCleanup;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\TestCase;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\DTO;
+namespace App\Modules\Uploads\DTO;
 
 final class ConversionExpectations
 {

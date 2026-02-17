@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\DTO;
+namespace App\Modules\Uploads\DTO;
 
 /**
  * Snapshot sencillo de artefactos previos al reemplazo.

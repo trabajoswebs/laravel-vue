@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline\Observers;
 
 // 3. Importaciones de clases necesarias.
-use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
+use App\Modules\Uploads\Contracts\MediaCleanupScheduler;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
 use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;

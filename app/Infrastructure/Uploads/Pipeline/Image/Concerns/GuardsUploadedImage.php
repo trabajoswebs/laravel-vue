@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Image\Concerns;
 
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\FileConstraints;
 use Illuminate\Http\UploadedFile;
 use App\Support\Logging\SecurityLogger;
 use RuntimeException;

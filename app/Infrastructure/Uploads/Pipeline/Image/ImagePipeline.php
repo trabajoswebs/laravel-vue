@@ -14,7 +14,7 @@ use App\Infrastructure\Uploads\Pipeline\Image\PipelineArtifacts;
 use App\Infrastructure\Uploads\Pipeline\Image\PipelineConfig;
 use App\Infrastructure\Uploads\Pipeline\Image\ImageProcessingException;
 use App\Infrastructure\Uploads\Pipeline\Image\PipelineLogger;
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\FileConstraints;
 use Illuminate\Http\UploadedFile;
 use InvalidArgumentException;
 

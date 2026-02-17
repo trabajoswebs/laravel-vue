@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 use Intervention\Image\ImageManager;
 use RuntimeException;
 use Throwable;
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Pipeline\Security\ImageMetadataReader;
 use App\Infrastructure\Uploads\Pipeline\Security\ImageNormalizer;
 use App\Infrastructure\Uploads\Pipeline\Security\MimeNormalizer;

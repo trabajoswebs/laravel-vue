@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Application\User\Contracts\UserRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;
@@ -13,7 +13,7 @@ use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Support\Security\Exceptions\AntivirusException;
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaOwner;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Support\Logging\SecurityLogger;
 use App\Support\Contracts\MetricsInterface;

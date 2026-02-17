@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Profiles;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Support\Logging\SecurityLogger;
 use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\Conversions\Conversion;

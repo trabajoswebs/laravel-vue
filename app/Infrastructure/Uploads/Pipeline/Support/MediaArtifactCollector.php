@@ -11,8 +11,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Support; // Ej.: "App\Infrastructure\Uploads"
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract;
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner; // Interfaz que expone getMedia() // Ej.: $owner->getMedia('avatar') => Collection<Media>
+use App\Modules\Uploads\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract;
+use App\Modules\Uploads\Contracts\MediaOwner; // Interfaz que expone getMedia() // Ej.: $owner->getMedia('avatar') => Collection<Media>
 use Illuminate\Contracts\Filesystem\Factory as StorageFactory; // Acceso a discos Laravel // Ej.: app('filesystem')->disk('s3')
 use Illuminate\Filesystem\FilesystemAdapter; // Adapter de Laravel (envoltorio de Flysystem) // Ej.: Storage::disk('s3') devuelve FilesystemAdapter
 use League\Flysystem\FilesystemOperator; // Driver nativo Flysystem v3 // Ej.: $adapter->getDriver()

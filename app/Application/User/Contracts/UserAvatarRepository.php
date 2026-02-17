@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Application\User\Contracts;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
+use App\Modules\Uploads\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\UploadedMedia;
 use App\Application\User\DTO\AvatarDeletionResult;
 use App\Application\User\DTO\AvatarUpdateResult;
 

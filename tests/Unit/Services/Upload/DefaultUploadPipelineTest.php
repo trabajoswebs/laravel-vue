@@ -10,8 +10,8 @@ use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException; //
 use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Support\Contracts\MetricsInterface;
 use App\Support\Contracts\LoggerInterface;
 use Tests\TestCase; // Clase base para tests de Laravel
@@ -134,7 +134,7 @@ final class DefaultUploadPipelineTest extends TestCase
             public function fileConstraints(): FileConstraints { return $this->constraints; }
             public function fieldName(): string { return 'file'; }
             public function requiresSquare(): bool { return false; }
-            public function applyConversions(\App\Infrastructure\Uploads\Core\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
+            public function applyConversions(\App\Modules\Uploads\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
             public function usesQuarantine(): bool { return false; }
             public function usesAntivirus(): bool { return false; }
             public function requiresImageNormalization(): bool { return true; }
@@ -253,7 +253,7 @@ final class DefaultUploadPipelineTest extends TestCase
             public function fileConstraints(): FileConstraints { return $this->constraints; }
             public function fieldName(): string { return 'file'; }
             public function requiresSquare(): bool { return false; }
-            public function applyConversions(\App\Infrastructure\Uploads\Core\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
+            public function applyConversions(\App\Modules\Uploads\Contracts\MediaOwner $model, ?\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void {}
             public function usesQuarantine(): bool { return false; }
             public function usesAntivirus(): bool { return false; }
             public function requiresImageNormalization(): bool { return false; }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\User\Contracts;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
+use App\Modules\Uploads\Contracts\MediaOwner;
 
 /**
  * Acceso y persistencia de usuarios desde la capa Application.

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\DTO;
+namespace App\Modules\Uploads\DTO;
 
-use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
+use App\Modules\Uploads\Contracts\MediaResource;
 
 final class MediaReplacementResult
 {

@@ -7,7 +7,7 @@ namespace App\Application\Uploads\Contracts;
 use App\Application\Uploads\DTO\UploadResult;
 use App\Domain\Uploads\UploadProfile;
 use App\Models\User;
-use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
+use App\Modules\Uploads\Contracts\UploadedMedia;
 
 /**
  * Contrato del orquestador de uploads.

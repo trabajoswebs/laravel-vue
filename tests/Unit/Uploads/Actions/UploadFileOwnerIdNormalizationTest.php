@@ -12,7 +12,7 @@ use App\Application\Uploads\Exceptions\InvalidOwnerIdException;
 use App\Domain\Uploads\UploadProfile;
 use App\Models\User;
 use App\Infrastructure\Uploads\Core\Services\ConfigurableOwnerIdNormalizer;
-use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
+use App\Modules\Uploads\Contracts\UploadedMedia;
 use Tests\TestCase;
 
 final class UploadFileOwnerIdNormalizationTest extends TestCase

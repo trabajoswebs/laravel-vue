@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Support;
 
-use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
-use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
+use App\Modules\Uploads\Contracts\FileConstraints;
+use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
