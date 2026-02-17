@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Adapters;
+namespace App\Modules\Uploads\Adapters;
 
 use App\Application\Uploads\Contracts\UploadStorageInterface;
 use Illuminate\Support\Facades\Storage;

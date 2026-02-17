@@ -9,7 +9,7 @@ use App\Modules\Uploads\Contracts\MediaCleanupScheduler as MediaCleanupScheduler
 use App\Modules\Uploads\Contracts\MediaUploader as MediaUploaderContract; // Contrato de uploader
 use App\Application\Uploads\Contracts\OwnerIdNormalizerInterface;
 use App\Application\Uploads\Contracts\UploadStorageInterface;
-use App\Infrastructure\Uploads\Core\Adapters\LaravelUploadStorage;
+use App\Modules\Uploads\Adapters\LaravelUploadStorage;
 use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
 use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
 use App\Infrastructure\Uploads\Core\Services\ConfigurableOwnerIdNormalizer;
@@ -17,7 +17,7 @@ use App\Infrastructure\Uploads\Core\Services\MediaReplacementService; // Servici
 use App\Support\Contracts\MetricsInterface; // Métricas
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
 use App\Modules\Uploads\Registry\UploadProfileRegistry; // Registro de perfiles
-use App\Infrastructure\Uploads\Core\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
+use App\Modules\Uploads\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
 use App\Infrastructure\Uploads\Profiles\AvatarImageProfile; // Perfil avatar
 use App\Infrastructure\Uploads\Profiles\CertificateSecretProfile; // Perfil certificados
 use App\Infrastructure\Uploads\Profiles\DocumentPdfProfile; // Perfil PDF

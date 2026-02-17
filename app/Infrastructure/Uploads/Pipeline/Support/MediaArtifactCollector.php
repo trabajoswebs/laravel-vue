@@ -18,7 +18,7 @@ use Illuminate\Filesystem\FilesystemAdapter; // Adapter de Laravel (envoltorio d
 use League\Flysystem\FilesystemOperator; // Driver nativo Flysystem v3 // Ej.: $adapter->getDriver()
 use Psr\Log\LoggerInterface; // PSR-3 logger // Ej.: $logger->info('msg')
 use Psr\Log\LogLevel; // Niveles estándar PSR-3 // Ej.: LogLevel::DEBUG
-use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
+use App\Modules\Uploads\Adapters\SpatieMediaResource;
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media de Spatie // Ej.: Media::find(1)
 use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator; // Generador de rutas v10/v11 // Ej.: $paths->getPath($media)
 

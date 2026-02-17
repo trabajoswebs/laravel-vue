@@ -7,7 +7,7 @@ namespace App\Infrastructure\Uploads\Pipeline\Services;
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract;
 use App\Modules\Uploads\DTO\CleanupStatePayload;
 use App\Modules\Uploads\Contracts\MediaResource;
-use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
+use App\Modules\Uploads\Adapters\SpatieMediaResource;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use App\Infrastructure\Uploads\Core\Models\MediaCleanupState;
 use Carbon\CarbonInterface;

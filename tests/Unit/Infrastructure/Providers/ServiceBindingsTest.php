@@ -11,7 +11,7 @@ use App\Application\Uploads\Contracts\UploadRepositoryInterface;
 use App\Support\Adapters\LaravelClock;
 use App\Modules\Tenancy\TenantContext;
 use App\Infrastructure\User\Adapters\EloquentUserRepository;
-use App\Infrastructure\Uploads\Core\Repositories\EloquentUploadRepository;
+use App\Modules\Uploads\Repositories\EloquentUploadRepository;
 use Tests\TestCase;
 
 final class ServiceBindingsTest extends TestCase

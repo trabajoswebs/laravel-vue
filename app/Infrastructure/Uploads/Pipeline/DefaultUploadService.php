@@ -11,7 +11,7 @@ use App\Modules\Uploads\Contracts\UploadedMedia;
 use App\Modules\Uploads\DTO\QueuedUploadResult;
 use App\Support\Contracts\AsyncJobDispatcherInterface;
 use App\Modules\Uploads\Contracts\MediaResource;
-use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
+use App\Modules\Uploads\Adapters\SpatieMediaResource;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadService;

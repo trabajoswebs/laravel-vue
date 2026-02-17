@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Adapters;
+namespace App\Modules\Uploads\Adapters;
 
 use App\Modules\Uploads\Contracts\MediaResource;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;

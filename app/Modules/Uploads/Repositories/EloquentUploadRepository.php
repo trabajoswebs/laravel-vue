@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Habilita tipado estricto
 
-namespace App\Infrastructure\Uploads\Core\Repositories; // Namespace del adaptador
+namespace App\Modules\Uploads\Repositories; // Namespace del adaptador
 
 use App\Application\Uploads\Contracts\UploadRepositoryInterface; // Contrato de repositorio
 use App\Application\Uploads\DTO\UploadResult; // DTO de resultado de upload
