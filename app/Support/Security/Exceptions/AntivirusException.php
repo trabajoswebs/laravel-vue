@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Security\Exceptions;
+namespace App\Support\Security\Exceptions;
 
 use RuntimeException;
 use Throwable;

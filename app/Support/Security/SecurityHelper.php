@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Security;
+namespace App\Support\Security;
 
 use HTMLPurifier;
 use HTMLPurifier_Config;

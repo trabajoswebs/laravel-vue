@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Scanning;
 
-use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Support\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinator;
 use ReflectionClass;
 use Tests\TestCase;

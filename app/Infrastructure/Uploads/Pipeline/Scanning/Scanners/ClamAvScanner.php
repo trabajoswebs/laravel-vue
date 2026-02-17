@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
 
-use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Support\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 
 /**

@@ -17,7 +17,7 @@ use App\Infrastructure\Uploads\Pipeline\DTO\InternalPipelineResult;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadService;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
-use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Support\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\ScanFailedException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Scanning;
 
-use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Support\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\ScanFailedException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\VirusDetectedException;

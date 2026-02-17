@@ -6,11 +6,11 @@ namespace App\Infrastructure\Uploads\Http\Controllers\Settings;
 
 use App\Application\User\Actions\DeleteAvatar;       // Ej. clase invocable para eliminar el avatar
 use App\Application\User\Actions\UpdateAvatar;       // Ej. clase invocable para actualizar el avatar
-use App\Infrastructure\Security\SecurityHelper;
+use App\Support\Security\SecurityHelper;
 use App\Http\Controllers\Controller;                  // Ej. base Controller de Laravel
 use App\Infrastructure\Uploads\Http\Requests\Settings\UpdateAvatarRequest;   // Ej. valida imagen (mimes, tamaño, dimensiones)
 use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;
-use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Support\Security\Exceptions\AntivirusException;
 use App\Models\User;                                  // Ej. modelo User
 use App\Infrastructure\Uploads\Pipeline\Exceptions\NormalizationFailedException;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\QuarantineException;

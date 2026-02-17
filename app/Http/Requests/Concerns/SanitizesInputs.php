@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Concerns;
 
-use App\Infrastructure\Security\SecurityHelper;
+use App\Support\Security\SecurityHelper;
 use Illuminate\Support\Facades\Log;
 
 /**

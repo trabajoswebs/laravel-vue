@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Sanitization;
 
-use App\Infrastructure\Security\SecurityHelper;
+use App\Support\Security\SecurityHelper;
 
 /**
  * Value Object para sanitizar y transportar nombres visibles de usuario.

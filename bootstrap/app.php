@@ -3,7 +3,7 @@
 require_once __DIR__ . '/helpers.php';
 
 // Importaciones de clases y namespaces necesarios para la configuración de la aplicación.
-use App\Infrastructure\Security\SecurityHelper;
+use App\Support\Security\SecurityHelper;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PreventBruteForce;

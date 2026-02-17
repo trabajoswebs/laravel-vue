@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Infrastructure\Security\SecurityHelper;
+use App\Support\Security\SecurityHelper;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Tenant; // Modelo Tenant para bootstrap inicial

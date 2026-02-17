@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Settings;
 
-use App\Infrastructure\Security\SecurityHelper;
+use App\Support\Security\SecurityHelper;
 use App\Models\User;
 use App\Infrastructure\Sanitization\DisplayName;
 use Illuminate\Foundation\Http\FormRequest;

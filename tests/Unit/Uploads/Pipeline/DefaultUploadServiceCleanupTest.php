@@ -6,7 +6,7 @@ namespace Tests\Unit\Uploads\Pipeline;
 
 use App\Support\Contracts\AsyncJobDispatcherInterface;
 use App\Models\User;
-use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Support\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;

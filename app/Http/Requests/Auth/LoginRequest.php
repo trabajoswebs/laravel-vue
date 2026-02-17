@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use App\Http\Requests\Concerns\SanitizesInputs;
-use App\Infrastructure\Security\RateLimitSignatureFactory;
+use App\Support\Security\RateLimitSignatureFactory;
 
 /**
  * FormRequest para manejo de autenticación de usuarios

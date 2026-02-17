@@ -2,7 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Infrastructure\Security\SecurityHelper;
+use App\Support\Security\SecurityHelper;
 use App\Http\Requests\Concerns\SanitizesInputs;
 use App\Infrastructure\Sanitization\DisplayName;
 use App\Infrastructure\Localization\TranslationService;

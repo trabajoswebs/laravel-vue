@@ -9,7 +9,7 @@ use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager;
-use App\Infrastructure\Security\Exceptions\AntivirusException;
+use App\Support\Security\Exceptions\AntivirusException;
 
 /**
  * Escáner concreto que utiliza YARA para detectar patrones maliciosos en archivos subidos.
