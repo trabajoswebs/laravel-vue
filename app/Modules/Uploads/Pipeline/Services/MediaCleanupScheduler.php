@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Services;
+namespace App\Modules\Uploads\Pipeline\Services;
 
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract;
 use App\Modules\Uploads\DTO\CleanupStatePayload;
