@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Security;
 
-use App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner;
-use App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\YaraScanner;
+use App\Modules\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner;
+use App\Modules\Uploads\Pipeline\Scanning\Scanners\YaraScanner;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 

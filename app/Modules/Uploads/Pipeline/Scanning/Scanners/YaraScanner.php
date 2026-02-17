@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
+namespace App\Modules\Uploads\Pipeline\Scanning\Scanners;
 
 use App\Infrastructure\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
-use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager;
+use App\Modules\Uploads\Pipeline\Scanning\YaraRuleManager;
 use App\Support\Security\Exceptions\AntivirusException;
 
 /**
@@ -21,7 +21,7 @@ use App\Support\Security\Exceptions\AntivirusException;
  * - Sin helpers globales (config, app).
  * - Logs sanitizados.
  *
- * @package App\Infrastructure\Uploads\Pipeline\Scanning\Scanners
+ * @package App\Modules\Uploads\Pipeline\Scanning\Scanners
  */
 final class YaraScanner extends AbstractScanner
 {

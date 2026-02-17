@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
+namespace App\Modules\Uploads\Pipeline\Scanning\Scanners;
 
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
@@ -16,7 +16,7 @@ use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
  * - Resolución de binario con fallbacks y lista blanca.
  * - Sin dependencias ocultas; toda la configuración se inyecta.
  *
- * @package App\Infrastructure\Uploads\Pipeline\Scanning\Scanners
+ * @package App\Modules\Uploads\Pipeline\Scanning\Scanners
  */
 final class ClamAvScanner extends AbstractScanner
 {

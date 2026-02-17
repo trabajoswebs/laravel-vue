@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Scanning;
+namespace App\Modules\Uploads\Pipeline\Scanning;
 
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Modules\Uploads\Pipeline\Exceptions\ScanFailedException;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
-use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCircuitBreaker;
+use App\Modules\Uploads\Pipeline\Scanning\ScanCircuitBreaker;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Http\UploadedFile;
 use Psr\Log\LoggerInterface;

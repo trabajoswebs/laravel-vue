@@ -7,7 +7,7 @@ use App\Domain\Uploads\UploadProfileId;
 use App\Modules\Uploads\Requests\HttpUploadedMedia;
 use App\Modules\Uploads\Pipeline\Quarantine\LocalQuarantineRepository;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
-use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
+use App\Modules\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;

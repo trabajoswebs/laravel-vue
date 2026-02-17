@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Scanning;
+namespace App\Modules\Uploads\Pipeline\Scanning;
 
 use App\Infrastructure\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
 

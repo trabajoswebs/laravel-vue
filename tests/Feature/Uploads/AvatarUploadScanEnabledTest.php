@@ -38,7 +38,7 @@ final class AvatarUploadScanEnabledTest extends TestCase
             'uploads.private_disk' => 'public',
             'image-pipeline.scan.enabled' => true,
             'image-pipeline.scan.strict' => false,
-            'image-pipeline.scan.handlers' => [\App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner::class],
+            'image-pipeline.scan.handlers' => [\App\Modules\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner::class],
             // en test aceptamos cualquier base para evitar falsos positivos con discos fake.
             'image-pipeline.scan.allowed_base_path' => '/',
             // binario mock determinista que siempre devuelve 0.

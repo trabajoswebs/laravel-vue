@@ -32,14 +32,14 @@ use App\Modules\Uploads\Pipeline\ImageUploadPipelineAdapter; // Adaptador pipeli
 use App\Modules\Uploads\Pipeline\Image\ImagePipeline; // Pipeline de imagen
 use App\Modules\Uploads\Pipeline\Quarantine\LocalQuarantineRepository; // Repo de cuarentena
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository; // Contrato de cuarentena
-use App\Infrastructure\Uploads\Pipeline\Scanning\GitYaraRuleManager; // Gestor Yara git
-use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinator; // Coordinador AV
-use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface; // Contrato coordinador AV
-use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCircuitStoreInterface;
-use App\Infrastructure\Uploads\Pipeline\Scanning\LaravelCacheScanCircuitStore;
-use App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner;
-use App\Infrastructure\Uploads\Pipeline\Scanning\Scanners\YaraScanner;
-use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager; // Gestor de reglas Yara
+use App\Modules\Uploads\Pipeline\Scanning\GitYaraRuleManager; // Gestor Yara git
+use App\Modules\Uploads\Pipeline\Scanning\ScanCoordinator; // Coordinador AV
+use App\Modules\Uploads\Pipeline\Scanning\ScanCoordinatorInterface; // Contrato coordinador AV
+use App\Modules\Uploads\Pipeline\Scanning\ScanCircuitStoreInterface;
+use App\Modules\Uploads\Pipeline\Scanning\LaravelCacheScanCircuitStore;
+use App\Modules\Uploads\Pipeline\Scanning\Scanners\ClamAvScanner;
+use App\Modules\Uploads\Pipeline\Scanning\Scanners\YaraScanner;
+use App\Modules\Uploads\Pipeline\Scanning\YaraRuleManager; // Gestor de reglas Yara
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Psr\Log\LoggerInterface;

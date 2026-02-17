@@ -18,7 +18,7 @@ use App\Modules\Uploads\Contracts\UploadedMedia;
 use App\Modules\Uploads\Paths\TenantPathGenerator;
 use App\Modules\Uploads\Services\MediaReplacementService;
 use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
-use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
+use App\Modules\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;

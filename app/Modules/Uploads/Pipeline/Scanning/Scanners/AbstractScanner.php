@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Scanning\Scanners;
+namespace App\Modules\Uploads\Pipeline\Scanning\Scanners;
 
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
@@ -23,7 +23,7 @@ use Throwable;
  * - Logs sanitizados (sin exposición de rutas del sistema).
  * - Política de fail‑open/fail‑closethrowable.
  *
- * @package App\Infrastructure\Uploads\Pipeline\Scanning\Scanners
+ * @package App\Modules\Uploads\Pipeline\Scanning\Scanners
  */
 abstract class AbstractScanner
 {

@@ -22,7 +22,7 @@ use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
 use App\Modules\Uploads\Paths\TenantPathGenerator;
 use App\Modules\Uploads\Services\MediaReplacementService;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
-use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
+use App\Modules\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
