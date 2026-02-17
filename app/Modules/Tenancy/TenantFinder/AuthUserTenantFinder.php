@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Habilita tipado estricto
 
-namespace App\Infrastructure\Tenancy\TenantFinder; // Namespace para finders de tenant
+namespace App\Modules\Tenancy\TenantFinder; // Namespace para finders de tenant
 
 use App\Models\Tenant; // Modelo Tenant propio
 use Illuminate\Http\Request; // Request HTTP

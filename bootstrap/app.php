@@ -13,7 +13,7 @@ use App\Http\Middleware\SecurityHeaders;
 use App\Infrastructure\Uploads\Http\Middleware\TrackMediaAccess;
 use App\Http\Middleware\UserAudit;
 use App\Http\Middleware\TrustProxies;
-use App\Infrastructure\Tenancy\Middleware\ResolveTenant; // Middleware propio para resolver tenant
+use App\Modules\Tenancy\Middleware\ResolveTenant; // Middleware propio para resolver tenant
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Foundation\Application;

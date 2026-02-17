@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Tenant; // Modelo tenant propio; ej. Tenant::find(1)
-use App\Infrastructure\Tenancy\TenantFinder\AuthUserTenantFinder; // Finder basado en usuario autenticado; ej. user->current_tenant_id
+use App\Modules\Tenancy\TenantFinder\AuthUserTenantFinder; // Finder basado en usuario autenticado; ej. user->current_tenant_id
 use Spatie\Multitenancy\Actions\ForgetCurrentTenantAction; // Limpia tenant actual; ej. después de job
 use Spatie\Multitenancy\Actions\MakeQueueTenantAwareAction; // Añade tenantId al payload de jobs; ej. tenantId=3
 use Spatie\Multitenancy\Actions\MakeTenantCurrentAction; // Fija tenant actual; ej. antes de ejecutar job

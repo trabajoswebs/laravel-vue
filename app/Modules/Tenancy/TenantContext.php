@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Activa tipado estricto
 
-namespace App\Infrastructure\Tenancy; // Namespace de infraestructura de tenancy
+namespace App\Modules\Tenancy; // Namespace de infraestructura de tenancy
 
 use App\Support\Contracts\TenantContextInterface; // Contrato compartido de tenant
 use App\Models\Tenant; // Modelo Tenant propio

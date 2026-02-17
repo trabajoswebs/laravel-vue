@@ -6,7 +6,7 @@ namespace Tests\Feature\Tenancy;
 
 use App\Models\User;
 use App\Models\Tenant;
-use App\Infrastructure\Tenancy\TenantFinder\AuthUserTenantFinder;
+use App\Modules\Tenancy\TenantFinder\AuthUserTenantFinder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Tests\TestCase;
