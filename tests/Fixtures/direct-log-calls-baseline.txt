@@ -59,10 +59,10 @@ app/Infrastructure/Localization/TranslationService.php:414
 app/Providers/HtmlPurifierServiceProvider.php:107
 app/Providers/HtmlPurifierServiceProvider.php:44
 app/Providers/HtmlPurifierServiceProvider.php:91
-app/Infrastructure/Security/SecurityHelper.php:124
-app/Infrastructure/Security/SecurityHelper.php:166
-app/Infrastructure/Security/SecurityHelper.php:265
-app/Infrastructure/Security/SecurityHelper.php:316
+app/Support/Security/SecurityHelper.php:124
+app/Support/Security/SecurityHelper.php:166
+app/Support/Security/SecurityHelper.php:265
+app/Support/Security/SecurityHelper.php:316
 app/Support/Adapters/LaravelLogger.php:20
 app/Support/Adapters/LaravelLogger.php:31
 app/Support/Adapters/LaravelLogger.php:53
