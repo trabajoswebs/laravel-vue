@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Infrastructure\Uploads\Providers; // Namespace del provider de uploads
+namespace App\Modules\Uploads\Providers; // Namespace del provider de uploads
 
 use App\Modules\Uploads\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract; // Contrato colector
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler as MediaCleanupSchedulerContract; // Contrato cleanup

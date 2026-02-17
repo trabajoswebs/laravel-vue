@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Providers;
+namespace App\Modules\Uploads\Providers;
 
 use App\Support\Logging\SecurityLogger;
 use App\Modules\Uploads\Middleware\RateLimitUploads;
