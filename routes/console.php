@@ -3,7 +3,7 @@
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
-use App\Infrastructure\Console\Commands\TenancyBootstrapExistingUsers;
+use App\Console\Commands\TenancyBootstrapExistingUsers;
 use App\Models\User;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\DB;

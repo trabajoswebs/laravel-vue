@@ -4,11 +4,44 @@ declare(strict_types=1);
 
 namespace App\Console;
 
-use App\Infrastructure\Console\Kernel as InfrastructureKernel;
+use App\Console\Commands\CleanAuditLogs;
+use App\Console\Commands\QuarantineCleanupSidecarsCommand;
+use App\Console\Commands\QuarantinePruneCommand;
+use App\Console\Commands\TenancyBootstrapExistingUsers;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
-/**
- * Alias de compatibilidad para el Kernel de consola tras moverlo a Infrastructure\Console.
- */
-class Kernel extends InfrastructureKernel
+class Kernel extends ConsoleKernel
 {
+    /**
+     * Registro explícito de comandos de consola.
+     *
+     * Evita que comandos críticos queden fuera si fallara la auto-carga.
+     *
+     * @var array<int, class-string>
+     */
+    protected $commands = [
+        CleanAuditLogs::class,
+        QuarantineCleanupSidecarsCommand::class,
+        QuarantinePruneCommand::class,
+        TenancyBootstrapExistingUsers::class,
+    ];
+
+    /**
+     * Define the application's command schedule.
+     */
+    protected function schedule(Schedule $schedule): void
+    {
+        // Example: schedule quarantine cleanup weekly
+        $schedule->command('quarantine:prune --hours=24')->daily();
+        $schedule->command('quarantine:cleanup-sidecars')->weekly();
+    }
+
+    /**
+     * Register the commands for the application.
+     */
+    protected function commands(): void
+    {
+        $this->load(__DIR__.'/Commands');
+    }
 }

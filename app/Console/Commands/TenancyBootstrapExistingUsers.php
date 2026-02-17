@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Activa tipado estricto
 
-namespace App\Infrastructure\Console\Commands; // Namespace de comandos de infraestructura
+namespace App\Console\Commands; // Namespace de comandos de infraestructura
 
 use App\Models\User; // Modelo de usuario
 use App\Models\Tenant; // Modelo de tenant
