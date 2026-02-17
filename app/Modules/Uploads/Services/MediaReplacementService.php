@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Services;
+namespace App\Modules\Uploads\Services;
 
 use App\Modules\Uploads\Contracts\MediaArtifactCollector;
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler;

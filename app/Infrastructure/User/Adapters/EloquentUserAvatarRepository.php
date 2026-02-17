@@ -8,7 +8,7 @@ use App\Modules\Uploads\Contracts\MediaArtifactCollector;
 use App\Modules\Uploads\Contracts\MediaOwner;
 use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Modules\Uploads\Contracts\UploadedMedia;
-use App\Infrastructure\Uploads\Core\Services\MediaReplacementService;
+use App\Modules\Uploads\Services\MediaReplacementService;
 use App\Application\User\Contracts\UserAvatarRepository;
 use App\Application\User\DTO\AvatarDeletionResult;
 use App\Application\User\DTO\AvatarUpdateResult;

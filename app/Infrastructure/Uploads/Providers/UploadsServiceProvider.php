@@ -12,8 +12,8 @@ use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Modules\Uploads\Adapters\LaravelUploadStorage;
 use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
 use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
-use App\Infrastructure\Uploads\Core\Services\ConfigurableOwnerIdNormalizer;
-use App\Infrastructure\Uploads\Core\Services\MediaReplacementService; // Servicio de reemplazo
+use App\Modules\Uploads\Services\ConfigurableOwnerIdNormalizer;
+use App\Modules\Uploads\Services\MediaReplacementService; // Servicio de reemplazo
 use App\Support\Contracts\MetricsInterface; // Métricas
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
 use App\Modules\Uploads\Registry\UploadProfileRegistry; // Registro de perfiles

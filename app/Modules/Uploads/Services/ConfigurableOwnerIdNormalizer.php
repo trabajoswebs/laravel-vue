@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Services;
+namespace App\Modules\Uploads\Services;
 
 use App\Application\Uploads\Contracts\OwnerIdNormalizerInterface;
 use App\Application\Uploads\Exceptions\InvalidOwnerIdException;
