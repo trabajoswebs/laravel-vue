@@ -190,8 +190,8 @@ class ProfileAvatarController extends Controller
                 try {
                     $state = $quarantine->getState($token);
                     $status = match ($state) {
-                        \App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState::INFECTED => 'infected',
-                        \App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState::FAILED => 'failed',
+                        \App\Modules\Uploads\Pipeline\Quarantine\QuarantineState::INFECTED => 'infected',
+                        \App\Modules\Uploads\Pipeline\Quarantine\QuarantineState::FAILED => 'failed',
                         default => 'processing',
                     };
 

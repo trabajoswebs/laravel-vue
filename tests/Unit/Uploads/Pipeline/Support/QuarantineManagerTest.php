@@ -6,7 +6,7 @@ namespace Tests\Unit\Uploads\Pipeline\Support;
 
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use Illuminate\Http\UploadedFile;
 use Tests\TestCase;

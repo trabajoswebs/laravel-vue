@@ -21,7 +21,7 @@ use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
 use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
 use App\Modules\Uploads\Paths\TenantPathGenerator;
 use App\Modules\Uploads\Services\MediaReplacementService;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;

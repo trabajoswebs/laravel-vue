@@ -6,8 +6,8 @@ namespace Tests\Unit\Uploads\Pipeline\Jobs;
 
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Modules\Uploads\Pipeline\Jobs\ProcessUploadJob;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use Tests\TestCase;
 

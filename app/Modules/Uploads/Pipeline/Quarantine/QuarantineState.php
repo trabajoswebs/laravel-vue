@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Quarantine;
+namespace App\Modules\Uploads\Pipeline\Quarantine;
 
 /**
  * Estados posibles de un artefacto en cuarentena.

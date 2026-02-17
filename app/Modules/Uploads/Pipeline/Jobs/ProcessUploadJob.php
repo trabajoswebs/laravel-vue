@@ -6,11 +6,11 @@ namespace App\Modules\Uploads\Pipeline\Jobs;
 
 use App\Modules\Uploads\Contracts\MediaProfile;
 use App\Application\User\Contracts\UserRepository;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken;
 use App\Modules\Uploads\Pipeline\DefaultUploadService;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Modules\Uploads\Contracts\MediaOwner;

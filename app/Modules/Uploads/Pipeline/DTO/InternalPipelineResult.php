@@ -18,13 +18,13 @@ final class InternalPipelineResult
      * @param string               $path          Ruta o identificador final del archivo aceptado.
      * @param int                  $size          Tamaño del archivo en bytes después de la normalización.
      * @param UploadMetadata       $metadata      Metadata bien tipada del artefacto.
-     * @param \App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken|null $quarantineId  Token del artefacto en cuarentena (si aplica).
+     * @param \App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken|null $quarantineId  Token del artefacto en cuarentena (si aplica).
      */
     public function __construct(
         public readonly string $path,
         public readonly int $size,
         public readonly UploadMetadata $metadata,
-        public readonly ?\App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken $quarantineId = null,
+        public readonly ?\App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken $quarantineId = null,
     ) {
     }
 }

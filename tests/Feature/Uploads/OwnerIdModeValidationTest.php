@@ -29,8 +29,8 @@ final class OwnerIdModeValidationTest extends TestCase
         ]);
 
         $this->app->singleton(
-            \App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository::class,
-            fn() => new \App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository(Storage::disk('quarantine'))
+            \App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository::class,
+            fn() => new \App\Modules\Uploads\Pipeline\Quarantine\LocalQuarantineRepository(Storage::disk('quarantine'))
         );
     }
 

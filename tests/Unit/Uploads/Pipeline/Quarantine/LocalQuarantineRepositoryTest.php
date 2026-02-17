@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Quarantine;
 
-use App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
+use App\Modules\Uploads\Pipeline\Quarantine\LocalQuarantineRepository;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 

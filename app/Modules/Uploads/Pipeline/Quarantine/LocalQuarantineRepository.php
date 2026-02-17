@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Quarantine;
+namespace App\Modules\Uploads\Pipeline\Quarantine;
 
 use App\Support\Logging\SecurityLogger;
 // Importamos las clases necesarias
@@ -11,8 +11,8 @@ use App\Modules\Uploads\Pipeline\Exceptions\QuarantineIntegrityException; // Exc
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Filesystem\FilesystemAdapter; // Adaptador de sistema de archivos de Laravel
 use RuntimeException; // Excepción estándar de PHP
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineState;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineToken;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken;
 
 /**
  * Implementación en sistema de archivos local del Repositorio de Cuarentena.

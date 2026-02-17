@@ -10,7 +10,7 @@ use App\Modules\Uploads\Contracts\MediaOwner;
 use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline;
 use App\Modules\Uploads\Pipeline\DefaultUploadService;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
-use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
+use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
