@@ -6,7 +6,7 @@ namespace Tests\Unit\Uploads\Pipeline\Security;
 
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
 use Tests\TestCase;
 

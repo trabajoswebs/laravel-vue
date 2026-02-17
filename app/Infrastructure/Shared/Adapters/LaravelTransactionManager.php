@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Shared\Adapters;
 
-use App\Application\Shared\Contracts\TransactionManagerInterface;
+use App\Support\Contracts\TransactionManagerInterface;
 use Illuminate\Support\Facades\DB;
 
 final class LaravelTransactionManager implements TransactionManagerInterface

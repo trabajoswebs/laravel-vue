@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Shared\Adapters;
 
-use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
+use App\Support\Contracts\AsyncJobDispatcherInterface;
 use App\Application\User\Jobs\CleanupMediaArtifacts;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use DateTimeInterface;

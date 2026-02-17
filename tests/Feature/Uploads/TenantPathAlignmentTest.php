@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Uploads;
 
-use App\Application\Shared\Contracts\TenantContextInterface;
+use App\Support\Contracts\TenantContextInterface;
 use App\Domain\Uploads\UploadProfileId;
 use App\Infrastructure\Uploads\Core\Paths\MediaLibrary\TenantAwarePathGenerator;
 use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;

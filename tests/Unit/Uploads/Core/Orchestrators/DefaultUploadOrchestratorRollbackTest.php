@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Core\Orchestrators;
 
-use App\Application\Shared\Contracts\TenantContextInterface;
+use App\Support\Contracts\TenantContextInterface;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
 use App\Infrastructure\Uploads\Core\Adapters\LaravelUploadStorage;
 use App\Support\Enums\Uploads\ProcessingMode;

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Security;
 
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Pipeline\Exceptions\UploadValidationException;
 

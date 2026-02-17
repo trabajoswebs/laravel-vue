@@ -19,7 +19,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Core\Paths\MediaLibrary;
 
-use App\Application\Shared\Contracts\TenantContextInterface;
+use App\Support\Contracts\TenantContextInterface;
 use App\Domain\Uploads\UploadProfileId;
 use App\Models\User;
 use App\Infrastructure\Uploads\Core\Paths\TenantPathGenerator;

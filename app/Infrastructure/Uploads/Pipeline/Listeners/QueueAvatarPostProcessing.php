@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Listeners;
 
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor por usuario
 use Illuminate\Support\Str; // Generar UUIDs; ej. Str::uuid()
 use Spatie\MediaLibrary\MediaCollections\Models\Media; // Modelo Media; ej. Media #5

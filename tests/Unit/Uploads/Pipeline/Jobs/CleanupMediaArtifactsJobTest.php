@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Jobs;
 
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;

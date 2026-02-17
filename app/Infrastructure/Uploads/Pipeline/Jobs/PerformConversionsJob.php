@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
 // 3. Importaciones de clases necesarias.
-use App\Application\Shared\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
+use App\Support\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
 use App\Models\Tenant; // Modelo Tenant para makeCurrent; ej. Tenant #3
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler; // Scheduler de limpieza; ej. flushExpired
 use App\Models\User; // Modelo User para validar avatar

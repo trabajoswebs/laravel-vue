@@ -8,11 +8,11 @@ use App\Application\User\Contracts\UserAvatarRepository;
 use App\Application\User\Contracts\UserRepository;
 use App\Application\User\Events\AvatarDeleted;
 use App\Application\User\Jobs\CleanupMediaArtifacts;
-use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
-use App\Application\Shared\Contracts\ClockInterface;
-use App\Application\Shared\Contracts\EventBusInterface;
-use App\Application\Shared\Contracts\LoggerInterface;
-use App\Application\Shared\Contracts\TransactionManagerInterface;
+use App\Support\Contracts\AsyncJobDispatcherInterface;
+use App\Support\Contracts\ClockInterface;
+use App\Support\Contracts\EventBusInterface;
+use App\Support\Contracts\LoggerInterface;
+use App\Support\Contracts\TransactionManagerInterface;
 use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
 use Illuminate\Support\Facades\Schema;
 

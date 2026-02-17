@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Application\User\Actions;
 
-use App\Application\Shared\Contracts\LoggerInterface; // Logger para auditoría
-use App\Application\Shared\Contracts\TenantContextInterface; // Contexto de tenant
+use App\Support\Contracts\LoggerInterface; // Logger para auditoría
+use App\Support\Contracts\TenantContextInterface; // Contexto de tenant
 use App\Application\Uploads\Actions\ReplaceFile; // Caso de uso de reemplazo
 use App\Application\Uploads\DTO\ReplacementResult; // DTO de reemplazo
 use App\Domain\Uploads\UploadProfileId; // VO de perfil

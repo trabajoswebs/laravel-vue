@@ -4,7 +4,7 @@ declare(strict_types=1); // Activa tipado estricto
 
 namespace App\Infrastructure\Tenancy; // Namespace de infraestructura de tenancy
 
-use App\Application\Shared\Contracts\TenantContextInterface; // Contrato compartido de tenant
+use App\Support\Contracts\TenantContextInterface; // Contrato compartido de tenant
 use App\Models\Tenant; // Modelo Tenant propio
 use Illuminate\Support\Facades\Auth; // Facade de autenticación
 use RuntimeException; // Excepción para requerir tenant

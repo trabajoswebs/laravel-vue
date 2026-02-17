@@ -9,7 +9,7 @@ use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
 use App\Infrastructure\Uploads\Core\Contracts\MediaUploader;
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 use App\Infrastructure\Uploads\Core\DTO\QueuedUploadResult;
-use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
+use App\Support\Contracts\AsyncJobDispatcherInterface;
 use App\Infrastructure\Uploads\Core\Contracts\MediaResource;
 use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
 use App\Infrastructure\Uploads\Pipeline\Contracts\UploadPipeline;

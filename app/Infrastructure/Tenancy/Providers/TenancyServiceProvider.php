@@ -4,7 +4,7 @@ declare(strict_types=1); // Habilita tipado estricto
 
 namespace App\Infrastructure\Tenancy\Providers; // Namespace del provider de tenancy
 
-use App\Application\Shared\Contracts\TenantContextInterface; // Contrato de contexto de tenant
+use App\Support\Contracts\TenantContextInterface; // Contrato de contexto de tenant
 use App\Infrastructure\Tenancy\TenantContext; // Implementación de contexto de tenant
 use Illuminate\Support\ServiceProvider; // Clase base de providers
 

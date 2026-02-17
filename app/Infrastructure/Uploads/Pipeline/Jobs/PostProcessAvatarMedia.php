@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
-use App\Application\Shared\Contracts\ClockInterface; // Reloj desacoplado; ej. now()
-use App\Application\Shared\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
+use App\Support\Contracts\ClockInterface; // Reloj desacoplado; ej. now()
+use App\Support\Contracts\LoggerInterface; // Logger desacoplado; ej. info/warning
 use App\Application\User\Jobs\Enums\ConversionReadyState; // Enum de estado de conversions; ej. READY
 use App\Models\Tenant; // Modelo Tenant para makeCurrent; ej. Tenant #3
 use App\Infrastructure\Uploads\Pipeline\Optimizer\OptimizerService; // Servicio de optimización de imágenes; ej. optimize media

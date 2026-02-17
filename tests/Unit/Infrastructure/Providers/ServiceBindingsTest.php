@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Infrastructure\Providers;
 
-use App\Application\Shared\Contracts\ClockInterface;
-use App\Application\Shared\Contracts\TenantContextInterface;
+use App\Support\Contracts\ClockInterface;
+use App\Support\Contracts\TenantContextInterface;
 use App\Application\User\Contracts\UserRepository as UserRepositoryContract;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
 use App\Infrastructure\Shared\Adapters\LaravelClock;

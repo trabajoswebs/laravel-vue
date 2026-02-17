@@ -16,7 +16,7 @@ use App\Infrastructure\Security\Exceptions\AntivirusException;
 use App\Infrastructure\Uploads\Core\Contracts\MediaOwner;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Support\Logging\SecurityLogger;
-use App\Application\Shared\Contracts\MetricsInterface;
+use App\Support\Contracts\MetricsInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Contracts\Queue\ShouldBeUnique;

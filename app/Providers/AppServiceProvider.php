@@ -2,12 +2,12 @@
 
 namespace App\Providers;
 
-use App\Application\Shared\Contracts\AsyncJobDispatcherInterface;
-use App\Application\Shared\Contracts\ClockInterface;
-use App\Application\Shared\Contracts\EventBusInterface;
-use App\Application\Shared\Contracts\MetricsInterface;
-use App\Application\Shared\Contracts\LoggerInterface;
-use App\Application\Shared\Contracts\TransactionManagerInterface;
+use App\Support\Contracts\AsyncJobDispatcherInterface;
+use App\Support\Contracts\ClockInterface;
+use App\Support\Contracts\EventBusInterface;
+use App\Support\Contracts\MetricsInterface;
+use App\Support\Contracts\LoggerInterface;
+use App\Support\Contracts\TransactionManagerInterface;
 use App\Domain\Security\Rules\AvatarHeaderRules;
 use App\Domain\Security\Rules\RateLimitSignatureRules;
 use App\Application\User\Contracts\UserAvatarRepository as UserAvatarRepositoryContract;

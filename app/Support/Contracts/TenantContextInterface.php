@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Habilita tipado estricto
 
-namespace App\Application\Shared\Contracts; // Namespace de contratos compartidos
+namespace App\Support\Contracts; // Namespace de contratos compartidos
 
 /**
  * Expone información del tenant actual a la capa de aplicación.

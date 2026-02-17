@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Pipeline\Listeners;
 
 use App\Infrastructure\Uploads\Core\Contracts\MediaCleanupScheduler;
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\LoggerInterface;
 use App\Infrastructure\Uploads\Core\Adapters\SpatieMediaResource;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 

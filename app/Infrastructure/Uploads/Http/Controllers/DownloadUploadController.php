@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Http\Controllers;
 
-use App\Application\Shared\Contracts\TenantContextInterface;
+use App\Support\Contracts\TenantContextInterface;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;

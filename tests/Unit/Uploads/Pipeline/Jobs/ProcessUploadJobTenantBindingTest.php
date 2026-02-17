@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Jobs;
 
-use App\Application\Shared\Contracts\MetricsInterface;
+use App\Support\Contracts\MetricsInterface;
 use App\Application\User\Contracts\UserRepository;
 use App\Models\User;
 use App\Infrastructure\Uploads\Pipeline\DefaultUploadService;

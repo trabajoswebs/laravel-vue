@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Core\Orchestrators;
 
-use App\Application\Shared\Contracts\TenantContextInterface;
+use App\Support\Contracts\TenantContextInterface;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
 use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Support\Enums\Uploads\ProcessingMode;

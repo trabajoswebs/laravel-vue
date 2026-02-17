@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Uploads\Actions;
 
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\LoggerInterface;
 use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Application\Uploads\DTO\ReplacementResult;
 use App\Application\Uploads\DTO\UploadResult;

@@ -12,8 +12,8 @@ use App\Infrastructure\Uploads\Pipeline\ImageUploadPipelineAdapter;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator;
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints;
 use App\Infrastructure\Uploads\Core\Contracts\MediaProfile;
-use App\Application\Shared\Contracts\MetricsInterface;
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\MetricsInterface;
+use App\Support\Contracts\LoggerInterface;
 use Tests\TestCase; // Clase base para tests de Laravel
 
 final class DefaultUploadPipelineTest extends TestCase

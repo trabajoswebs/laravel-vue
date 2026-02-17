@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Uploads\Pipeline\Jobs;
 
-use App\Application\Shared\Contracts\ClockInterface;
-use App\Application\Shared\Contracts\LoggerInterface;
+use App\Support\Contracts\ClockInterface;
+use App\Support\Contracts\LoggerInterface;
 use App\Models\User;
 use App\Models\Tenant;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;

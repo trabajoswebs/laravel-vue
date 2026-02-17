@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Shared\Metrics;
 
-use App\Application\Shared\Contracts\MetricsInterface;
+use App\Support\Contracts\MetricsInterface;
 use Illuminate\Support\Facades\Log;
 
 /**

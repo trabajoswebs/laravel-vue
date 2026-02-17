@@ -14,7 +14,7 @@ use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
 use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
 use App\Infrastructure\Uploads\Core\Services\ConfigurableOwnerIdNormalizer;
 use App\Infrastructure\Uploads\Core\Services\MediaReplacementService; // Servicio de reemplazo
-use App\Application\Shared\Contracts\MetricsInterface; // Métricas
+use App\Support\Contracts\MetricsInterface; // Métricas
 use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles
 use App\Infrastructure\Uploads\Core\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
@@ -43,7 +43,7 @@ use App\Infrastructure\Uploads\Pipeline\Scanning\YaraRuleManager; // Gestor de r
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Psr\Log\LoggerInterface;
-use App\Application\Shared\Contracts\LoggerInterface as AppLoggerInterface;
+use App\Support\Contracts\LoggerInterface as AppLoggerInterface;
 use App\Infrastructure\Uploads\Pipeline\Security\MagicBytesValidator; // Validador de magic bytes
 use App\Infrastructure\Uploads\Pipeline\Services\MediaCleanupScheduler; // Scheduler de cleanup
 use App\Infrastructure\Uploads\Pipeline\Support\MediaArtifactCollector; // Colector de artefactos

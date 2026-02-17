@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Application\Shared\Contracts;
+namespace App\Support\Contracts;
 
 /**
  * Interfaz para servicios de bus de eventos.

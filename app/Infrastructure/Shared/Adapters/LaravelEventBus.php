@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Shared\Adapters;
 
-use App\Application\Shared\Contracts\EventBusInterface;
+use App\Support\Contracts\EventBusInterface;
 
 /**
  * Adaptador del bus de eventos de Laravel.

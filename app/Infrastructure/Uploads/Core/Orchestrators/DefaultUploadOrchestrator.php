@@ -8,7 +8,7 @@ use App\Application\Uploads\Contracts\UploadOrchestratorInterface;
 use App\Application\Uploads\Contracts\UploadRepositoryInterface;
 use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Application\Uploads\DTO\UploadResult;
-use App\Application\Shared\Contracts\TenantContextInterface;
+use App\Support\Contracts\TenantContextInterface;
 use App\Support\Enums\Uploads\ScanMode;
 use App\Support\Enums\Uploads\UploadKind;
 use App\Domain\Uploads\UploadProfile;
