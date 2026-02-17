@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Requests;
+namespace App\Modules\Uploads\Requests;
 
 use App\Infrastructure\Uploads\Core\Contracts\UploadedMedia;
 use Illuminate\Http\UploadedFile;

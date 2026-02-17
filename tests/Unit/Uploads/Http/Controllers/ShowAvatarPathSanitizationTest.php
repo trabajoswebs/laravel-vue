@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Http\Controllers;
 
-use App\Infrastructure\Uploads\Http\Controllers\Media\ShowAvatar;
+use App\Modules\Uploads\Controllers\Media\ShowAvatar;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\TestCase;
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Middleware;
+namespace App\Modules\Uploads\Middleware;
 
 use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
 use Closure;

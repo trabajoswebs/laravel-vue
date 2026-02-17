@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Requests\Settings;
+namespace App\Modules\Uploads\Requests\Settings;
 
 use Illuminate\Foundation\Http\FormRequest;
-use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesImageValidation; // Trait de reglas de imagen
+use App\Modules\Uploads\Requests\Concerns\UsesImageValidation; // Trait de reglas de imagen
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
 

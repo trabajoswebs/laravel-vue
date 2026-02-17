@@ -13,7 +13,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
-use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;
+use App\Modules\Uploads\Requests\HttpUploadedMedia;
 use Tests\TestCase;
 
 final class GenericUploadTest extends TestCase

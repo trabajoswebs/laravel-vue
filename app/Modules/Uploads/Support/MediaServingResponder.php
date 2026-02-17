@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Support;
+namespace App\Modules\Uploads\Support;
 
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;

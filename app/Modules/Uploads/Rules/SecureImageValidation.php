@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Rules;
+namespace App\Modules\Uploads\Rules;
 
 use Closure;
 use Illuminate\Contracts\Validation\DataAwareRule;
@@ -30,7 +30,7 @@ use App\Infrastructure\Uploads\Pipeline\Security\Upload\UploadValidationLogger;
  *  - Escanea los primeros bytes del archivo buscando payloads sospechosos (p. ej. `<?php`, `eval(`).
  *
  * @example
- *  use App\Infrastructure\Uploads\Http\Rules\SecureImageValidation;
+ *  use App\Modules\Uploads\Rules\SecureImageValidation;
  *  // En un FormRequest:
  *  public function rules(): array {
  *      return [

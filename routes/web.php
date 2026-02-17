@@ -3,11 +3,11 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\LanguageController;
-use App\Infrastructure\Uploads\Http\Controllers\Media\ShowAvatar;
-use App\Infrastructure\Uploads\Http\Controllers\DownloadUploadController; // Controlador de descargas
+use App\Modules\Uploads\Controllers\Media\ShowAvatar;
+use App\Modules\Uploads\Controllers\DownloadUploadController; // Controlador de descargas
 use App\Http\Controllers\Health\HealthController;
-use App\Infrastructure\Uploads\Http\Controllers\Media\ShowMediaController;
-use App\Infrastructure\Uploads\Http\Controllers\UploadController;
+use App\Modules\Uploads\Controllers\Media\ShowMediaController;
+use App\Modules\Uploads\Controllers\UploadController;
 
 // Ruta principal del sitio
 Route::get('/', function () {

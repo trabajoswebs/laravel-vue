@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Controllers;
+namespace App\Modules\Uploads\Controllers;
 
 use App\Application\Uploads\Actions\ReplaceFile;
 use App\Application\Uploads\Actions\UploadFile;
@@ -12,9 +12,9 @@ use App\Domain\Uploads\UploadProfileId;
 use App\Http\Controllers\Controller;
 use App\Infrastructure\Uploads\Core\Models\Upload;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
-use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;
-use App\Infrastructure\Uploads\Http\Requests\ReplaceUploadRequest;
-use App\Infrastructure\Uploads\Http\Requests\StoreUploadRequest;
+use App\Modules\Uploads\Requests\HttpUploadedMedia;
+use App\Modules\Uploads\Requests\ReplaceUploadRequest;
+use App\Modules\Uploads\Requests\StoreUploadRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use App\Support\Logging\SecurityLogger;
@@ -27,7 +27,7 @@ use Symfony\Component\HttpFoundation\Response as HttpStatus;
  * Proporciona endpoints para crear, actualizar y eliminar archivos subidos,
  * manejando la lógica de negocio a través de acciones de aplicación.
  * 
- * @package App\Infrastructure\Uploads\Http\Controllers
+ * @package App\Modules\Uploads\Controllers
  */
 final class UploadController extends Controller
 {

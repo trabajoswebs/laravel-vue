@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Requests\Concerns;
+namespace App\Modules\Uploads\Requests\Concerns;
 
 use App\Domain\Uploads\UploadProfile;
 use Closure;

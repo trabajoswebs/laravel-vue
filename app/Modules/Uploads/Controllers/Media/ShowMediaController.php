@@ -2,10 +2,10 @@
 
 declare(strict_types=1); // Fuerza tipado estricto
 
-namespace App\Infrastructure\Uploads\Http\Controllers\Media; // Mantiene la convención de Media controllers // Ej: rutas /media
+namespace App\Modules\Uploads\Controllers\Media; // Mantiene la convención de Media controllers // Ej: rutas /media
 
 use App\Support\Contracts\TenantContextInterface; // Permite obtener tenant actual // Ej: app(TenantContextInterface)
-use App\Infrastructure\Uploads\Http\Support\MediaServingResponder;
+use App\Modules\Uploads\Support\MediaServingResponder;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Contracts\Filesystem\Filesystem; // Tipo para discos de Storage // Ej: FilesystemAdapter
 use Illuminate\Http\Request; // Request HTTP entrante // Ej: path capturado

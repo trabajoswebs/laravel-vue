@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Http\Support;
 
-use App\Infrastructure\Uploads\Http\Support\MediaServingResponder;
+use App\Modules\Uploads\Support\MediaServingResponder;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Tests\Support\TemporaryUrlFilesystem;

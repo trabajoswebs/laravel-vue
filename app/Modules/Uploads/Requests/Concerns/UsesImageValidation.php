@@ -2,10 +2,10 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Infrastructure\Uploads\Http\Requests\Concerns; // Namespace del trait
+namespace App\Modules\Uploads\Requests\Concerns; // Namespace del trait
 
 use App\Infrastructure\Uploads\Core\Contracts\FileConstraints as FC; // Contrato de constraints
-use App\Infrastructure\Uploads\Http\Rules\SecureImageValidation; // Regla de validación segura
+use App\Modules\Uploads\Rules\SecureImageValidation; // Regla de validación segura
 use Closure; // Tipo Closure para validaciones inline
 use Illuminate\Http\UploadedFile; // Archivo subido
 use Illuminate\Validation\Rules\File; // Regla File

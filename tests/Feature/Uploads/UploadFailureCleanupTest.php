@@ -4,7 +4,7 @@ namespace Tests\Feature\Uploads;
 
 use App\Application\Uploads\Contracts\UploadOrchestratorInterface;
 use App\Domain\Uploads\UploadProfileId;
-use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia;
+use App\Modules\Uploads\Requests\HttpUploadedMedia;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\LocalQuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Infrastructure\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;

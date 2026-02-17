@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Requests;
+namespace App\Modules\Uploads\Requests;
 
 use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
-use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesImageValidation; // Trait de reglas compartidas
+use App\Modules\Uploads\Requests\Concerns\UsesImageValidation; // Trait de reglas compartidas
 
 /**
  * FormRequest genérico para subir imágenes a distintas colecciones.

@@ -10,7 +10,7 @@ use App\Application\Uploads\Actions\ReplaceFile; // Caso de uso de reemplazo
 use App\Application\Uploads\DTO\ReplacementResult; // DTO de reemplazo
 use App\Domain\Uploads\UploadProfileId; // VO de perfil
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry; // Registro de perfiles
-use App\Infrastructure\Uploads\Http\Requests\HttpUploadedMedia; // Adaptador de archivo HTTP
+use App\Modules\Uploads\Requests\HttpUploadedMedia; // Adaptador de archivo HTTP
 use App\Models\User; // Modelo User que actúa como owner
 use App\Infrastructure\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor de avatar
 use Illuminate\Support\Str; // Helper para UUID

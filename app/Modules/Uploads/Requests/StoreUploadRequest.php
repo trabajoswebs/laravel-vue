@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Requests;
+namespace App\Modules\Uploads\Requests;
 
 use App\Support\Enums\Uploads\UploadKind;
 use App\Domain\Uploads\UploadProfile;
@@ -10,9 +10,9 @@ use App\Domain\Uploads\UploadProfileId;
 use App\Http\Requests\Concerns\SanitizesInputs;
 use App\Models\User;
 use App\Infrastructure\Uploads\Core\Registry\UploadProfileRegistry;
-use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesDocumentValidation;
-use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesImageValidation;
-use App\Infrastructure\Uploads\Http\Requests\Concerns\UsesOwnerIdValidation;
+use App\Modules\Uploads\Requests\Concerns\UsesDocumentValidation;
+use App\Modules\Uploads\Requests\Concerns\UsesImageValidation;
+use App\Modules\Uploads\Requests\Concerns\UsesOwnerIdValidation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\ValidationException;
 
@@ -23,7 +23,7 @@ use Illuminate\Validation\ValidationException;
  * permitiendo diferentes tipos de validación según el perfil de upload especificado.
  * Incluye campos adicionales como correlation_id y meta para soportar metadatos avanzados.
  * 
- * @package App\Infrastructure\Uploads\Http\Requests
+ * @package App\Modules\Uploads\Requests
  */
 final class StoreUploadRequest extends FormRequest
 {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Middleware;
+namespace App\Modules\Uploads\Middleware;
 
 use Closure;
 use Illuminate\Http\JsonResponse;

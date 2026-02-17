@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Uploads\Providers;
 
 use App\Support\Logging\SecurityLogger;
-use App\Infrastructure\Uploads\Http\Middleware\RateLimitUploads;
+use App\Modules\Uploads\Middleware\RateLimitUploads;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Infrastructure\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Routing\Router;

@@ -7,10 +7,10 @@ use App\Support\Security\SecurityHelper;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\PreventBruteForce;
-use App\Infrastructure\Uploads\Http\Middleware\RateLimitUploads;
+use App\Modules\Uploads\Middleware\RateLimitUploads;
 use App\Http\Middleware\SanitizeInput;
 use App\Http\Middleware\SecurityHeaders;
-use App\Infrastructure\Uploads\Http\Middleware\TrackMediaAccess;
+use App\Modules\Uploads\Middleware\TrackMediaAccess;
 use App\Http\Middleware\UserAudit;
 use App\Http\Middleware\TrustProxies;
 use App\Modules\Tenancy\Middleware\ResolveTenant; // Middleware propio para resolver tenant

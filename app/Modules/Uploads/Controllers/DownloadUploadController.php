@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Http\Controllers;
+namespace App\Modules\Uploads\Controllers;
 
 use App\Support\Contracts\TenantContextInterface;
 use App\Http\Controllers\Controller;

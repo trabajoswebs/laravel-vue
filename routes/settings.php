@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
-use App\Infrastructure\Uploads\Http\Controllers\Settings\ProfileAvatarController;
+use App\Modules\Uploads\Controllers\Settings\ProfileAvatarController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
