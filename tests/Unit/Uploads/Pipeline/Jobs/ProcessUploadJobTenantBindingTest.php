@@ -12,7 +12,7 @@ use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Modules\Uploads\Pipeline\Jobs\ProcessUploadJob;
 use App\Modules\Uploads\Pipeline\Quarantine\LocalQuarantineRepository;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken;
-use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
+use App\Modules\Uploads\Pipeline\Support\QuarantineManager;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 

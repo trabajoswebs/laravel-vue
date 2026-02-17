@@ -46,7 +46,7 @@ use Psr\Log\LoggerInterface;
 use App\Support\Contracts\LoggerInterface as AppLoggerInterface;
 use App\Modules\Uploads\Pipeline\Security\MagicBytesValidator; // Validador de magic bytes
 use App\Infrastructure\Uploads\Pipeline\Services\MediaCleanupScheduler; // Scheduler de cleanup
-use App\Infrastructure\Uploads\Pipeline\Support\MediaArtifactCollector; // Colector de artefactos
+use App\Modules\Uploads\Pipeline\Support\MediaArtifactCollector; // Colector de artefactos
 use App\Application\Uploads\Contracts\UploadOrchestratorInterface; // Contrato de orquestador
 use App\Application\Uploads\Contracts\UploadRepositoryInterface; // Contrato de repositorio
 use Illuminate\Support\ServiceProvider; // Base ServiceProvider

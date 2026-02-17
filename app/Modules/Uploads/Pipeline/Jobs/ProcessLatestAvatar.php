@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Storage;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use App\Modules\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
-use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
+use App\Modules\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 
 /**
  * Job coalescedor: procesa únicamente el último avatar subido por usuario/tenant.

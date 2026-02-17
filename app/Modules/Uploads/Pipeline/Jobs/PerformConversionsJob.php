@@ -13,7 +13,7 @@ use App\Modules\Uploads\Contracts\MediaCleanupScheduler; // Scheduler de limpiez
 use App\Models\User; // Modelo User para validar avatar
 use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob; // Limpieza directa de artefactos
 use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
-use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
+use App\Modules\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 use Illuminate\Contracts\Debug\ExceptionHandler; // Reporta excepciones; ej. app(ExceptionHandler)
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage; // Acceso a disks; ej. Storage::disk('public')->exists('x.jpg')

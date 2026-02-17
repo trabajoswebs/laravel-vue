@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Support;
+namespace App\Modules\Uploads\Pipeline\Support;
 
 use App\Application\Uploads\DTO\UploadResult;
 use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;

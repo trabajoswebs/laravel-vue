@@ -7,7 +7,7 @@ namespace Tests\Unit\Uploads;
 use App\Application\Uploads\DTO\UploadResult as ApplicationUploadResult;
 use App\Modules\Uploads\Pipeline\Contracts\UploadMetadata;
 use App\Modules\Uploads\Pipeline\DTO\InternalPipelineResult;
-use App\Infrastructure\Uploads\Pipeline\Support\PipelineResultMapper;
+use App\Modules\Uploads\Pipeline\Support\PipelineResultMapper;
 use PHPUnit\Framework\TestCase;
 
 final class PipelineResultMapperTest extends TestCase

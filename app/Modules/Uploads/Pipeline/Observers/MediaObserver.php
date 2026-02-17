@@ -10,7 +10,7 @@ namespace App\Modules\Uploads\Pipeline\Observers;
 use App\Modules\Uploads\Contracts\MediaCleanupScheduler;
 use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
 use App\Modules\Uploads\Pipeline\Jobs\CleanupAvatarOrphans;
-use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
+use App\Modules\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 use App\Support\Logging\SecurityLogger;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 

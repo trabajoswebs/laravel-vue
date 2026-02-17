@@ -15,8 +15,8 @@ use App\Modules\Uploads\Pipeline\Scanning\ScanCoordinatorInterface;
 use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use App\Modules\Uploads\Pipeline\Security\Upload\UploadSecurityLogger;
-use App\Infrastructure\Uploads\Pipeline\Support\ImageUploadReporter;
-use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
+use App\Modules\Uploads\Pipeline\Support\ImageUploadReporter;
+use App\Modules\Uploads\Pipeline\Support\QuarantineManager;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Tests\TestCase;
 

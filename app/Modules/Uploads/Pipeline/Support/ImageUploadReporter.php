@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Support;
+namespace App\Modules\Uploads\Pipeline\Support;
 
 use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;
 use Illuminate\Contracts\Debug\ExceptionHandler;

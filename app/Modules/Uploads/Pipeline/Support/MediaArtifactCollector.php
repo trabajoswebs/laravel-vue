@@ -9,7 +9,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Pipeline\Support; // Ej.: "App\Infrastructure\Uploads"
+namespace App\Modules\Uploads\Pipeline\Support; // Ej.: "App\Infrastructure\Uploads"
 
 use App\Modules\Uploads\Contracts\MediaArtifactCollector as MediaArtifactCollectorContract;
 use App\Modules\Uploads\Contracts\MediaOwner; // Interfaz que expone getMedia() // Ej.: $owner->getMedia('avatar') => Collection<Media>

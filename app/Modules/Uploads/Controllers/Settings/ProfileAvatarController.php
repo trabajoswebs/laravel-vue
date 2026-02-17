@@ -17,7 +17,7 @@ use App\Modules\Uploads\Pipeline\Exceptions\QuarantineException;
 use App\Modules\Uploads\Pipeline\Exceptions\ScanFailedException;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
-use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
+use App\Modules\Uploads\Pipeline\Support\QuarantineManager;
 use Illuminate\Auth\Access\AuthorizationException;    // Ej. excepciones de autorización
 use Illuminate\Http\JsonResponse;                     // Ej. respuesta JSON
 use Illuminate\Http\RedirectResponse;                 // Ej. respuesta redirect

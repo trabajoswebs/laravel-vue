@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Uploads\Pipeline\Support;
 
-use App\Infrastructure\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
+use App\Modules\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator;
 use Tests\TestCase;

@@ -11,7 +11,7 @@ use App\Modules\Uploads\Pipeline\DefaultUploadService;
 use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
 use App\Modules\Uploads\Pipeline\Exceptions\VirusDetectedException;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;
-use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
+use App\Modules\Uploads\Pipeline\Support\QuarantineManager;
 use App\Support\Security\Exceptions\AntivirusException;
 use App\Modules\Uploads\Contracts\MediaOwner;
 use App\Modules\Uploads\Pipeline\Security\Logging\MediaLogSanitizer;

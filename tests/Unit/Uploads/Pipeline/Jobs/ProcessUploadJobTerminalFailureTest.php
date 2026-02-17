@@ -9,7 +9,7 @@ use App\Modules\Uploads\Pipeline\Jobs\ProcessUploadJob;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineRepository;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineState;
 use App\Modules\Uploads\Pipeline\Quarantine\QuarantineToken;
-use App\Infrastructure\Uploads\Pipeline\Support\QuarantineManager;
+use App\Modules\Uploads\Pipeline\Support\QuarantineManager;
 use Tests\TestCase;
 
 final class ProcessUploadJobTerminalFailureTest extends TestCase
