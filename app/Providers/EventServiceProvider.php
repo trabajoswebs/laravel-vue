@@ -8,8 +8,8 @@ use App\Modules\Uploads\Pipeline\Listeners\RunPendingMediaCleanup;
 use App\Modules\Uploads\Pipeline\Listeners\QueueAvatarPostProcessing;
 use App\Application\User\Events\AvatarDeleted;
 use App\Application\User\Events\AvatarUpdated;
-use App\Infrastructure\User\Listeners\OnAvatarDeleted;
-use App\Infrastructure\User\Listeners\OnAvatarUpdated;
+use App\Modules\User\Listeners\OnAvatarDeleted;
+use App\Modules\User\Listeners\OnAvatarUpdated;
 use Spatie\MediaLibrary\Conversions\Events\ConversionHasBeenCompletedEvent;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 

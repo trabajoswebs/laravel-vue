@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\User\Adapters;
+namespace App\Modules\User\Adapters;
 
 use App\Modules\Uploads\Contracts\MediaArtifactCollector;
 use App\Modules\Uploads\Contracts\MediaOwner;

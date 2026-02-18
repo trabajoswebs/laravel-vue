@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\User\Listeners;
+namespace App\Modules\User\Listeners;
 
 use App\Application\User\Events\AvatarUpdated; // Evento de aplicación al actualizar avatar; ej. user_id=1
 use App\Modules\Uploads\Pipeline\Jobs\ProcessLatestAvatar; // Job coalescedor para avatar

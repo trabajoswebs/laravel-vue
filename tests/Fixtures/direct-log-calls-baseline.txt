@@ -70,6 +70,6 @@ app/Support/Adapters/LaravelLogger.php:64
 app/Support/Metrics/LogMetrics.php:18
 app/Support/Metrics/LogMetrics.php:28
 app/Modules/Tenancy/Middleware/ResolveTenant.php:145
-app/Infrastructure/User/Adapters/EloquentUserAvatarRepository.php:88
-app/Infrastructure/User/Listeners/OnAvatarUpdated.php:22
-app/Infrastructure/User/Listeners/OnAvatarUpdated.php:35
+app/Modules/User/Adapters/EloquentUserAvatarRepository.php:88
+app/Modules/User/Listeners/OnAvatarUpdated.php:22
+app/Modules/User/Listeners/OnAvatarUpdated.php:35

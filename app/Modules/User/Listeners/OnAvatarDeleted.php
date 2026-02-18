@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\User\Listeners;
+namespace App\Modules\User\Listeners;
 
 use App\Application\User\Events\AvatarDeleted;
 use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;

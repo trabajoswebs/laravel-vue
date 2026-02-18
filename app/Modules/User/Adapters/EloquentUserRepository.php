@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\User\Adapters;
+namespace App\Modules\User\Adapters;
 
 use App\Application\User\Contracts\UserRepository;
 use App\Modules\Uploads\Contracts\MediaOwner;
