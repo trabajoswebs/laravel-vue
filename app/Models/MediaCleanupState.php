@@ -4,7 +4,7 @@
 declare(strict_types=1);
 
 // 2. Espacio de nombres para modelos de medios.
-namespace App\Infrastructure\Uploads\Core\Models;
+namespace App\Models;
 
 // 3. Importación de la clase base Model de Eloquent.
 use Illuminate\Database\Eloquent\Model;

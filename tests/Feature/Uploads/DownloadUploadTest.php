@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Uploads;
 
-use App\Infrastructure\Uploads\Core\Models\Upload;
+use App\Models\Upload;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;

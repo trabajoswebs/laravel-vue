@@ -4,7 +4,7 @@
 declare(strict_types=1);
 
 // 2. Espacio de nombres (namespace)
-namespace App\Infrastructure\Uploads\Core\Models\Concerns;
+namespace App\Models\Concerns;
 
 /**
  * Proporciona utilidades para mapear colecciones de Media Library a columnas de versión.

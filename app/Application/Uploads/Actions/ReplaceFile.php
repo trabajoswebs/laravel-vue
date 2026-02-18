@@ -11,7 +11,7 @@ use App\Application\Uploads\DTO\UploadResult;
 use App\Domain\Uploads\UploadProfile;
 use App\Models\User;
 use App\Modules\Uploads\Contracts\UploadedMedia;
-use App\Infrastructure\Uploads\Core\Models\Upload;
+use App\Models\Upload;
 
 /**
  * Acción de aplicación para reemplazar archivos.

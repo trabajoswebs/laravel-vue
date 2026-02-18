@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Modules\Uploads\Contracts\MediaOwner; // Contrato que marca modelos propietarios de medios
-use App\Infrastructure\Uploads\Core\Models\Concerns\TracksMediaVersions; // Trait que versiona media para cache busting
+use App\Models\Concerns\TracksMediaVersions; // Trait que versiona media para cache busting
 use App\Modules\Uploads\Pipeline\Image\AvatarConversionProfile;
 use App\Infrastructure\Uploads\Profiles\AvatarProfile;
 use App\Models\Tenant; // Modelo de tenant para relaciones

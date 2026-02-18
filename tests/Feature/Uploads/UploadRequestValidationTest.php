@@ -6,7 +6,7 @@ namespace Tests\Feature\Uploads;
 
 use App\Models\User;
 use App\Models\Tenant;
-use App\Infrastructure\Uploads\Core\Models\Upload;
+use App\Models\Upload;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;

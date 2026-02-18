@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Infrastructure\Uploads\Core\Models; // Namespace del modelo Upload
+namespace App\Models; // Namespace del modelo Upload
 
 use Illuminate\Database\Eloquent\Builder; // Builder para scopes
 use Illuminate\Database\Eloquent\Factories\HasFactory; // Trait de factories

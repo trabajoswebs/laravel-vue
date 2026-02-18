@@ -9,7 +9,7 @@ use App\Modules\Uploads\DTO\CleanupStatePayload;
 use App\Modules\Uploads\Contracts\MediaResource;
 use App\Modules\Uploads\Adapters\SpatieMediaResource;
 use App\Modules\Uploads\Pipeline\Jobs\CleanupMediaArtifactsJob;
-use App\Infrastructure\Uploads\Core\Models\MediaCleanupState;
+use App\Models\MediaCleanupState;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;

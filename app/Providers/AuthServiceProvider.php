@@ -5,7 +5,7 @@ namespace App\Providers;
 use App\Models\User;
 use App\Modules\User\Policies\UserPolicy;
 use App\Modules\Uploads\Policies\UploadPolicy;
-use App\Infrastructure\Uploads\Core\Models\Upload;
+use App\Models\Upload;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 

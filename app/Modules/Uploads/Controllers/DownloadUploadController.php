@@ -6,7 +6,7 @@ namespace App\Modules\Uploads\Controllers;
 
 use App\Support\Contracts\TenantContextInterface;
 use App\Http\Controllers\Controller;
-use App\Infrastructure\Uploads\Core\Models\Upload;
+use App\Models\Upload;
 use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;

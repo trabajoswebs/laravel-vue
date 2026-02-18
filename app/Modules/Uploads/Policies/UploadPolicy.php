@@ -6,7 +6,7 @@ namespace App\Modules\Uploads\Policies;
 
 use App\Support\Policies\Concerns\HandlesTenantMembership;
 use App\Models\User;
-use App\Infrastructure\Uploads\Core\Models\Upload;
+use App\Models\Upload;
 use App\Support\Enums\Uploads\ServingMode;
 use App\Domain\Uploads\UploadProfileId;
 use App\Modules\Uploads\Registry\UploadProfileRegistry;

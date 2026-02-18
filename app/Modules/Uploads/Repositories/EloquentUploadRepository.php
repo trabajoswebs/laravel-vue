@@ -8,7 +8,7 @@ use App\Application\Uploads\Contracts\UploadRepositoryInterface; // Contrato de 
 use App\Application\Uploads\DTO\UploadResult; // DTO de resultado de upload
 use App\Domain\Uploads\UploadProfile; // Perfil de upload
 use App\Models\User; // Modelo de usuario
-use App\Infrastructure\Uploads\Core\Models\Upload; // Modelo Upload para persistencia
+use App\Models\Upload; // Modelo Upload para persistencia
 
 /**
  * Persiste uploads no imagen en la tabla uploads.
