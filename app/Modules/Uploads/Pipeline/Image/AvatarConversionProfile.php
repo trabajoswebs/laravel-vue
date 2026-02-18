@@ -6,7 +6,7 @@ namespace App\Modules\Uploads\Pipeline\Image;
 
 use App\Modules\Uploads\Contracts\FileConstraints;
 use App\Modules\Uploads\Contracts\MediaOwner;
-use App\Infrastructure\Uploads\Profiles\AvatarProfile;
+use App\Modules\Uploads\Profiles\AvatarProfile;
 use App\Support\Logging\SecurityLogger;
 use Spatie\Image\Enums\Fit;
 use Spatie\MediaLibrary\Conversions\Conversion;

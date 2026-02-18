@@ -17,7 +17,7 @@ final class ProcessUploadJobTerminalFailureTest extends TestCase
     public function test_failed_transitions_pending_token_to_failed_and_deletes_artifact(): void
     {
         $token = QuarantineToken::fromPath('/tmp/fake.bin', 'q/a.bin', 'cid', 'avatar');
-        $job = new ProcessUploadJob($token, '7', \App\Infrastructure\Uploads\Profiles\AvatarProfile::class, 'cid-terminal');
+        $job = new ProcessUploadJob($token, '7', \App\Modules\Uploads\Profiles\AvatarProfile::class, 'cid-terminal');
 
         $quarantineRepo = $this->getMockBuilder(QuarantineRepository::class)
             ->getMock();
@@ -59,7 +59,7 @@ final class ProcessUploadJobTerminalFailureTest extends TestCase
     public function test_failed_does_not_transition_when_token_is_already_terminal_but_still_deletes(): void
     {
         $token = QuarantineToken::fromPath('/tmp/fake.bin', 'q/a.bin', 'cid', 'avatar');
-        $job = new ProcessUploadJob($token, '7', \App\Infrastructure\Uploads\Profiles\AvatarProfile::class, 'cid-terminal-existing');
+        $job = new ProcessUploadJob($token, '7', \App\Modules\Uploads\Profiles\AvatarProfile::class, 'cid-terminal-existing');
 
         $quarantineRepo = $this->getMockBuilder(QuarantineRepository::class)
             ->getMock();

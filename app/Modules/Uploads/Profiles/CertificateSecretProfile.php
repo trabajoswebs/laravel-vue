@@ -2,7 +2,7 @@
 
 declare(strict_types=1); // Tipado estricto
 
-namespace App\Infrastructure\Uploads\Profiles; // Namespace de perfiles de uploads infra
+namespace App\Modules\Uploads\Profiles; // Namespace de perfiles de uploads infra
 
 use App\Support\Enums\Uploads\ProcessingMode; // Enum de procesamiento
 use App\Support\Enums\Uploads\ScanMode; // Enum de escaneo

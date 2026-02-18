@@ -163,7 +163,7 @@ class ProfileAvatarController extends Controller
         $correlationId = trim((string) $request->query('correlation_id', ''));
         $quarantineId = trim((string) $request->query('quarantine_id', ''));
 
-        $collection = app(\App\Infrastructure\Uploads\Profiles\AvatarProfile::class)->collection();
+        $collection = app(\App\Modules\Uploads\Profiles\AvatarProfile::class)->collection();
 
         // Busca media ya persistido con correlación o quarantine_id.
         $media = $authUser->getMedia($collection)
@@ -223,7 +223,7 @@ class ProfileAvatarController extends Controller
             throw new AuthorizationException('Authenticated user required to query avatar upload.');
         }
 
-        $collection = app(\App\Infrastructure\Uploads\Profiles\AvatarProfile::class)->collection();
+        $collection = app(\App\Modules\Uploads\Profiles\AvatarProfile::class)->collection();
         $current = $authUser->getFirstMedia($collection);
 
         $requested = $authUser->getMedia($collection)
@@ -491,7 +491,7 @@ class ProfileAvatarController extends Controller
      */
     private function buildAvatarResponseData(User $user): array
     {
-        $collection = app(\App\Infrastructure\Uploads\Profiles\AvatarProfile::class)->collection(); // Colección de avatar // Ej: 'avatar'
+        $collection = app(\App\Modules\Uploads\Profiles\AvatarProfile::class)->collection(); // Colección de avatar // Ej: 'avatar'
         $media = $user->fresh()?->getFirstMedia($collection); // Refresca usuario y obtiene media // Ej: avatar actual
 
         if (!$media) { // Si no hay avatar // Ej: después de borrar

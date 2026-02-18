@@ -6,8 +6,8 @@ namespace App\Modules\Uploads\Orchestrators;
 
 use App\Domain\Uploads\UploadProfile;
 use App\Modules\Uploads\Contracts\MediaProfile;
-use App\Infrastructure\Uploads\Profiles\AvatarProfile;
-use App\Infrastructure\Uploads\Profiles\GalleryProfile;
+use App\Modules\Uploads\Profiles\AvatarProfile;
+use App\Modules\Uploads\Profiles\GalleryProfile;
 use InvalidArgumentException;
 
 final class MediaProfileResolver

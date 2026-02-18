@@ -7,7 +7,7 @@ namespace App\Modules\Uploads\Controllers\Media;
 use App\Http\Controllers\Controller; // Base controller
 use App\Modules\Uploads\Support\MediaServingResponder;
 use App\Modules\Uploads\Pipeline\Security\Logging\MediaSecurityLogger;
-use App\Infrastructure\Uploads\Profiles\AvatarProfile; // Perfil avatar
+use App\Modules\Uploads\Profiles\AvatarProfile; // Perfil avatar
 use App\Models\User; // Modelo User
 use Illuminate\Http\Request; // Request HTTP
 use Illuminate\Support\Facades\Auth; // Facade Auth

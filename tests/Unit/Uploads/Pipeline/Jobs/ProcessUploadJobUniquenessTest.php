@@ -17,8 +17,8 @@ final class ProcessUploadJobUniquenessTest extends TestCase
     {
         $token = QuarantineToken::fromPath('/tmp/fake.bin', 'q/a.bin', 'cid', 'avatar');
 
-        $jobA = new ProcessUploadJob($token, '7', \App\Infrastructure\Uploads\Profiles\AvatarProfile::class, 'cid');
-        $jobB = new ProcessUploadJob($token, '7', \App\Infrastructure\Uploads\Profiles\AvatarProfile::class, 'cid');
+        $jobA = new ProcessUploadJob($token, '7', \App\Modules\Uploads\Profiles\AvatarProfile::class, 'cid');
+        $jobB = new ProcessUploadJob($token, '7', \App\Modules\Uploads\Profiles\AvatarProfile::class, 'cid');
 
         $this->assertSame($jobA->uniqueId(), $jobB->uniqueId());
     }
@@ -26,7 +26,7 @@ final class ProcessUploadJobUniquenessTest extends TestCase
     public function test_failed_cleans_up_quarantine_artifact(): void
     {
         $token = QuarantineToken::fromPath('/tmp/fake.bin', 'q/a.bin', 'cid', 'avatar');
-        $job = new ProcessUploadJob($token, '7', \App\Infrastructure\Uploads\Profiles\AvatarProfile::class, 'cid');
+        $job = new ProcessUploadJob($token, '7', \App\Modules\Uploads\Profiles\AvatarProfile::class, 'cid');
 
         $repository = $this->createMock(QuarantineRepository::class);
         $repository->expects($this->once())
@@ -41,7 +41,7 @@ final class ProcessUploadJobUniquenessTest extends TestCase
     public function test_job_targets_media_queue_and_after_commit(): void
     {
         $token = QuarantineToken::fromPath('/tmp/fake.bin', 'q/a.bin', 'cid', 'avatar');
-        $job = new ProcessUploadJob($token, '7', \App\Infrastructure\Uploads\Profiles\AvatarProfile::class, 'cid');
+        $job = new ProcessUploadJob($token, '7', \App\Modules\Uploads\Profiles\AvatarProfile::class, 'cid');
 
         $this->assertSame(config('queue.aliases.media', 'media'), $job->queue);
         $this->assertTrue((bool) $job->afterCommit);

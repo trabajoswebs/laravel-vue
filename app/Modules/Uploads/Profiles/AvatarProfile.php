@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Profiles;
+namespace App\Modules\Uploads\Profiles;
 
 use App\Modules\Uploads\Contracts\MediaOwner;
 use App\Modules\Uploads\Pipeline\Image\AvatarConversionProfile;

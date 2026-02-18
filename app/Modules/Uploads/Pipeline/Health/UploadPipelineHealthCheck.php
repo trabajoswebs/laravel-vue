@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Uploads\Pipeline\Health;
 
-use App\Infrastructure\Uploads\Profiles\AvatarProfile;
+use App\Modules\Uploads\Profiles\AvatarProfile;
 use App\Modules\Uploads\Pipeline\Scanning\YaraRuleManager;
 use App\Modules\Uploads\Pipeline\Security\Exceptions\InvalidRuleException;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;

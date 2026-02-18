@@ -18,12 +18,12 @@ use App\Support\Contracts\MetricsInterface; // Métricas
 use App\Modules\Uploads\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
 use App\Modules\Uploads\Registry\UploadProfileRegistry; // Registro de perfiles
 use App\Modules\Uploads\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
-use App\Infrastructure\Uploads\Profiles\AvatarImageProfile; // Perfil avatar
-use App\Infrastructure\Uploads\Profiles\CertificateSecretProfile; // Perfil certificados
-use App\Infrastructure\Uploads\Profiles\DocumentPdfProfile; // Perfil PDF
-use App\Infrastructure\Uploads\Profiles\GalleryImageProfile; // Perfil galería
-use App\Infrastructure\Uploads\Profiles\ImportCsvProfile; // Perfil CSV
-use App\Infrastructure\Uploads\Profiles\SpreadsheetXlsxProfile; // Perfil XLSX
+use App\Modules\Uploads\Profiles\AvatarImageProfile; // Perfil avatar
+use App\Modules\Uploads\Profiles\CertificateSecretProfile; // Perfil certificados
+use App\Modules\Uploads\Profiles\DocumentPdfProfile; // Perfil PDF
+use App\Modules\Uploads\Profiles\GalleryImageProfile; // Perfil galería
+use App\Modules\Uploads\Profiles\ImportCsvProfile; // Perfil CSV
+use App\Modules\Uploads\Profiles\SpreadsheetXlsxProfile; // Perfil XLSX
 use App\Modules\Uploads\Pipeline\Contracts\UploadPipeline; // Contrato pipeline
 use App\Modules\Uploads\Pipeline\Contracts\UploadService; // Contrato servicio upload
 use App\Modules\Uploads\Pipeline\DefaultUploadPipeline; // Pipeline por defecto

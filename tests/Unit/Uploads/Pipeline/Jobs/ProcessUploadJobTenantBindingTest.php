@@ -26,7 +26,7 @@ final class ProcessUploadJobTenantBindingTest extends TestCase
         $job = new ProcessUploadJob(
             token: $token,
             ownerId: '7',
-            profileClass: \App\Infrastructure\Uploads\Profiles\AvatarProfile::class,
+            profileClass: \App\Modules\Uploads\Profiles\AvatarProfile::class,
             correlationId: 'cid',
             tenantId: 99,
         );

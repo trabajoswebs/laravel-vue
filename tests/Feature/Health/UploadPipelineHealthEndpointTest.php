@@ -6,7 +6,7 @@ namespace Tests\Feature\Health;
 
 use App\Modules\Uploads\Pipeline\Health\UploadPipelineHealthCheck;
 use App\Modules\Uploads\Pipeline\Scanning\YaraRuleManager;
-use App\Infrastructure\Uploads\Profiles\AvatarProfile;
+use App\Modules\Uploads\Profiles\AvatarProfile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\TenantTestHelpers;
