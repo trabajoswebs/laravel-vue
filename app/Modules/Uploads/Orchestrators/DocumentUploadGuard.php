@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Orchestrators;
+namespace App\Modules\Uploads\Orchestrators;
 
 use App\Application\Uploads\Exceptions\InvalidUploadFileException;
 use App\Domain\Uploads\UploadProfile;

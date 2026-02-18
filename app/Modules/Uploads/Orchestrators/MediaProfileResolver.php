@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\Uploads\Core\Orchestrators;
+namespace App\Modules\Uploads\Orchestrators;
 
 use App\Domain\Uploads\UploadProfile;
 use App\Modules\Uploads\Contracts\MediaProfile;

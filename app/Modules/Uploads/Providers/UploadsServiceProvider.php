@@ -10,12 +10,12 @@ use App\Modules\Uploads\Contracts\MediaUploader as MediaUploaderContract; // Con
 use App\Application\Uploads\Contracts\OwnerIdNormalizerInterface;
 use App\Application\Uploads\Contracts\UploadStorageInterface;
 use App\Modules\Uploads\Adapters\LaravelUploadStorage;
-use App\Infrastructure\Uploads\Core\Orchestrators\DocumentUploadGuard;
-use App\Infrastructure\Uploads\Core\Orchestrators\MediaProfileResolver;
+use App\Modules\Uploads\Orchestrators\DocumentUploadGuard;
+use App\Modules\Uploads\Orchestrators\MediaProfileResolver;
 use App\Modules\Uploads\Services\ConfigurableOwnerIdNormalizer;
 use App\Modules\Uploads\Services\MediaReplacementService; // Servicio de reemplazo
 use App\Support\Contracts\MetricsInterface; // Métricas
-use App\Infrastructure\Uploads\Core\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
+use App\Modules\Uploads\Orchestrators\DefaultUploadOrchestrator; // Orquestador por defecto
 use App\Modules\Uploads\Registry\UploadProfileRegistry; // Registro de perfiles
 use App\Modules\Uploads\Repositories\EloquentUploadRepository; // Repo Eloquent de uploads
 use App\Infrastructure\Uploads\Profiles\AvatarImageProfile; // Perfil avatar
