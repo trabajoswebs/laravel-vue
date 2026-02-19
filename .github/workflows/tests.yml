@@ -55,5 +55,12 @@ jobs:
       - name: Build Assets
         run: npm run build
 
-      - name: Tests
-        run: ./vendor/bin/phpunit
+      - name: Start Sail
+        run: ./vendor/bin/sail up -d
+
+      - name: Cached Config Tests
+        run: ./bin/test-cached-config.sh
+
+      - name: Stop Sail
+        if: always()
+        run: ./vendor/bin/sail down
