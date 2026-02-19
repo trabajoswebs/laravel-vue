@@ -41,4 +41,4 @@ Utilidades de soporte no acopladas al dominio principal:
 ## Referencias
 
 - Árbol completo de `app/`: `app_tree.txt`
-- Detalle del hub de uploads: `app/Infrastructure/Uploads/README.md`
+- Detalle del hub de uploads: `app/Modules/Uploads/README.md`

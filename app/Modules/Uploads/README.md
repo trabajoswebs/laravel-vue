@@ -1,6 +1,6 @@
 # Uploads Hub
 
-`app/Infrastructure/Uploads` centraliza el ciclo completo de archivos: validación, quarantine/scanning, persistencia, serving y lifecycle de limpieza.
+`app/Modules/Uploads` centraliza el ciclo completo de archivos: validación, quarantine/scanning, persistencia, serving y lifecycle de limpieza.
 
 ## Módulos
 

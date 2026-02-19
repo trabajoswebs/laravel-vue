@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Archivo: app/Infrastructure/Uploads/Pipeline/Support/MediaArtifactCollector.php
+ * Archivo: app/Modules/Uploads/Pipeline/Support/MediaArtifactCollector.php
  * Objetivo: versión mejorada con logging PSR-3, flags de config cacheadas,
  *           filtros por tipo de artefacto y más contexto en logs.
  * Notas: comentarios + ejemplos donde aplican.
