@@ -20,7 +20,7 @@ use App\Modules\Uploads\Pipeline\Exceptions\UploadValidationException;
  * - Performance optimizado con límites de tamaño
  * - MimeNormalizer integrado (sin dependencias externas)
  *
- * @package App\Infrastructure\Uploads\Pipeline\Security
+ * @package App\Modules\Uploads\Pipeline\Security
  */
 final class MagicBytesValidator
 {

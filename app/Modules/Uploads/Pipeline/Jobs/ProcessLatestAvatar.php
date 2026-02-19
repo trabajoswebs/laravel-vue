@@ -40,7 +40,7 @@ use App\Modules\Uploads\Pipeline\Support\MediaCleanupArtifactsBuilder;
  *   4. Versionado optimista para reencolar si hay cambios durante ejecución
  *   5. Auto-limpieza de artefactos huérfanos
  *
- * @package App\Infrastructure\Uploads\Pipeline\Jobs
+ * @package App\Modules\Uploads\Pipeline\Jobs
  */
 final class ProcessLatestAvatar implements ShouldQueue, ShouldBeUnique
 {

@@ -33,7 +33,7 @@ use RuntimeException;
  * Ejecuta uploads aplicando validación, cuarentena, escaneo antivirus y persistencia
  * con enfoque orientado al tenant. Maneja diferentes tipos de uploads según el perfil.
  * 
- * @package App\Infrastructure\Uploads\Core\Orchestrators
+ * @package App\Modules\Uploads\Core\Orchestrators
  */
 final class DefaultUploadOrchestrator implements UploadOrchestratorInterface
 {

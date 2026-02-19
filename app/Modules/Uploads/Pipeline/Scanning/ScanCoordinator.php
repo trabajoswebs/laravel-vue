@@ -25,7 +25,7 @@ use Throwable;
  * - Trazabilidad mejorada de nombres de escáner.
  * - Sin llamadas estáticas a facades.
  *
- * @package App\Infrastructure\Uploads\Pipeline\Scanning
+ * @package App\Modules\Uploads\Pipeline\Scanning
  */
 final class ScanCoordinator implements ScanCoordinatorInterface
 {
